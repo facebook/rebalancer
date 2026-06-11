@@ -14,18 +14,22 @@
 
 name: release
 
-# Auto-trigger when version.txt is bumped on main. The release pipeline
-# does NOT rebuild — it waits for the per-push CI workflows triggered by
-# the same commit (lint-version, linux, mac, wheels, sdist, packaging_linux,
-# packaging_mac) to succeed, downloads their artifacts, publishes wheels +
-# sdist to TestPyPI, then creates the v<version> tag and a GitHub Release.
+# Trigger on every push to main (not just version.txt changes). The validate
+# job compares version.txt against the latest GitHub release and skips the
+# rest of the pipeline if the version has already been released. This means
+# a CI-fix commit after a failed release attempt will automatically retry the
+# release without needing a manual dispatch or a version bump.
+#
+# The release pipeline does NOT rebuild — it waits for the per-push CI
+# workflows triggered by the same commit (lint-version, linux, mac, wheels,
+# sdist, linux-sdk, packaging_mac) to succeed, downloads their artifacts,
+# publishes wheels + sdist to TestPyPI, then creates the v<version> tag and
+# a GitHub Release.
 #
 # If any sibling workflow fails the release stops — no upload, no tag.
 on:
   push:
     branches: [main]
-    paths:
-    - 'version.txt'
   workflow_dispatch:
     inputs:
       ref:
@@ -39,8 +43,7 @@ permissions:
   id-token: write     # OIDC for trusted PyPI/TestPyPI publishing
 
 # Never cancel an in-flight release — they end in tag creation + PyPI upload,
-# both irreversible. A second version.txt bump must wait for the first to
-# finish.
+# both irreversible. A second push must wait for the first to finish.
 concurrency:
   group: release
   cancel-in-progress: false
@@ -48,7 +51,7 @@ concurrency:
 env:
   PROJECT_NAME: rebalancer
   # Workflows that must succeed for this SHA before we publish.
-  REQUIRED_WORKFLOWS: "lint-version.yml linux.yml mac.yml wheels.yml sdist.yml packaging_linux.yml packaging_mac.yml"
+  REQUIRED_WORKFLOWS: "lint-version.yml linux.yml mac.yml wheels.yml sdist.yml linux-sdk.yml packaging_mac.yml"
 
 jobs:
   validate:
@@ -57,6 +60,9 @@ jobs:
     outputs:
       version: ${{ steps.read.outputs.version }}
       sha: ${{ steps.read.outputs.sha }}
+      skip: ${{ steps.read.outputs.skip }}
+    env:
+      GH_TOKEN: ${{ github.token }}
     steps:
     - uses: actions/checkout@v6
       with:
@@ -68,17 +74,36 @@ jobs:
     - run: pip install packaging
     - name: Lint version.txt
       run: python3 tools/lint-version.py
-    - name: Capture version + SHA
+    - name: Check version against latest release
       id: read
       run: |
         VERSION=$(cat version.txt)
         SHA=$(git rev-parse HEAD)
         echo "version=$VERSION" >> "$GITHUB_OUTPUT"
         echo "sha=$SHA"         >> "$GITHUB_OUTPUT"
-        echo "Releasing v$VERSION at $SHA"
+
+        LATEST_TAG=$(gh release view --repo "${{ github.repository }}" \
+          --json tagName --jq '.tagName' 2>/dev/null || echo "")
+        LATEST_VERSION="${LATEST_TAG#v}"
+
+        IS_NEWER=$(python3 - <<EOF
+from packaging.version import Version
+current = Version("$VERSION")
+latest  = Version("$LATEST_VERSION") if "$LATEST_VERSION" else Version("0")
+print("true" if current > latest else "false")
+EOF
+)
+        if [ "$IS_NEWER" = "true" ]; then
+          echo "v$VERSION > latest release '${LATEST_VERSION:-none}' — will release"
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+        else
+          echo "v$VERSION <= latest release '${LATEST_VERSION:-none}' — skipping release"
+          echo "skip=true" >> "$GITHUB_OUTPUT"
+        fi
 
   wait-for-builds:
     needs: validate
+    if: needs.validate.outputs.skip == 'false'
     runs-on: ubuntu-latest
     timeout-minutes: 90
     env:
@@ -129,6 +154,7 @@ jobs:
 
   publish:
     needs: [validate, wait-for-builds]
+    if: needs.validate.outputs.skip == 'false'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: testpypi   # configure trusted publisher on test.pypi.org
@@ -145,7 +171,7 @@ jobs:
     - name: Download wheel artifacts (linux + macos)
       run: |
         mkdir -p dist
-        for wf in wheels.yml sdist.yml packaging_linux.yml packaging_mac.yml; do
+        for wf in wheels.yml sdist.yml linux-sdk.yml packaging_mac.yml; do
           run_id=$(gh run list \
             --repo "${{ github.repository }}" \
             --workflow "$wf" \
