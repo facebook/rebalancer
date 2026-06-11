@@ -23,7 +23,7 @@ name: release
 # If any sibling workflow fails the release stops — no upload, no tag.
 on:
   push:
-    branches: [main, richard/packaging]
+    branches: [main]
     paths:
     - 'version.txt'
   workflow_dispatch:

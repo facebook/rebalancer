@@ -16,7 +16,7 @@ name: lint-version
 
 on:
   push:
-    branches: [main, richard/packaging]
+    branches: [main]
   pull_request:
     paths:
     - 'version.txt'

@@ -2,9 +2,9 @@ name: lint
 
 on:
   push:
-    branches: [main, richard/packaging]
+    branches: [main]
   pull_request:
-    branches: [main, richard/packaging]
+    branches: [main]
 
 permissions:
   contents: read

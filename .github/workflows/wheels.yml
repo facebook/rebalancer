@@ -16,7 +16,7 @@ name: wheels
 
 on:
   push:
-    branches: [main, richard/packaging, richard/packaging2]
+    branches: [main]
     tags: ['v*']
   pull_request:
     types: [opened, synchronize, reopened]
@@ -27,7 +27,6 @@ on:
     - 'version.txt'
     - '.github/workflows/wheels.yml'
     - 'tools/wheels/**'
-    - 'tools/packages/**'
     - 'build/fbcode_builder/**'
   workflow_dispatch:
 
@@ -143,33 +142,4 @@ jobs:
       with:
         name: wheels-${{ matrix.os }}-${{ matrix.py }}
         path: wheelhouse/*.whl
-        if-no-files-found: error
-
-  linux-sdk:
-    name: linux-sdk
-    runs-on: 16-core-ubuntu
-    timeout-minutes: 60
-    steps:
-    - uses: actions/checkout@v6
-      with:
-        fetch-depth: 1
-
-    - name: Build SDK artifacts inside manylinux_2_28
-      run: |
-        docker run --rm \
-          -v "$PWD:/project" \
-          -w /project \
-          quay.io/pypa/manylinux_2_28_x86_64 \
-          bash tools/wheels/build_linux_sdk.sh
-
-    - name: Restore executable permissions
-      # EXAMPLES=ON only applies when building with tests (cmake.defines.test=on
-      # in the rebalancer manifest). The SDK build uses --no-tests so no .exe
-      # binaries are produced; the glob is a no-op here.
-      run: chmod +x _artifacts/linux/bin/*.exe 2>/dev/null || true
-
-    - uses: actions/upload-artifact@v6
-      with:
-        name: rebalancer-linux-sdk
-        path: _artifacts/linux
         if-no-files-found: error

@@ -16,7 +16,7 @@ name: sdist
 
 on:
   push:
-    branches: [main, richard/packaging]
+    branches: [main]
     tags: ['v*']
   pull_request:
     types: [opened, synchronize, reopened]

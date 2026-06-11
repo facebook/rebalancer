@@ -12,33 +12,66 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-name: packaging_linux
+name: linux-sdk
 
 on:
-  workflow_run:
-    workflows: ["wheels"]
-    branches: [main, richard/packaging, richard/packaging2]
-    types: [completed]
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+    - 'src/rebalancer/**'
+    - 'CMakeLists.txt'
+    - 'version.txt'
+    - '.github/workflows/linux-sdk.yml'
+    - 'tools/wheels/build_linux_sdk.sh'
+    - 'tools/packages/**'
+    - 'build/fbcode_builder/**'
   workflow_dispatch:
-    inputs:
-      run_id:
-        description: 'wheels workflow run ID to pull SDK artifacts from'
-        required: true
-        type: string
 
 permissions:
-  actions: read    # needed for downloading artifacts
-  contents: read   # needed for actions/checkout
+  contents: read
+  actions: read
 
 concurrency:
-  group: packaging_linux-${{ github.event.workflow_run.head_sha || github.sha }}
+  group: linux-sdk-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  linux-sdk:
+    name: linux-sdk
+    runs-on: 16-core-ubuntu
+    timeout-minutes: 60
+    steps:
+    - uses: actions/checkout@v6
+      with:
+        fetch-depth: 1
+
+    - name: Build SDK artifacts inside manylinux_2_28
+      run: |
+        docker run --rm \
+          -v "$PWD:/project" \
+          -w /project \
+          quay.io/pypa/manylinux_2_28_x86_64 \
+          bash tools/wheels/build_linux_sdk.sh
+
+    - name: Restore executable permissions
+      # EXAMPLES=ON only applies when building with tests (cmake.defines.test=on
+      # in the rebalancer manifest). The SDK build uses --no-tests so no .exe
+      # binaries are produced; the glob is a no-op here.
+      run: chmod +x _artifacts/linux/bin/*.exe 2>/dev/null || true
+
+    - uses: actions/upload-artifact@v6
+      with:
+        name: rebalancer-linux-sdk
+        path: _artifacts/linux
+        if-no-files-found: error
+
   package:
     name: package-${{ matrix.arch }}
+    needs: linux-sdk
     runs-on: ${{ matrix.runs_on }}
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     strategy:
       fail-fast: false
       matrix:
@@ -48,16 +81,12 @@ jobs:
           sdk_artifact: rebalancer-linux-sdk
     steps:
     - uses: actions/checkout@v6
-      with:
-        ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
     - name: Download Linux SDK artifacts
       uses: actions/download-artifact@v6
       with:
         name: ${{ matrix.sdk_artifact }}
         path: _artifacts/linux
-        run-id: ${{ github.event.workflow_run.id || inputs.run_id }}
-        github-token: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Restore executable permissions
       # upload-artifact strips execute bits. Restore them for all binaries:
