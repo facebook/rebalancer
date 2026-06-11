@@ -137,9 +137,22 @@ else
 fi
 
 # bundle_system_deps.py walks the artifact's shared libs and bundles any
-# transitive system deps (libstdc++, libssl, etc.) that aren't already in
-# the artifact lib dir. With $ORIGIN rpaths set above, ldd reports the
-# getdeps-installed shared libs (libfolly.so, etc.) as "found" in lib/,
-# so the bundler correctly skips them and only copies true system libs.
+# transitive deps that aren't already in the artifact lib dir.
+#
+# Two classes of missing dep:
+#   1. True system libs (libstdc++, libssl, etc.) — ldd finds them in system
+#      paths; bundler copies them to lib/rebalancer/.
+#   2. Getdeps-built libs that fixup-dyn-deps didn't copy (libglog, libgflags,
+#      libfmt, etc.) — these are transitive deps of libfolly.so but not direct
+#      DT_NEEDED of librebalancer.so, so fixup-dyn-deps never walked them.
+#      After the $ORIGIN rpath pass above, ldd reports them as "not found"
+#      (they're not in lib/ or lib/rebalancer/). Adding the getdeps install
+#      prefix to LD_LIBRARY_PATH lets ldd resolve them; the bundler then
+#      copies them to lib/rebalancer/ where ldconfig will register them.
+GETDEPS_LIBDIRS=""
+for d in /tmp/fbcode_builder_getdeps-*/installed/*/lib \
+          /tmp/fbcode_builder_getdeps-*/installed/*/lib64; do
+    [ -d "$d" ] && GETDEPS_LIBDIRS="${GETDEPS_LIBDIRS}:${d}"
+done
 cd /project
-$PY /project/tools/packages/bundle_system_deps.py
+LD_LIBRARY_PATH="${GETDEPS_LIBDIRS#:}" $PY /project/tools/packages/bundle_system_deps.py
