@@ -86,13 +86,12 @@ jobs:
           --json tagName --jq '.tagName' 2>/dev/null || echo "")
         LATEST_VERSION="${LATEST_TAG#v}"
 
-        IS_NEWER=$(python3 - <<EOF
+        IS_NEWER=$(python3 -c "
 from packaging.version import Version
-current = Version("$VERSION")
-latest  = Version("$LATEST_VERSION") if "$LATEST_VERSION" else Version("0")
-print("true" if current > latest else "false")
-EOF
-)
+v = Version('$VERSION')
+l = Version('$LATEST_VERSION') if '$LATEST_VERSION' else Version('0')
+print('true' if v > l else 'false')
+")
         if [ "$IS_NEWER" = "true" ]; then
           echo "v$VERSION > latest release '${LATEST_VERSION:-none}' — will release"
           echo "skip=false" >> "$GITHUB_OUTPUT"
