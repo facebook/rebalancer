@@ -57,6 +57,7 @@ TEST_F(ProductTest, NeitherBinary) {
       .exceptionForLpExpr =
           "At least one of the operands must be a binary variable"};
 
+  EXPECT_DOUBLE_EQ(-2, binaryOperation->getInitialValue());
   EXPECT_EQ(-2, apply(binaryOperation, assignment, lpAssertOptions));
   EXPECT_TRUE(descendingChildPotentialsAsExpected(*binaryOperation, {0, 0}));
 
@@ -87,6 +88,8 @@ TEST_F(ProductTest, LhsBinary) {
       {container(1), {object(1)}},
   });
 
+  // m init = 2*0 - 1 = -1; step(-1) = 0; (m-2) init = -3; product = 0 * -3 = 0.
+  EXPECT_DOUBLE_EQ(0, binaryOperation->getInitialValue());
   EXPECT_EQ(0, apply(binaryOperation, assignment));
 
   EXPECT_EQ(
@@ -107,6 +110,8 @@ TEST_F(ProductTest, EquivalenceSets) {
   auto o1c1 = variable(object(1), container(1), universe, assignment);
   auto o3c2 = variable(object(3), container(2), universe, assignment);
   auto b = product(o1c1, o3c2, universe);
+  // o1c1 init = 1, o3c2 init = 1, so product init = 1.
+  EXPECT_DOUBLE_EQ(1.0, b->getInitialValue());
 
   EquivalenceSets equivalenceSets(*universe);
   equivalenceSets.combine(

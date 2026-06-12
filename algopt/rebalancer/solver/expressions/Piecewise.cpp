@@ -100,6 +100,8 @@ Piecewise::Piecewise(
     prevY = y;
   }
   add_child(expr);
+
+  setInitialValue(performPiecewise(getOnlyChildRawPtr()->getInitialValue()));
 }
 
 const std::string_view& Piecewise::getType() const {

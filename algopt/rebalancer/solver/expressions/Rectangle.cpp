@@ -33,6 +33,7 @@ Rectangle::Rectangle(
     : Transform(std::move(expr), std::move(universe)) {
   lowerBound_ = lowerBound;
   upperBound_ = upperBound;
+  setInitialValue(perform_transform(getOnlyChildRawPtr()->getInitialValue()));
 }
 
 const std::string_view& Rectangle::getType() const {

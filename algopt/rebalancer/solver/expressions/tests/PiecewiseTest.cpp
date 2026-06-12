@@ -38,37 +38,23 @@ class PiecewiseTest : public ExpressionTestsBase {
 TEST_F(PiecewiseTest, PiecewiseNonContinuous) {
   const auto universe = buildUniverse();
   const Assignment assignment(universe->getContainers().getInitialAssignment());
+
+  // x = 6*var(obj1,c0) + var(obj2,c0) - 1; initial value -1, out of [0, 5].
   auto x = 6 * variable(object(1), container(0), universe, assignment) +
       variable(object(2), container(0), universe, assignment) - 1;
-  auto y = piecewise({{0, 0}, {0, 5}, {5, 0}}, x, universe, false);
+  REBALANCER_EXPECT_RUNTIME_ERROR_CONTAINS(
+      piecewise({{0, 0}, {0, 5}, {5, 0}}, x, universe, false),
+      "cannot be smaller than first point");
 
-  // check all breakpoints
-  // x = -1
-  Assignment assignment00(
-      {{container(0), {}}, {container(1), {object(1), object(2)}}});
-  REBALANCER_EXPECT_RUNTIME_ERROR(
-      apply(y, assignment00), "x cannot be smaller than first points");
+  // x2 has initial value 6*1 + 0 - 1 = 5 (in domain).
+  auto x2 = 6 * variable(object(0), container(0), universe, assignment) +
+      variable(object(2), container(0), universe, assignment) - 1;
+  auto y = piecewise({{0, 0}, {0, 5}, {5, 0}}, x2, universe, false);
+  EXPECT_DOUBLE_EQ(0, apply(y, assignment));
 
-  // x = 0
-  const Assignment assignment01(
-      {{container(0), {object(2)}}, {container(1), {object(1)}}});
-  EXPECT_EQ(0, apply(y, assignment01));
-
-  // x = 5
-  const Assignment assignment10(
-      {{container(0), {object(1)}}, {container(1), {object(2)}}});
-  EXPECT_EQ(0, apply(y, assignment10));
-
-  // x = 6
-  Assignment assignment11(
-      {{container(0), {object(1), object(2)}}, {container(1), {}}});
-  REBALANCER_EXPECT_RUNTIME_ERROR(
-      apply(y, assignment11), "x cannot be larger than last points");
-
-  // Check an internal point
-  auto z = piecewise({{0, 0}, {0, 5}, {5, 0}}, x / 5, universe, false);
-  // x / 5 = 1
-  EXPECT_EQ(4, apply(z, assignment10));
+  // x2/5 = 1, so piecewise interpolates to 4 between (0, 5) and (5, 0).
+  auto z = piecewise({{0, 0}, {0, 5}, {5, 0}}, x2 / 5, universe, false);
+  EXPECT_DOUBLE_EQ(4, apply(z, assignment));
 }
 
 TEST_F(PiecewiseTest, PiecewiseNonContinuousDecreasing) {
@@ -144,6 +130,16 @@ TEST_F(PiecewiseTest, PiecewiseDecreasing) {
 
   // x = 2.5, so y should be 5-2.5
   EXPECT_EQ(2.5, evaluate(y, {{object(1), container(0)}}, assignment));
+}
+
+TEST_F(PiecewiseTest, PiecewiseInitialValue) {
+  const auto universe = buildUniverse();
+  const Assignment assignment(universe->getContainers().getInitialAssignment());
+
+  auto v = variable(object(0), container(0), universe, assignment);
+  // v = 1, so piecewise({(1, 9), (2, 5)})(1) = 9.
+  EXPECT_DOUBLE_EQ(
+      9.0, piecewise({{1.0, 9.0}, {2.0, 5.0}}, v, universe)->getInitialValue());
 }
 
 } // namespace facebook::rebalancer::packer::tests

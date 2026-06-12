@@ -54,6 +54,8 @@ QuotientOperation::QuotientOperation(
     std::shared_ptr<Expression> expr2,
     std::shared_ptr<const entities::Universe> universe)
     : BinaryOperation(std::move(expr1), std::move(expr2), std::move(universe)) {
+  setInitialValue(
+      safe_div(child1st->getInitialValue(), child2nd->getInitialValue()));
 }
 
 const std::string_view& QuotientOperation::getType() const {

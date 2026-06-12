@@ -42,6 +42,8 @@ TEST_F(QuotientOperationTest, LpExactWhenQuotientInUnitInterval) {
   auto x = variable(object(1), container(0), universe, assignment);
   auto q = quotient(const_expr(1, universe), x + 2, universe);
 
+  // No `apply` needed for `getInitialValue()`: the constructor seeds it.
+  EXPECT_NEAR(0.5, q->getInitialValue(), 1e-8);
   EXPECT_NEAR(0.5, apply(q, assignment), 1e-8);
 }
 
@@ -59,6 +61,7 @@ TEST_F(QuotientOperationTest, LpInfeasibleWhenQuotientExceedsOne) {
   LpAssertOptions lpAssertOptions{
       .exceptionForLpExpr =
           "LP problem has no solution (infeasible or unbounded)"};
+  EXPECT_NEAR(1.5, q->getInitialValue(), 1e-8);
   EXPECT_NEAR(1.5, apply(q, assignment, lpAssertOptions), 1e-8);
 }
 
@@ -92,6 +95,13 @@ TEST_F(QuotientOperationTest, Bounds) {
 
     const Assignment assignment({{container(1), {object(1), object(2)}}});
     // we have variable(1, 0) = variable(2, 0) = 0
+    // Initial value uses the same identity (objects 1, 2 are in c1, c2 per
+    // SetUp; var(o*, c0) = 0 initially), so initial value matches `eval[i]`.
+    if (std::isnan(eval[i])) {
+      EXPECT_TRUE(std::isnan(binary_operation->getInitialValue()));
+    } else {
+      EXPECT_DOUBLE_EQ(eval[i], binary_operation->getInitialValue());
+    }
     _apply(*binary_operation, assignment);
 
     if (std::isinf(eval[i])) {

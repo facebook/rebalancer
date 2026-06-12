@@ -55,6 +55,9 @@ SumOverThreshold::SumOverThreshold(
   for (auto& node : values) {
     add_child(node);
   }
+
+  setInitialValue(
+      populateAndEvaluate([](Expression* c) { return c->getInitialValue(); }));
 }
 
 const std::string_view& SumOverThreshold::getType() const {
@@ -104,32 +107,14 @@ double SumOverThreshold::evaluate(
     result += evaluate_single(new_value, threshold);
   }
 
-  return getPrecision().isZero(fabs(result)) ? 0 : result;
+  return snapToZero(result);
 }
 
 double SumOverThreshold::innerFullApply(
     const TopToBottomEvaluator& evaluator,
     const Assignment& assignment) {
-  const double threshold = evaluator.apply(threshold_expr.get(), assignment);
-  values.clear();
-  for (const auto& child : children()) {
-    if (threshold_expr == child) {
-      continue;
-    }
-    values[child.get()] = evaluator.apply(child.get(), assignment);
-  }
-
-  collection.clear();
-  for (auto& [expr, val] : values) {
-    collection.update(
-        make_pair(val, expr),
-        Node{.sum = val, .sum_squares = val * val, .count = 1});
-  }
-
-  value = evaluate_collection(threshold);
-  if (getPrecision().isZero(fabs(value))) {
-    value = 0;
-  }
+  value = populateAndEvaluate(
+      [&](Expression* c) { return evaluator.apply(c, assignment); });
   return value;
 }
 
@@ -157,10 +142,7 @@ double SumOverThreshold::innerPartialApply(
       }
     }
   }
-  value = evaluate_collection(threshold);
-  if (getPrecision().isZero(fabs(value))) {
-    value = 0;
-  }
+  value = snapToZero(evaluate_collection(threshold));
   return value;
 }
 
@@ -180,14 +162,7 @@ Bounds SumOverThreshold::innerLowerAndUpperBounds(
     lb += evaluate_single(min_value, max_threshold);
     ub += evaluate_single(max_value, min_threshold);
   }
-  const auto& precision = getPrecision();
-  if (precision.isZero(fabs(lb))) {
-    lb = 0;
-  }
-  if (precision.isZero(fabs(ub))) {
-    ub = 0;
-  }
-  return {.lower_bound = lb, .upper_bound = ub};
+  return {.lower_bound = snapToZero(lb), .upper_bound = snapToZero(ub)};
 }
 
 void SumOverThreshold::lpIntent(const LpEvaluator& evaluator, bool minimizing) {
@@ -290,6 +265,25 @@ double SumOverThreshold::evaluate_single(double value, double threshold) const {
     result = result * result;
   }
   return result;
+}
+
+template <typename ValueFn>
+double SumOverThreshold::populateAndEvaluate(ValueFn&& valueFn) {
+  values.clear();
+  collection.clear();
+  double threshold = 0;
+  for (const auto& child : children()) {
+    const auto val = valueFn(child.get());
+    if (threshold_expr == child) {
+      threshold = val;
+      continue;
+    }
+    values[child.get()] = val;
+    collection.update(
+        make_pair(val, child.get()),
+        Node{.sum = val, .sum_squares = val * val, .count = 1});
+  }
+  return snapToZero(evaluate_collection(threshold));
 }
 
 std::string SumOverThreshold::innerDigest(size_t maxChildren) const {
