@@ -51,7 +51,7 @@ concurrency:
 env:
   PROJECT_NAME: rebalancer
   # Workflows that must succeed for this SHA before we publish.
-  REQUIRED_WORKFLOWS: "lint-version.yml linux.yml mac.yml wheels.yml sdist.yml linux-sdk.yml packaging_mac.yml"
+  REQUIRED_WORKFLOWS: "lint-version.yml getdeps_linux.yml getdeps_mac.yml wheels.yml sdist.yml linux-sdk.yml packaging_mac.yml"
 
 jobs:
   validate:
