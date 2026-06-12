@@ -15,6 +15,7 @@
 #include "algopt/rebalancer/solver/expressions/Operators.h"
 #include "algopt/rebalancer/solver/expressions/tests/ExpressionTestsBase.h"
 #include "algopt/rebalancer/solver/expressions/tests/ExpressionUtils.h"
+#include "algopt/rebalancer/solver/utils/equivalence_sets/EquivalenceSets.h"
 
 #include <fmt/format.h>
 #include <folly/container/irange.h>
@@ -24,7 +25,7 @@ namespace facebook::rebalancer::packer::tests {
 
 class ProductTest : public ExpressionTestsBase {
  protected:
-  void SetUp() override {
+  void setUpDefaultAssignment() {
     constexpr int kNumContainers = 20;
     entities::Map<std::string, std::vector<std::string>> initialAssignment;
     for (const auto i : folly::irange(kNumContainers)) {
@@ -36,6 +37,7 @@ class ProductTest : public ExpressionTestsBase {
 };
 
 TEST_F(ProductTest, NeitherBinary) {
+  setUpDefaultAssignment();
   const auto universe = buildUniverse();
   const Assignment initialAssignment(
       universe->getContainers().getInitialAssignment());
@@ -73,6 +75,7 @@ TEST_F(ProductTest, NeitherBinary) {
 }
 
 TEST_F(ProductTest, LhsBinary) {
+  setUpDefaultAssignment();
   const auto universe = buildUniverse();
   const Assignment initialAssignment(
       universe->getContainers().getInitialAssignment());
@@ -92,6 +95,30 @@ TEST_F(ProductTest, LhsBinary) {
   EXPECT_EQ(
       -1,
       applyChanges(binaryOperation, {{object(1), container(0)}}, assignment));
+}
+
+TEST_F(ProductTest, EquivalenceSets) {
+  setInitialAssignment(
+      entities::Map<std::string, std::vector<std::string>>{
+          {"container1", {"object1", "object2"}},
+          {"container2", {"object3", "object4"}}});
+  const auto universe = buildUniverse();
+  const Assignment assignment(universe->getContainers().getInitialAssignment());
+  auto o1c1 = variable(object(1), container(1), universe, assignment);
+  auto o3c2 = variable(object(3), container(2), universe, assignment);
+  auto b = product(o1c1, o3c2, universe);
+
+  EquivalenceSets equivalenceSets(*universe);
+  equivalenceSets.combine(
+      std::vector<entities::ObjectId>{
+          object(1), object(2), object(3), object(4)});
+
+  updateEquivalenceSets(equivalenceSets, *b);
+
+  EXPECT_EQ(equivalenceSets.size(), 3);
+  EXPECT_NE(equivalenceSets.at(object(1)), equivalenceSets.at(object(2)));
+  EXPECT_EQ(equivalenceSets.at(object(2)), equivalenceSets.at(object(4)));
+  EXPECT_NE(equivalenceSets.at(object(1)), equivalenceSets.at(object(3)));
 }
 
 } // namespace facebook::rebalancer::packer::tests

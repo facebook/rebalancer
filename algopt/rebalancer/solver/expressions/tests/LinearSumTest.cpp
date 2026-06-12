@@ -15,6 +15,9 @@
 #include "algopt/rebalancer/solver/expressions/LinearSum.h"
 #include "algopt/rebalancer/solver/expressions/Operators.h"
 #include "algopt/rebalancer/solver/expressions/tests/ExpressionTestsBase.h"
+#include "algopt/rebalancer/solver/expressions/tests/ExpressionUtils.h"
+#include "algopt/rebalancer/solver/iterators/ExpressionContainersIterator.h"
+#include "algopt/rebalancer/solver/utils/GlobalObjective.h"
 
 #include <fmt/format.h>
 #include <folly/container/irange.h>
@@ -24,7 +27,7 @@ namespace facebook::rebalancer::packer::tests {
 
 class LinearSumTest : public ExpressionTestsBase {
  protected:
-  void SetUp() override {
+  void setUpDefaultAssignment() {
     constexpr int kNumContainers = 20;
     entities::Map<std::string, std::vector<std::string>> initialAssignment;
     for (const auto i : folly::irange(kNumContainers)) {
@@ -36,6 +39,7 @@ class LinearSumTest : public ExpressionTestsBase {
 };
 
 TEST_F(LinearSumTest, Caching) {
+  setUpDefaultAssignment();
   const auto universe = buildUniverse();
   const Assignment assignment(
       {{container(1), {object(0)}}, {container(2), {}}, {container(0), {}}});
@@ -95,6 +99,7 @@ TEST_F(LinearSumTest, Caching) {
 }
 
 TEST_F(LinearSumTest, EquivalenceSetsLinearSum) {
+  setUpDefaultAssignment();
   const auto universe = buildUniverse();
   const Assignment initialAssignment(
       universe->getContainers().getInitialAssignment());
@@ -116,6 +121,7 @@ TEST_F(LinearSumTest, EquivalenceSetsLinearSum) {
 }
 
 TEST_F(LinearSumTest, LinearSumIsBinary) {
+  setUpDefaultAssignment();
   const auto universe = buildUniverse();
   const Assignment initialAssignment(
       universe->getContainers().getInitialAssignment());
@@ -139,6 +145,7 @@ TEST_F(LinearSumTest, LinearSumIsBinary) {
 }
 
 TEST_F(LinearSumTest, LinearSumEqual) {
+  setUpDefaultAssignment();
   const auto universe = buildUniverse();
   const Assignment initialAssignment(
       universe->getContainers().getInitialAssignment());
@@ -153,6 +160,7 @@ TEST_F(LinearSumTest, LinearSumEqual) {
 }
 
 TEST_F(LinearSumTest, ZeroOptimization) {
+  setUpDefaultAssignment();
   const auto universe = buildUniverse();
   const Assignment initialAssignment(
       universe->getContainers().getInitialAssignment());
@@ -166,6 +174,7 @@ TEST_F(LinearSumTest, ZeroOptimization) {
 }
 
 TEST_F(LinearSumTest, LinearSumBoundsTests) {
+  setUpDefaultAssignment();
   const auto universe = buildUniverse();
   const Assignment initialAssignment(
       universe->getContainers().getInitialAssignment());
@@ -189,6 +198,7 @@ TEST_F(LinearSumTest, LinearSumBoundsTests) {
 }
 
 TEST_F(LinearSumTest, AmplifiedSubToleranceChildChangesPropagate) {
+  setUpDefaultAssignment();
   // Two-level sum:
   //   innerSum_i = 1.0 + kSmallFactor * v_i
   //   obj        = sum_i kLargeFactor * innerSum_i, for i in [0, kN)
@@ -235,6 +245,142 @@ TEST_F(LinearSumTest, AmplifiedSubToleranceChildChangesPropagate) {
           *obj, context, getModifiedAssignment(initialAssignment, moves)),
       1e-8);
   EXPECT_NEAR(expected, obj->value, 1e-8);
+}
+
+TEST_F(LinearSumTest, ContainerOrder) {
+  /*
+   *                   SUM=8
+   *                /    |   \
+   *              8     -10   5
+   *            /        |     \
+   *        MAX=1      MAX=0  MAX=0
+   *        /  |       /  \     \
+   *      v2=1 v3=1   v4  v1    v1
+   *      c3   c1     c2  c3    c3
+   * Desired order when NOT skipping optimal expressions: (c2, c3, c1). In this
+   * case, child2 has the maximum potential initially, and both v1 and v4 have
+   * zero potential. Although there is no priority among c2/c3 based
+   * on potentials, we break ties in favor of expressions that have larger id.
+   * Here v4 will have a larger id than v1, and hence the expected order is (c2,
+   * c3, c1).
+   *
+   * Desired order when skipping optimal expressions: (c1, c3). In this case,
+   * although child2 has the maximum potential initially, both v1 and v4 have
+   * zero potential. Therefore, they will be skipped. Following that, Child1 has
+   * the next max potential, and both its children v2 and v3 have potential
+   * = 1. Due to deterministic tie-breaking in favor of expression with larger
+   * id, the expected order is (c1, c3)
+   */
+  setInitialAssignment(
+      entities::Map<std::string, std::vector<std::string>>{
+          {"container1", {"object1"}},
+          {"container2", {}},
+          {"container3", {"object0"}}});
+  const auto universe = buildUniverse();
+
+  // false placement
+  const Assignment initialAssignment(
+      universe->getContainers().getInitialAssignment());
+  auto v1 = variable(object(1), container(3), universe, initialAssignment);
+  // true placement
+  auto v2 = variable(object(0), container(3), universe, initialAssignment);
+  // true placement
+  auto v3 = variable(object(1), container(1), universe, initialAssignment);
+  // false placement
+  auto v4 = variable(object(1), container(2), universe, initialAssignment);
+
+  Assignment assignment(
+      {{container(1), {object(1)}}, {container(3), {object(0)}}});
+
+  auto child1 = rebalancer::max(v2, v3, universe);
+  auto child2 = rebalancer::max(v1, v4, universe);
+  auto child3 = rebalancer::max({v1}, universe);
+  auto linearsum = std::make_shared<LinearSum>(
+      universe,
+      0,
+      PackerMap<std::shared_ptr<Expression>, double>{
+          {child1, 8.0}, {child2, -10.0}, {child3, 5.0}});
+
+  auto objective = GlobalObjective::Builder{}
+                       .addToObjective(0, linearsum, universe)
+                       .build(universe);
+
+  Context context;
+  auto objExpr = objective.getOnlyObjective();
+  objExpr->init_unconstrained_bounds(context);
+  _apply(*objExpr, assignment);
+
+  // verify that expression tree confirms to the representation above
+  EXPECT_EQ(linearsum->value, 8);
+  auto children =
+      linearsum->get_sorted_children(true); // get descending sorted children
+  ASSERT_EQ(3, children.size());
+  auto child = children.begin();
+  EXPECT_EQ(0, child->first->value);
+  EXPECT_EQ(-10, child->second);
+  child++;
+  EXPECT_EQ(1, child->first->value);
+  EXPECT_EQ(8, child->second);
+  child++;
+  EXPECT_EQ(0, child->first->value);
+  EXPECT_EQ(5, child->second);
+
+  // verify DescendingChildPotentials
+  EXPECT_TRUE(descendingChildPotentialsAsExpected(
+      *linearsum,
+      {10.0, 8.0, 0.0},
+      std::vector<ExprPtr>{child2, child1, child3}));
+
+  {
+    // case1: optimal expressions are NOT skipped
+    const DescendingExpressionContainersTraversal descending(
+        objective.getView());
+    std::vector<entities::ContainerId> order(
+        descending.begin(), descending.end());
+    ASSERT_EQ(3, order.size());
+    EXPECT_EQ(container(2), order[0]);
+    EXPECT_EQ(container(3), order[1]);
+    EXPECT_EQ(container(1), order[2]);
+  }
+
+  {
+    // case2: optimal expressions are skipped
+    const DescendingExpressionContainersTraversal descending(
+        objective.getView(), true /*skipOptimalExpressions*/);
+    std::vector<entities::ContainerId> order(
+        descending.begin(), descending.end());
+    ASSERT_EQ(2, order.size());
+    EXPECT_EQ(container(1), order[0]);
+    EXPECT_EQ(container(3), order[1]);
+  }
+
+  {
+    // apply the move where object(1) is moved to container(2) and object(0) is
+    // moved to container(1)
+    Context applyContext;
+    assignment.moveTo(object(1), container(2));
+    assignment.moveTo(object(0), container(1));
+    applyContext.changes() = ChangeSet(
+        {Change(object(1), container(1), -1),
+         Change(object(1), container(2), 1),
+         Change(object(0), container(3), -1),
+         Change(object(0), container(1), 1)});
+    _applyChanges(*linearsum, applyContext, assignment);
+
+    // Note that although all the children of linearSum have the same potential,
+    // the order below follows from the following deterministic tie-breaking
+    // rule: 1) first prefer expressions that have non-zero uniquelyAffected +
+    // directlyAffected containers, 2) if there is a tie, then prefer
+    // expressions that have larger ids. Therefore, here child3 comes first
+    // (because it has 1 uniquelyAffectedContainer c3), child2 and child1 are
+    // tied (neither have any uniquelyAffectedContainers in their subgraph nor
+    // any directlyAffectedContainers); child2 comes before child1 because it
+    // has a larger id
+    EXPECT_TRUE(descendingChildPotentialsAsExpected(
+        *linearsum,
+        {0.0, 0.0, 0.0},
+        std::vector<ExprPtr>{child3, child2, child1}));
+  }
 }
 
 } // namespace facebook::rebalancer::packer::tests
