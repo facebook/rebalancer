@@ -32,10 +32,12 @@ pip3 install pex --user
 ./build/fbcode_builder/getdeps.py --scratch-path ./installed --allow-system-packages build fbthrift
 cd ..
 
-# Clone and build Rebalancer
+# Clone (requires an SSH key set up with GitHub:
+# https://docs.github.com/en/authentication/connecting-to-github-with-ssh)
 git clone git@github.com:facebookincubator/rebalancer.git
-cd rebalancer/
-mkdir build && cd build
+
+# Configure and build
+cd rebalancer/build
 cmake -GNinja \
   -DCMAKE_COLOR_DIAGNOSTICS=ON \
   -DCMAKE_PREFIX_PATH="$HOME/fbthrift/installed/installed/folly/lib/cmake/folly;$HOME/fbthrift/installed/installed/fbthrift/lib/cmake/fbthrift;$HOME/fbthrift/installed/installed/fmt/lib/cmake/fmt" \
@@ -63,14 +65,20 @@ cmake -GNinja .. && ninja
 
 ### macOS
 
+> **Prerequisite:** Install [Homebrew](https://brew.sh) if you don't have it.
+> After installing, open a new terminal so the `brew` command is available
+> (or run the `eval "$(/opt/homebrew/bin/brew shellenv)"` line the installer prints).
+
 ```bash
-# Prereqs
+# Install dependencies
 brew install cmake ninja boost fmt folly googletest fbthrift
 
-# Clone and build Rebalancer
+# Clone (requires an SSH key set up with GitHub:
+# https://docs.github.com/en/authentication/connecting-to-github-with-ssh)
 git clone git@github.com:facebookincubator/rebalancer.git
-cd rebalancer/
-mkdir build && cd build
+
+# Configure and build
+cd rebalancer/build
 cmake -GNinja \
   -DCMAKE_COLOR_DIAGNOSTICS=ON \
   -DCMAKE_PREFIX_PATH="/opt/homebrew/lib/cmake/folly;/opt/homebrew/lib/cmake/fbthrift;/opt/homebrew/lib/cmake/fmt" \
