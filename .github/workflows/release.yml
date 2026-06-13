@@ -59,7 +59,6 @@ jobs:
     timeout-minutes: 5
     outputs:
       version: ${{ steps.read.outputs.version }}
-      sha: ${{ steps.read.outputs.sha }}
       skip: ${{ steps.read.outputs.skip }}
     env:
       GH_TOKEN: ${{ github.token }}
@@ -78,9 +77,7 @@ jobs:
       id: read
       run: |
         VERSION=$(cat version.txt)
-        SHA=$(git rev-parse HEAD)
         echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-        echo "sha=$SHA"         >> "$GITHUB_OUTPUT"
 
         LATEST_TAG=$(gh release view --repo "${{ github.repository }}" \
           --json tagName --jq '.tagName' 2>/dev/null || echo "")
@@ -94,99 +91,20 @@ jobs:
           echo "v$VERSION <= latest release '${LATEST_VERSION:-none}' — skipping release"
           echo "skip=true" >> "$GITHUB_OUTPUT"
         fi
-
-  wait-for-builds:
-    needs: validate
-    if: needs.validate.outputs.skip == 'false'
-    runs-on: ubuntu-latest
-    timeout-minutes: 90
-    env:
-      SHA: ${{ needs.validate.outputs.sha }}
-      GH_TOKEN: ${{ github.token }}
-    steps:
-    - name: Wait for required sibling workflows
-      run: |
-        set -euo pipefail
-        for wf in $REQUIRED_WORKFLOWS; do
-          echo "::group::Waiting for $wf @ $SHA"
-          deadline=$(( $(date +%s) + 60 * 80 ))   # 80 min per workflow ceiling
-          while :; do
-            run_json=$(gh run list \
-              --repo "${{ github.repository }}" \
-              --workflow "$wf" \
-              --commit "$SHA" \
-              --limit 1 \
-              --json status,conclusion,databaseId,url 2>/dev/null || echo '[]')
-            status=$(echo "$run_json"     | jq -r '.[0].status     // "missing"')
-            conclusion=$(echo "$run_json" | jq -r '.[0].conclusion // ""')
-            url=$(echo "$run_json"        | jq -r '.[0].url        // ""')
-            case "$status" in
-              completed)
-                if [ "$conclusion" = "success" ]; then
-                  echo "✅ $wf succeeded ($url)"
-                  break
-                fi
-                echo "::error::$wf finished with conclusion=$conclusion ($url) — aborting release"
-                exit 1
-                ;;
-              missing)
-                # No run for this exact SHA — the workflow was skipped by path
-                # filters (e.g. a release.yml-only commit). Fall back to the
-                # most recent successful run on main: if build-relevant files
-                # didn't change, the prior artifacts are still valid.
-                fallback=$(gh run list \
-                  --repo "${{ github.repository }}" \
-                  --workflow "$wf" \
-                  --branch main \
-                  --status success \
-                  --limit 1 \
-                  --json databaseId,headSha,url 2>/dev/null || echo '[]')
-                fb_id=$(echo "$fallback"  | jq -r '.[0].databaseId // ""')
-                fb_sha=$(echo "$fallback" | jq -r '.[0].headSha // ""')
-                fb_url=$(echo "$fallback" | jq -r '.[0].url // ""')
-                if [ -n "$fb_id" ]; then
-                  # Verify fb_sha is an ancestor of SHA so we don't accept a
-                  # build from an unrelated branch that happened to merge last.
-                  compare=$(gh api \
-                    "repos/${{ github.repository }}/compare/${fb_sha}...${SHA}" \
-                    --jq '.status' 2>/dev/null || echo "unknown")
-                  if [ "$compare" = "ahead" ] || [ "$compare" = "identical" ]; then
-                    echo "✅ $wf skipped for $SHA (path filter); ancestor run succeeded: $fb_url"
-                    break
-                  else
-                    echo "  $wf: fallback $fb_sha is not an ancestor of $SHA (status=$compare); waiting..."
-                  fi
-                fi
-                echo "  $wf has no run for $SHA yet; waiting..."
-                ;;
-              *)
-                echo "  $wf status=$status; waiting..."
-                ;;
-            esac
-            if [ "$(date +%s)" -ge "$deadline" ]; then
-              echo "::error::$wf did not complete within 80 minutes — aborting"
-              exit 1
-            fi
-            sleep 30
-          done
-          echo "::endgroup::"
-        done
-        echo "All required workflows succeeded for $SHA."
-
   publish:
-    needs: [validate, wait-for-builds]
+    needs: validate
     if: needs.validate.outputs.skip == 'false'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: testpypi   # configure trusted publisher on test.pypi.org
     env:
-      SHA: ${{ needs.validate.outputs.sha }}
+      SHA: ${{ github.sha }}
       VERSION: ${{ needs.validate.outputs.version }}
       GH_TOKEN: ${{ github.token }}
     steps:
     - uses: actions/checkout@v6
       with:
-        ref: ${{ needs.validate.outputs.sha }}
+        ref: ${{ github.event.inputs.ref || github.sha }}
         fetch-depth: 0
 
     - name: Download wheel artifacts (linux + macos)
