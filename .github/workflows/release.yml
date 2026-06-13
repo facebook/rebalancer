@@ -91,6 +91,67 @@ jobs:
           echo "v$VERSION <= latest release '${LATEST_VERSION:-none}' — skipping release"
           echo "skip=true" >> "$GITHUB_OUTPUT"
         fi
+  find-release-sha:
+    needs: validate
+    if: needs.validate.outputs.skip == 'false'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      qualifying_sha: ${{ steps.scan.outputs.qualifying_sha }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+    - uses: actions/checkout@v6
+      with:
+        ref: ${{ github.event.inputs.ref || github.sha }}
+        fetch-depth: 0
+    - name: Find oldest qualifying SHA
+      id: scan
+      run: |
+        set -euo pipefail
+
+        # Most recent commit that touched version.txt — lower bound of the search.
+        base_sha=$(git log --format=%H -1 -- version.txt)
+        if [ -z "$base_sha" ]; then
+          echo "::error::version.txt has no git history"
+          exit 1
+        fi
+        echo "base_sha=$base_sha"
+
+        # All commits from base_sha through HEAD, oldest first.
+        mapfile -t commits < <(git log --reverse --format=%H "${base_sha}^..HEAD")
+        echo "Scanning ${#commits[@]} commits (oldest first)"
+
+        qualifying_sha=""
+        for sha in "${commits[@]}"; do
+          all_pass=true
+          for wf in $REQUIRED_WORKFLOWS; do
+            run_json=$(gh run list \
+              --repo "${{ github.repository }}" \
+              --workflow "$wf" \
+              --commit "$sha" \
+              --limit 1 \
+              --json status,conclusion 2>/dev/null || echo '[]')
+            status=$(echo "$run_json"     | jq -r '.[0].status     // "missing"')
+            conclusion=$(echo "$run_json" | jq -r '.[0].conclusion // ""')
+            if [ "$status" != "completed" ] || [ "$conclusion" != "success" ]; then
+              echo "  $sha: $wf not qualifying (status=$status conclusion=$conclusion)"
+              all_pass=false
+              break
+            fi
+          done
+          if [ "$all_pass" = "true" ]; then
+            qualifying_sha="$sha"
+            echo "✅ Qualifying SHA: $sha"
+            break
+          fi
+        done
+
+        if [ -z "$qualifying_sha" ]; then
+          echo "::error::No qualifying SHA found in [base_sha..HEAD] — re-trigger after all required workflows pass at a single commit"
+          exit 1
+        fi
+        echo "qualifying_sha=$qualifying_sha" >> "$GITHUB_OUTPUT"
   publish:
     needs: validate
     if: needs.validate.outputs.skip == 'false'
