@@ -138,6 +138,61 @@ jobs:
         # with no diagnostic output).
         CIBW_TEST_COMMAND: bash {project}/tools/wheels/test_wheel.sh
 
+    # Linux wheels are built with cmake.build-type = "RelWithDebInfo" (see
+    # pyproject.toml), which retains full DWARF debug sections in every
+    # bundled .so. That produces ~133 MB wheels, exceeding PyPI's 100 MB
+    # per-file limit. We strip debug symbols here rather than switching to a
+    # Release build so that the smoke tests above (CIBW_TEST_COMMAND) run
+    # against the full-symbol binary — preserving crash diagnostic quality
+    # during CI — while the artifact we upload and eventually publish to PyPI
+    # is lean (~13 MB). strip --strip-unneeded removes only debug sections;
+    # it leaves the export symbol table and all executable code untouched,
+    # which is safe for dynamically-linked .so files. macOS wheels are ~25 MB
+    # unstripped and do not need this treatment.
+    - if: matrix.os == 'linux'
+      name: Strip debug symbols from Linux wheels
+      run: |
+        python3 - <<'PYEOF'
+        import hashlib, os, subprocess, zipfile, tempfile, glob
+
+        for whl_path in glob.glob('wheelhouse/*.whl'):
+            before = os.path.getsize(whl_path)
+            with tempfile.TemporaryDirectory() as tmpdir:
+                with zipfile.ZipFile(whl_path) as zf:
+                    zf.extractall(tmpdir)
+                for root, _, files in os.walk(tmpdir):
+                    for f in files:
+                        if '.so' in f:
+                            subprocess.run(
+                                ['strip', '--strip-unneeded', os.path.join(root, f)],
+                                check=True)
+                # Regenerate RECORD so pip's integrity check passes after we
+                # modified the .so files.
+                record_path = next(
+                    os.path.join(r, f)
+                    for r, _, fs in os.walk(tmpdir)
+                    for f in fs if f == 'RECORD')
+                entries = []
+                for root, _, files in os.walk(tmpdir):
+                    for f in files:
+                        fp = os.path.join(root, f)
+                        rel = os.path.relpath(fp, tmpdir)
+                        if fp == record_path:
+                            continue
+                        digest = hashlib.sha256(open(fp, 'rb').read()).hexdigest()
+                        entries.append(f'{rel},sha256={digest},{os.path.getsize(fp)}')
+                entries.append(f'{os.path.relpath(record_path, tmpdir)},,')
+                open(record_path, 'w').write('\n'.join(entries) + '\n')
+                os.remove(whl_path)
+                with zipfile.ZipFile(whl_path, 'w', zipfile.ZIP_DEFLATED) as zf:
+                    for root, _, files in os.walk(tmpdir):
+                        for f in files:
+                            fp = os.path.join(root, f)
+                            zf.write(fp, os.path.relpath(fp, tmpdir))
+            after = os.path.getsize(whl_path)
+            print(f'{os.path.basename(whl_path)}: {before/1e6:.1f} MB -> {after/1e6:.1f} MB')
+        PYEOF
+
     - uses: actions/upload-artifact@v6
       with:
         name: wheels-${{ matrix.os }}-${{ matrix.py }}
