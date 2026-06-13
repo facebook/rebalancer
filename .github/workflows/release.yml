@@ -153,19 +153,19 @@ jobs:
         fi
         echo "qualifying_sha=$qualifying_sha" >> "$GITHUB_OUTPUT"
   publish:
-    needs: validate
+    needs: [validate, find-release-sha]
     if: needs.validate.outputs.skip == 'false'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: testpypi   # configure trusted publisher on test.pypi.org
     env:
-      SHA: ${{ github.sha }}
+      SHA: ${{ needs.find-release-sha.outputs.qualifying_sha }}
       VERSION: ${{ needs.validate.outputs.version }}
       GH_TOKEN: ${{ github.token }}
     steps:
     - uses: actions/checkout@v6
       with:
-        ref: ${{ github.event.inputs.ref || github.sha }}
+        ref: ${{ needs.find-release-sha.outputs.qualifying_sha }}
         fetch-depth: 0
 
     - name: Download wheel artifacts (linux + macos)
