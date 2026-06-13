@@ -181,9 +181,11 @@ jobs:
           echo "Downloading artifacts from $wf run $run_id"
           gh run download "$run_id" --repo "${{ github.repository }}" --dir _stage
         done
-        # pypi_dist/ gets only Python distributions (.whl, .tar.gz) for upload.
+        # pypi_dist/ gets only Python distributions (.whl, sdist .tar.gz) for upload.
+        # Homebrew bottles (*.bottle.tar.gz) are excluded — they are not valid PyPI dists.
         # dist/ gets everything for the GitHub Release attachment.
-        find _stage -type f \( -name '*.whl' -o -name '*.tar.gz' \) \
+        find _stage -type f -name '*.whl' -exec cp -v {} pypi_dist/ \;
+        find _stage -type f -name '*.tar.gz' ! -name '*.bottle.tar.gz' \
           -exec cp -v {} pypi_dist/ \;
         find _stage -type f \( -name '*.whl' -o -name '*.tar.gz' \
                               -o -name '*.deb' -o -name '*.rpm' \
