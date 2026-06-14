@@ -195,7 +195,7 @@ jobs:
         done
 
         echo "qualifying_sha=$qualifying_sha" >> "$GITHUB_OUTPUT"
-  publish:
+  publish-testpypi:
     needs: [validate, find-release-sha]
     if: needs.validate.outputs.skip == 'false'
     runs-on: ubuntu-latest
@@ -213,7 +213,7 @@ jobs:
 
     - name: Download wheel artifacts (linux + macos)
       run: |
-        mkdir -p dist pypi_dist
+        mkdir -p pypi_dist
         for wf in wheels.yml sdist.yml linux-sdk.yml packaging_mac.yml; do
           run_id=$(gh run list \
             --repo "${{ github.repository }}" \
@@ -226,25 +226,18 @@ jobs:
         done
         # pypi_dist/ gets only Python distributions (.whl, sdist .tar.gz) for upload.
         # Homebrew bottles (*.bottle.tar.gz) are excluded — they are not valid PyPI dists.
-        # dist/ gets everything for the GitHub Release attachment.
         find _stage -type f -name '*.whl' -exec cp -v {} pypi_dist/ \;
         find _stage -type f -name '*.tar.gz' ! -name '*.bottle.tar.gz' \
           -exec cp -v {} pypi_dist/ \;
-        find _stage -type f \( -name '*.whl' -o -name '*.tar.gz' \
-                              -o -name '*.deb' -o -name '*.rpm' \
-                              -o -name '*.bottle.tar.gz' \) \
-          -exec cp -v {} dist/ \;
         echo "=== PyPI dist ===" && ls -la pypi_dist/
-        echo "=== Full dist ===" && ls -la dist/
 
-    # Validate every file before touching PyPI. PyPI has no atomic upload
-    # API — files land one at a time with no rollback — so any rejection
-    # mid-upload leaves a partial release on the index. We treat a partial
-    # upload as unrecoverable: skip-existing is intentionally NOT set on the
-    # publish step below, so a re-run after a partial upload will fail rather
-    # than silently completing a mismatched set of files. The operator must
-    # either bump the version or yank the partial release before retrying.
-    # This pre-flight catches the common rejection causes before any upload:
+    # Validate every file before touching either index. PyPI has no atomic
+    # upload API — files land one at a time with no rollback — so any
+    # rejection mid-upload leaves a partial release on the index. We treat a
+    # partial upload as unrecoverable: skip-existing is intentionally NOT set,
+    # so a re-run after a partial upload will fail rather than silently
+    # completing a mismatched set. The operator must bump the version or yank
+    # the partial release before retrying. Checks:
     #   - size: PyPI rejects files > 100 MB (test.pypi.org same limit)
     #   - existing: abort if this version is already (partially) on TestPyPI
     #   - metadata: twine check catches malformed wheels/sdists
@@ -269,14 +262,17 @@ jobs:
         print(f"All {len(os.listdir('pypi_dist'))} files are under 100 MB.")
 
         version = os.environ["VERSION"]
-        url = f"https://test.pypi.org/pypi/rebalancer/{version}/json"
-        r = requests.get(url, timeout=10)
-        if r.status_code == 200:
-            existing = sorted(r.json()["urls"][i]["filename"] for i in range(len(r.json()["urls"])))
-            print(f"::error::v{version} already has files on TestPyPI: {existing}")
-            print("::error::Bump the version or yank the partial release before retrying.")
-            sys.exit(1)
-        print(f"v{version} not yet on TestPyPI — safe to upload.")
+        for index, label in [
+            (f"https://test.pypi.org/pypi/rebalancer/{version}/json", "TestPyPI"),
+            (f"https://pypi.org/pypi/rebalancer/{version}/json", "PyPI"),
+        ]:
+            r = requests.get(index, timeout=10)
+            if r.status_code == 200:
+                existing = sorted(u["filename"] for u in r.json()["urls"])
+                print(f"::error::v{version} already has files on {label}: {existing}")
+                print("::error::Bump the version or yank the partial release before retrying.")
+                sys.exit(1)
+            print(f"v{version} not yet on {label} — safe to upload.")
         PYEOF
         echo "=== twine check ==="
         twine check --strict pypi_dist/*
@@ -285,6 +281,50 @@ jobs:
       uses: pypa/gh-action-pypi-publish@release/v1
       with:
         repository-url: https://test.pypi.org/legacy/
+        packages-dir: pypi_dist
+
+  publish-pypi:
+    needs: [validate, find-release-sha, publish-testpypi]
+    if: needs.validate.outputs.skip == 'false'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: pypi   # configure trusted publisher on pypi.org
+    env:
+      SHA: ${{ needs.find-release-sha.outputs.qualifying_sha }}
+      VERSION: ${{ needs.validate.outputs.version }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+    - uses: actions/checkout@v6
+      with:
+        ref: ${{ needs.find-release-sha.outputs.qualifying_sha }}
+        fetch-depth: 0
+
+    - name: Download wheel artifacts (linux + macos)
+      run: |
+        mkdir -p dist pypi_dist
+        for wf in wheels.yml sdist.yml linux-sdk.yml packaging_mac.yml; do
+          run_id=$(gh run list \
+            --repo "${{ github.repository }}" \
+            --workflow "$wf" \
+            --commit "$SHA" \
+            --limit 1 \
+            --json databaseId --jq '.[0].databaseId')
+          echo "Downloading artifacts from $wf run $run_id"
+          gh run download "$run_id" --repo "${{ github.repository }}" --dir _stage
+        done
+        find _stage -type f -name '*.whl' -exec cp -v {} pypi_dist/ \;
+        find _stage -type f -name '*.tar.gz' ! -name '*.bottle.tar.gz' \
+          -exec cp -v {} pypi_dist/ \;
+        find _stage -type f \( -name '*.whl' -o -name '*.tar.gz' \
+                              -o -name '*.deb' -o -name '*.rpm' \
+                              -o -name '*.bottle.tar.gz' \) \
+          -exec cp -v {} dist/ \;
+        echo "=== PyPI dist ===" && ls -la pypi_dist/
+        echo "=== Full dist ===" && ls -la dist/
+
+    - name: Publish wheels + sdist to PyPI
+      uses: pypa/gh-action-pypi-publish@release/v1
+      with:
         packages-dir: pypi_dist
 
     - name: Create signed tag
