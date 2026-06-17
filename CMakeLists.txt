@@ -57,6 +57,13 @@ if(${CMAKE_SOURCE_DIR} STREQUAL ${CMAKE_BINARY_DIR})
   message(FATAL_ERROR "In-source build are not supported")
 endif()
 
+if(MSVC)
+    message(FATAL_ERROR
+        "MSVC is not supported. Rebalancer requires a Unix-like toolchain "
+        "(GCC or Clang on Linux, Apple Clang on macOS)."
+    )
+endif()
+
 option(USE_GUROBI "Build with Gurobi solver" OFF)
 if(USE_GUROBI)
     add_compile_definitions(REBALANCER_USE_GUROBI)
@@ -124,41 +131,21 @@ set(CMAKE_CXX_STANDARD
     CACHE STRING
           "The C++ standard whose features are requested to build this target.")
 
-if(MSVC)
-    # Prevent Windows headers from defining macros that conflict with C++
-    # identifiers in Thrift-generated code:
-    #   NOGDI: wingdi.h defines ABSOLUTE=1 and RELATIVE=2, which corrupt
-    #          Thrift enum values like LimitType::ABSOLUTE.
-    #   NOMINMAX: windef.h defines min/max macros that break std::min/max.
-    add_compile_definitions(NOGDI NOMINMAX)
-    # Thrift defines gflags (e.g. FLAGS_thrift_cpp2_protocol_reader_*) inside
-    # static libraries, but gflags is built as a shared library so its CMake
-    # config sets GFLAGS_IS_A_DLL=1. This makes DECLARE_* macros use
-    # __declspec(dllimport), generating __imp_ symbol references that don't
-    # exist in the thrift static libs. Override GFLAGS_DLL_DECLARE_FLAG to
-    # empty so our code references the flags as regular extern symbols.
-    # The gflags header guards this with #ifndef, so pre-defining it wins.
-    add_compile_definitions(GFLAGS_DLL_DECLARE_FLAG=)
-    # Large test files (e.g. ProblemSolverChecksTest.cpp) exceed the default
-    # COFF section limit with MSVC's /permissive- and gtest templates.
-    add_compile_options(/bigobj)
-else()
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-nullability -Wno-deprecated-declarations -Wno-nullability-completeness")
-    # Enable Clang's compile-time thread safety analysis when available.
-    # The REBALANCER_GUARDED_BY / REBALANCER_EXCLUDES macros in
-    # common/ThreadAnnotations.h are no-ops on compilers that lack support.
-    if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wthread-safety")
-    endif()
-    # Homebrew's x86_64 folly bottle is compiled with AVX2; F14's link-time
-    # check requires the consumer to match. Only applies on macOS/Intel —
-    # Linux builds folly from source via getdeps without AVX2.
-    if(APPLE AND CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64")
-        include(CheckCXXCompilerFlag)
-        check_cxx_compiler_flag("-mavx2" COMPILER_SUPPORTS_AVX2)
-        if(COMPILER_SUPPORTS_AVX2)
-            set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mavx2")
-        endif()
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-nullability -Wno-deprecated-declarations -Wno-nullability-completeness")
+# Enable Clang's compile-time thread safety analysis when available.
+# The REBALANCER_GUARDED_BY / REBALANCER_EXCLUDES macros in
+# common/ThreadAnnotations.h are no-ops on compilers that lack support.
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wthread-safety")
+endif()
+# Homebrew's x86_64 folly bottle is compiled with AVX2; F14's link-time
+# check requires the consumer to match. Only applies on macOS/Intel —
+# Linux builds folly from source via getdeps without AVX2.
+if(APPLE AND CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64")
+    include(CheckCXXCompilerFlag)
+    check_cxx_compiler_flag("-mavx2" COMPILER_SUPPORTS_AVX2)
+    if(COMPILER_SUPPORTS_AVX2)
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mavx2")
     endif()
 endif()
 
@@ -181,14 +168,12 @@ set(CXX_STANDARD_REQUIRED ON)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-# Use lld linker if available for faster linking (not available on Windows).
+# Use lld linker if available for faster linking.
 # lld is faster and more memory-efficient than the default ld.bfd.
-if(NOT MSVC)
-    find_program(LLD_LINKER ld.lld)
-    if(LLD_LINKER)
-        add_link_options("-fuse-ld=lld")
-        message(STATUS "Using lld linker for faster linking")
-    endif()
+find_program(LLD_LINKER ld.lld)
+if(LLD_LINKER)
+    add_link_options("-fuse-ld=lld")
+    message(STATUS "Using lld linker for faster linking")
 endif()
 
 
@@ -359,11 +344,6 @@ function(create_executables TARGET_NAME EXECUTABLE_FILES)
 
         message(STATUS "Creating executable target: ${exec_name}.exe from source file: ${exec_file}")
         add_executable("${exec_name}.exe" ${exec_file})
-        if(WIN32)
-            # On Windows, CMake appends .exe automatically, so set OUTPUT_NAME
-            # to avoid producing exec_name.exe.exe.
-            set_target_properties("${exec_name}.exe" PROPERTIES OUTPUT_NAME "${exec_name}")
-        endif()
         target_include_directories("${exec_name}.exe"
             PUBLIC
                 ${FBTHRIFT_INCLUDE_DIR}
@@ -525,9 +505,6 @@ if(BENCHMARKS)
 endif()
 
 add_executable(rebalancer_tests.exe ${rebalancer_test_files})
-if(WIN32)
-    set_target_properties(rebalancer_tests.exe PROPERTIES OUTPUT_NAME "rebalancer_tests")
-endif()
 target_link_libraries(rebalancer_tests.exe
     PUBLIC
         rebalancer
@@ -580,16 +557,8 @@ gtest_discover_tests(rebalancer_tests.exe
   PROPERTIES TIMEOUT 120
 )
 
-# Check for C++ identifiers that conflict with Windows macros
 find_package(Python3 COMPONENTS Interpreter)
 if(Python3_FOUND)
-    add_test(
-        NAME check_windows_macros
-        COMMAND ${Python3_EXECUTABLE}
-            "${CMAKE_CURRENT_SOURCE_DIR}/tools/check_windows_macros.py"
-            "${CMAKE_CURRENT_SOURCE_DIR}/algopt"
-        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-    )
     add_test(
         NAME check_benchmark_paths
         COMMAND ${Python3_EXECUTABLE}
