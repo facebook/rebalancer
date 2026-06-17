@@ -14,6 +14,7 @@
 
 #include "algopt/rebalancer/interface/tests/utils.h"
 #include "algopt/rebalancer/solver/moves/SwapMoveType.h"
+#include "algopt/rebalancer/tests/SolverTestUtils.h"
 #include <algopt/rebalancer/interface/thrift/gen-cpp2/ProblemSolver_types.h>
 #include <algopt/rebalancer/interface/thrift/gen-cpp2/ProblemSpecs_types.h>
 
@@ -24,14 +25,73 @@
 
 #include <map>
 #include <optional>
+#include <set>
 #include <string>
+#include <tuple>
+#include <utility>
 #include <vector>
 
-using namespace facebook::rebalancer::interface;
+namespace facebook::rebalancer::interface::tests {
 
-class GroupDiversityTest : public ::testing::TestWithParam<int> {};
+class GroupDiversityTest
+    : public ::testing::TestWithParam<
+          std::tuple<int, SolverAlgoType, OptimalSolverPackage>> {
+ protected:
+  static int getThreadCount() {
+    return std::get<0>(GetParam());
+  }
+  static SolverAlgoType getSolverAlgoType() {
+    return std::get<1>(GetParam());
+  }
+  static OptimalSolverPackage getSolverPackage() {
+    return std::get<2>(GetParam());
+  }
 
-INSTANTIATE_TEST_CASE_P(NumThreads, GroupDiversityTest, testThreadCounts());
+  void SetUp() override {
+    if (getSolverAlgoType() == OPTIMAL &&
+        facebook::algopt::isSolverUnavailable(getSolverPackage())) {
+      GTEST_SKIP() << facebook::algopt::solverName(getSolverPackage())
+                   << " solver not available";
+    }
+  }
+
+  // Registers the parameterized solver on `solver`. For LOCALSEARCH the
+  // provided local-search spec is used (defaulting to the standard move-type
+  // set); for OPTIMAL the spec is ignored and an exact MIP solver is added.
+  static void addConfiguredSolver(
+      ProblemSolver& solver,
+      std::optional<LocalSearchSolverSpec> localSearchSpec = std::nullopt) {
+    switch (getSolverAlgoType()) {
+      case LOCALSEARCH:
+        solver.addSolver(
+            std::move(localSearchSpec)
+                .value_or(makeDefaultLocalSearchSolver()));
+        break;
+      case OPTIMAL: {
+        OptimalSolverSpec optimalSpec;
+        optimalSpec.solverPackage() = getSolverPackage();
+        solver.addSolver(optimalSpec);
+        break;
+      }
+    }
+  }
+};
+
+INSTANTIATE_TEST_CASE_P(
+    LocalSearch,
+    GroupDiversityTest,
+    ::testing::Combine(
+        testThreadCounts(),
+        ::testing::Values(LOCALSEARCH),
+        ::testing::Values(OptimalSolverPackage::GUROBI)));
+
+INSTANTIATE_TEST_CASE_P(
+    Optimal,
+    GroupDiversityTest,
+    ::testing::Combine(
+        testThreadCounts(),
+        ::testing::Values(OPTIMAL),
+        facebook::algopt::testSolverPackages()));
 
 TEST_P(GroupDiversityTest, Basic) {
   // In this test we model the problem of assigning servers to reservations. All
@@ -39,7 +99,7 @@ TEST_P(GroupDiversityTest, Basic) {
   // incentivize each reservation to get servers from a minimum number of
   // different regions.
   auto solver =
-      initializeTestProblemSolver({.executorThreadCount = GetParam()});
+      initializeTestProblemSolver({.executorThreadCount = getThreadCount()});
   solver->setObjectName("server");
   solver->setContainerName("reservation");
 
@@ -83,7 +143,7 @@ TEST_P(GroupDiversityTest, Basic) {
     solver->addGoal(spec);
   }
 
-  solver->addSolver(makeDefaultLocalSearchSolver());
+  addConfiguredSolver(*solver);
 
   auto solution = solver->solve();
   auto& assignment = *solution.assignment();
@@ -102,12 +162,15 @@ TEST_P(GroupDiversityTest, Basic) {
   EXPECT_NEAR(5.0, *solution.initialObjective()->value(), 1e-8);
   EXPECT_NEAR(0.0, *solution.finalObjective()->value(), 1e-8);
 
-  EXPECT_EQ(3, reservationToServerCount.at("unassigned"));
-  EXPECT_EQ(2, reservationToServerCount.at("reservation0"));
-  EXPECT_EQ(3, reservationToServerCount.at("reservation1"));
+  // Check specific final solution only for local search
+  if (getSolverAlgoType() == LOCALSEARCH) {
+    EXPECT_EQ(3, reservationToServerCount.at("unassigned"));
+    EXPECT_EQ(2, reservationToServerCount.at("reservation0"));
+    EXPECT_EQ(3, reservationToServerCount.at("reservation1"));
 
-  EXPECT_EQ(2, reservationToRegions.at("reservation0").size());
-  EXPECT_EQ(3, reservationToRegions.at("reservation1").size());
+    EXPECT_EQ(2, reservationToRegions.at("reservation0").size());
+    EXPECT_EQ(3, reservationToRegions.at("reservation1").size());
+  }
 }
 
 TEST_P(GroupDiversityTest, WithOveralappingGroups) {
@@ -115,7 +178,7 @@ TEST_P(GroupDiversityTest, WithOveralappingGroups) {
   // label4); these are the group names. Each object has certain labels
   // associated with it and can associated with multiple labels.
   auto solver =
-      initializeTestProblemSolver({.executorThreadCount = GetParam()});
+      initializeTestProblemSolver({.executorThreadCount = getThreadCount()});
   solver->setObjectName("ball");
   solver->setContainerName("bin");
 
@@ -158,7 +221,7 @@ TEST_P(GroupDiversityTest, WithOveralappingGroups) {
   LocalSearchSolverSpec solverSpec;
   solverSpec.moveTypeList()->push_back(
       ProblemSolver::makeMoveTypeSpec(SingleMoveTypeSpec()));
-  solver->addSolver(solverSpec);
+  addConfiguredSolver(*solver, solverSpec);
 
   auto solution = solver->solve();
   auto& assignment = *solution.assignment();
@@ -166,18 +229,21 @@ TEST_P(GroupDiversityTest, WithOveralappingGroups) {
   // expect that final objective is optimal
   EXPECT_NEAR(0.0, *solution.finalObjective()->value(), 1e-8);
 
-  folly::F14FastMap<std::string, std::set<std::string>> binToBalls;
-  for (auto& [ball, bin] : assignment) {
-    binToBalls[bin].insert(ball);
+  // Check specific final solution only for local search
+  if (getSolverAlgoType() == LOCALSEARCH) {
+    folly::F14FastMap<std::string, std::set<std::string>> binToBalls;
+    for (auto& [ball, bin] : assignment) {
+      binToBalls[bin].insert(ball);
+    }
+
+    EXPECT_EQ(2, binToBalls["bin0"].size());
+    EXPECT_EQ(2, binToBalls["bin1"].size());
+
+    // we expect that both ball1 and ball2 are in the same container, and ball3
+    // and ball4 are also in the same container
+    EXPECT_EQ(assignment["ball1"], assignment["ball2"]);
+    EXPECT_EQ(assignment["ball3"], assignment["ball4"]);
   }
-
-  EXPECT_EQ(2, binToBalls["bin0"].size());
-  EXPECT_EQ(2, binToBalls["bin1"].size());
-
-  // we expect that both ball1 and ball2 are in the same container, and ball3
-  // and ball4 are also in the same container
-  EXPECT_EQ(assignment["ball1"], assignment["ball2"]);
-  EXPECT_EQ(assignment["ball3"], assignment["ball4"]);
 }
 
 static std::unique_ptr<ProblemSolver> setupStackingTestcase(
@@ -259,13 +325,17 @@ static std::unique_ptr<ProblemSolver> setupStackingTestcase(
 }
 
 TEST_P(GroupDiversityTest, stackHighOnServersNoProgressWithSingleMoves) {
+  if (getSolverAlgoType() == OPTIMAL) {
+    GTEST_SKIP() << "local search specific test";
+  }
+
   std::map<std::string, std::string> partToServer;
-  auto solver = setupStackingTestcase(GetParam(), partToServer);
+  auto solver = setupStackingTestcase(getThreadCount(), partToServer);
   // use just SINGLE moves
   LocalSearchSolverSpec solverSpec;
   solverSpec.moveTypeList()->push_back(
       ProblemSolver::makeMoveTypeSpec(SingleMoveTypeSpec()));
-  solver->addSolver(solverSpec);
+  addConfiguredSolver(*solver, solverSpec);
 
   auto solution = solver->solve();
   auto numMoves = solution.movesSummary().value().size();
@@ -273,13 +343,17 @@ TEST_P(GroupDiversityTest, stackHighOnServersNoProgressWithSingleMoves) {
 }
 
 TEST_P(GroupDiversityTest, stackHighOnServersPossibleWithSwap) {
+  if (getSolverAlgoType() == OPTIMAL) {
+    GTEST_SKIP() << "local search specific test";
+  }
+
   std::map<std::string, std::string> partToServer;
-  auto solver = setupStackingTestcase(GetParam(), partToServer);
+  auto solver = setupStackingTestcase(getThreadCount(), partToServer);
   // use just SWAP moves
   LocalSearchSolverSpec solverSpec;
   solverSpec.moveTypeList()->push_back(
       ProblemSolver::makeMoveTypeSpec(SwapMoveTypeSpec()));
-  solver->addSolver(solverSpec);
+  addConfiguredSolver(*solver, solverSpec);
 
   auto solution = solver->solve();
   auto& assignment = *solution.assignment();
@@ -306,6 +380,10 @@ TEST_P(GroupDiversityTest, stackHighOnServersPossibleWithSwap) {
 }
 
 TEST_P(GroupDiversityTest, stackHighAllGroupsEqual) {
+  if (getSolverAlgoType() == OPTIMAL) {
+    GTEST_SKIP() << "local search specific test";
+  }
+
   std::map<std::string, std::string> partToServer;
   std::map<std::string, std::vector<std::string>> assignmentOverride = {
       {"unassigned", {"server0_part3", "server1_part3", "server2_part3"}},
@@ -323,14 +401,14 @@ TEST_P(GroupDiversityTest, stackHighAllGroupsEqual) {
        }}};
 
   auto solver =
-      setupStackingTestcase(GetParam(), partToServer, assignmentOverride);
+      setupStackingTestcase(getThreadCount(), partToServer, assignmentOverride);
   // use SINGLE, SWAP moves to get rid of excess capacity
   LocalSearchSolverSpec solverSpec;
   solverSpec.moveTypeList()->push_back(
       ProblemSolver::makeMoveTypeSpec(SingleMoveTypeSpec()));
   solverSpec.moveTypeList()->push_back(
       ProblemSolver::makeMoveTypeSpec(SwapMoveTypeSpec()));
-  solver->addSolver(solverSpec);
+  addConfiguredSolver(*solver, solverSpec);
 
   auto solution = solver->solve();
   auto& assignment = *solution.assignment();
@@ -354,8 +432,12 @@ TEST_P(GroupDiversityTest, stackHighAllGroupsEqual) {
 }
 
 TEST_P(GroupDiversityTest, stackHighDynamicDimensions) {
+  if (getSolverAlgoType() == OPTIMAL) {
+    GTEST_SKIP() << "local search specific test";
+  }
+
   auto solver =
-      initializeTestProblemSolver({.executorThreadCount = GetParam()});
+      initializeTestProblemSolver({.executorThreadCount = getThreadCount()});
   solver->setObjectName("server_part");
   solver->setContainerName("reservation");
 
@@ -448,7 +530,7 @@ TEST_P(GroupDiversityTest, stackHighDynamicDimensions) {
       ProblemSolver::makeMoveTypeSpec(singleMoveSpec));
   solverSpec.moveTypeList()->push_back(
       ProblemSolver::makeMoveTypeSpec(swapSpec));
-  solver->addSolver(solverSpec);
+  addConfiguredSolver(*solver, solverSpec);
 
   auto solution = solver->solve();
   auto& assignment = *solution.assignment();
@@ -469,3 +551,5 @@ TEST_P(GroupDiversityTest, stackHighDynamicDimensions) {
   // remaining M3 allotment of r0 stayes on server0
   EXPECT_EQ(1, containerToServerToPartCount["r0"]["server0"]);
 }
+
+} // namespace facebook::rebalancer::interface::tests
