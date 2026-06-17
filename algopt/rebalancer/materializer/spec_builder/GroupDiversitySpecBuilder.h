@@ -15,6 +15,7 @@
 #pragma once
 
 #include "algopt/rebalancer/materializer/spec_builder/SpecBuilder.h"
+#include "algopt/rebalancer/solver/expressions/ObjectPartitionLookup.h"
 
 namespace facebook::rebalancer::materializer {
 
@@ -36,16 +37,25 @@ class GroupDiversitySpecBuilder : public SpecBuilder {
   SpecParameters getSpecInfo() const override;
 
  private:
+  // Builds an `ObjectPartitionLookup` for this spec at `scopeItemId`,
+  // varying only the penalty `transform` and per-group `coefficient`.
+  ExprPtr buildLookup(
+      ExpressionBuilder& expressionBuilder,
+      entities::ScopeItemId scopeItemId,
+      ObjectPartitionLookupPenaltyTransform transform,
+      double coefficient = 1.0) const;
+
   folly::coro::Task<ExprPtr> getContinuousPenaltyExpr(
       ExpressionBuilder& expressionBuilder,
-      entities::DimensionId dimensionId,
-      entities::ScopeId scopeId,
       entities::ScopeItemId scopeItemId,
-      entities::PartitionId partitionId,
       interface::GroupDiversityBound bound) const;
 
   interface::GroupDiversitySpec spec_;
   bool needContinuousExpressions_;
+  entities::ScopeId scopeId_;
+  entities::PartitionId partitionId_;
+  entities::DimensionId dimensionId_;
+  const entities::ObjectScalarDimension& dimension_;
 };
 
 } // namespace facebook::rebalancer::materializer

@@ -28,7 +28,11 @@ GroupDiversitySpecBuilder::GroupDiversitySpecBuilder(
     bool needContinuousExpressions)
     : SpecBuilder(std::move(universe)),
       spec_(std::move(spec)),
-      needContinuousExpressions_(needContinuousExpressions) {}
+      needContinuousExpressions_(needContinuousExpressions),
+      scopeId_(universe_->getScopeId(*spec_.scope())),
+      partitionId_(universe_->getPartitionId(*spec_.partition())),
+      dimensionId_(universe_->getDimensionId(*spec_.dimension())),
+      dimension_(universe_->getObjects().getDimension(dimensionId_).only()) {}
 
 folly::coro::Task<ExprPtr> GroupDiversitySpecBuilder::goalCoro(
     ExpressionBuilder& expressionBuilder) const {
@@ -36,29 +40,50 @@ folly::coro::Task<ExprPtr> GroupDiversitySpecBuilder::goalCoro(
       co_await constraints(expressionBuilder), universe_);
 }
 
+ExprPtr GroupDiversitySpecBuilder::buildLookup(
+    ExpressionBuilder& expressionBuilder,
+    entities::ScopeItemId scopeItemId,
+    ObjectPartitionLookupPenaltyTransform transform,
+    double coefficient) const {
+  std::optional<ExpressionBuilder::ScopeParams> scopeParams;
+  if (dimension_.isDynamic()) {
+    scopeParams = ExpressionBuilder::ScopeParams{
+        .scopeId = scopeId_, .scopeItemId = scopeItemId};
+  }
+  const auto partition = expressionBuilder.getObjectPartition(
+      /*groupLimits=*/{},
+      dimensionId_,
+      partitionId_,
+      /*normalizeByGroupSize=*/false,
+      scopeParams,
+      /*filteredGroupIds=*/std::nullopt,
+      /*defaultGroupCoefficient=*/coefficient);
+  return expressionBuilder.getObjectPartitionLookup(
+      UtilMetric::AFTER,
+      scopeId_,
+      scopeItemId,
+      partition,
+      /*overrides=*/{},
+      transform,
+      /*groupsAllowed=*/0,
+      /*minBound=*/false);
+}
+
 folly::coro::Task<std::vector<ConstraintInfo>>
 GroupDiversitySpecBuilder::constraints(
     ExpressionBuilder& expressionBuilder) const {
-  auto scopeId = universe_->getScopeId(*spec_.scope());
-  auto partitionId = universe_->getPartitionId(*spec_.partition());
-  auto& partition = universe_->getPartition(partitionId);
-  auto dimensionId = universe_->getDimensionId(*spec_.dimension());
-  const LimitWrapper limits(universe_, *spec_.limit(), scopeId);
-  const ScopeItemFilterWrapper filter(*universe_, *spec_.filter(), scopeId);
+  const LimitWrapper limits(universe_, *spec_.limit(), scopeId_);
+  const ScopeItemFilterWrapper filter(*universe_, *spec_.filter(), scopeId_);
 
   std::vector<ConstraintInfo> result;
   for (auto scopeItemId : filter.getScopeItemIds()) {
-    auto groupsInScopeItem = const_expr(0, universe_);
-    for (auto groupId : partition.getGroupIds()) {
-      auto util = co_await expressionBuilder.getAbsoluteUtil(
-          UtilMetric::AFTER,
-          dimensionId,
-          scopeId,
-          scopeItemId,
-          partitionId,
-          groupId);
-      groupsInScopeItem += step(util, universe_);
-    }
+    // With group limits = 0, every present group gets a positive penalty
+    // and STEP maps each to 1; the sum is the count of distinct groups
+    // present in this scope item.
+    auto groupsInScopeItem = buildLookup(
+        expressionBuilder,
+        scopeItemId,
+        ObjectPartitionLookupPenaltyTransform::STEP);
 
     auto limit = limits.getLimit(scopeItemId);
     ExprPtr constraintExpr = nullptr;
@@ -71,12 +96,7 @@ GroupDiversitySpecBuilder::constraints(
     }
 
     auto additionalPenalty = co_await getContinuousPenaltyExpr(
-        expressionBuilder,
-        dimensionId,
-        scopeId,
-        scopeItemId,
-        partitionId,
-        *spec_.bound());
+        expressionBuilder, scopeItemId, *spec_.bound());
 
     result.emplace_back(constraintExpr, additionalPenalty);
   }
@@ -85,10 +105,7 @@ GroupDiversitySpecBuilder::constraints(
 
 folly::coro::Task<ExprPtr> GroupDiversitySpecBuilder::getContinuousPenaltyExpr(
     ExpressionBuilder& expressionBuilder,
-    entities::DimensionId dimensionId,
-    entities::ScopeId scopeId,
     entities::ScopeItemId scopeItemId,
-    entities::PartitionId partitionId,
     interface::GroupDiversityBound bound) const {
   if (!needContinuousExpressions_) {
     co_return nullptr;
@@ -107,12 +124,11 @@ folly::coro::Task<ExprPtr> GroupDiversitySpecBuilder::getContinuousPenaltyExpr(
     co_return nullptr;
   }
 
-  auto& partition = universe_->getPartition(partitionId);
-  auto& dimension = universe_->getObjects().getDimension(dimensionId).only();
+  auto& partition = universe_->getPartition(partitionId_);
   // We need to normalize the utilization values to be in [0, 1] range, for that
   // we will compute an upperbound of the group utilization
   double maxUtilUpperbound = 0;
-  const auto maxObjectValue = dimension.getMaximumValue();
+  const auto maxObjectValue = dimension_.getMaximumValue();
   for (auto groupId : partition.getGroupIds()) {
     double groupUtilUpperBound =
         partition.getObjectIds(groupId).size() * maxObjectValue;
@@ -148,48 +164,26 @@ folly::coro::Task<ExprPtr> GroupDiversitySpecBuilder::getContinuousPenaltyExpr(
   // Case 3: SWAP of two used group objects
   //   * Linear term will remain unchanged but quadratic term will encourage
   //   that we move out of the most underutilized group to another group
-  if (!dimension.hasNegativeValues() && !dimension.isRoutingConfigBased()) {
-    std::optional<ExpressionBuilder::ScopeParams> scopeParams;
-    if (dimension.isDynamic()) {
-      scopeParams = ExpressionBuilder::ScopeParams{
-          .scopeId = scopeId, .scopeItemId = scopeItemId};
-    }
-
-    // Use a uniform normalized coefficient here; the lookup decides whether to
-    // return the linear or squared penalty term.
-    const auto normalizedObjectPartition = expressionBuilder.getObjectPartition(
-        /*groupLimits=*/{},
-        dimensionId,
-        partitionId,
-        /*normalizeByGroupSize=*/false,
-        scopeParams,
-        /*filteredGroupIds=*/std::nullopt,
-        /*defaultGroupCoefficient=*/1.0 / maxUtilUpperbound);
-    const auto getPenalty =
-        [&](ObjectPartitionLookupPenaltyTransform penaltyTransform) {
-          return expressionBuilder.getObjectPartitionLookup(
-              UtilMetric::AFTER,
-              scopeId,
-              scopeItemId,
-              normalizedObjectPartition,
-              /*overrides=*/{},
-              penaltyTransform,
-              /*groupsAllowed=*/0,
-              /*minBound=*/false);
-        };
-    co_return getPenalty(ObjectPartitionLookupPenaltyTransform::IDENTITY) -
+  if (!dimension_.hasNegativeValues() && !dimension_.isRoutingConfigBased()) {
+    // Use a uniform normalized coefficient here
+    const auto coefficient = 1.0 / maxUtilUpperbound;
+    const auto term = [&](ObjectPartitionLookupPenaltyTransform transform) {
+      return buildLookup(
+          expressionBuilder, scopeItemId, transform, coefficient);
+    };
+    co_return term(ObjectPartitionLookupPenaltyTransform::IDENTITY) -
         (QUADRATIC_TERM_MULTIPLIER *
-         getPenalty(ObjectPartitionLookupPenaltyTransform::SQUARE));
+         term(ObjectPartitionLookupPenaltyTransform::SQUARE));
   }
 
   auto totalPenaltyExpression = const_expr(0, universe_);
   for (auto groupId : partition.getGroupIds()) {
     auto groupUtil = co_await expressionBuilder.getAbsoluteUtil(
         UtilMetric::AFTER,
-        dimensionId,
-        scopeId,
+        dimensionId_,
+        scopeId_,
         scopeItemId,
-        partitionId,
+        partitionId_,
         groupId);
     auto normUtil = groupUtil / maxUtilUpperbound;
     // Let x = normUtil which is in [0, 1]
