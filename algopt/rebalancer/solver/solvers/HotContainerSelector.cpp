@@ -41,9 +41,7 @@ AbstractContainer<entities::ContainerId> resetHotContainerTraversal(
     uint64_t randomSeed,
     const Assignment& assignment,
     bool enableObjectPotentialSorting,
-    algopt::Timer& timer,
     const interface::HottestTraversalConfig& traversalConfig) {
-  const algopt::TimerScope timerScope(timer);
   if (enableObjectPotentialSorting) {
     if (objectiveView.size() == 0) {
       return makeStlWrapperContainer(std::vector<entities::ContainerId>());
@@ -153,12 +151,12 @@ std::optional<entities::ContainerId> HotContainerSelector::next(
 }
 
 void HotContainerSelector::reset() {
+  const algopt::TimerScope timerScope(findTimer_);
   containersTraversal_ = resetHotContainerTraversal(
       objectiveView_,
       randomSeed_,
       problem_.assignment,
       enableObjectPotentialSorting_,
-      findTimer_,
       traversalConfig_);
   containersIterator_ = containersTraversal_->begin();
   containersIteratorEnd_ = containersTraversal_->end();
