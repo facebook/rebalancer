@@ -22,6 +22,7 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <numeric>
 #include <vector>
@@ -118,6 +119,27 @@ TEST_P(CoroUtilsTest, runEachTask) {
           executor_));
 
   EXPECT_EQ(taskCount_ * fib(10), overallSum);
+}
+
+TEST_P(CoroUtilsTest, runEachTaskBatchedVisitsEachIndexOnce) {
+  constexpr int begin = 5;
+  constexpr int end = begin + 1000;
+  constexpr int total = end - begin;
+  std::array<std::atomic<int>, total> visitCount{};
+
+  folly::coro::blockingWait(
+      CoroUtils::runEachTaskBatched<int>(
+          begin,
+          end,
+          [&](int i) -> folly::coro::Task<void> {
+            visitCount[i - begin].fetch_add(1);
+            co_return;
+          },
+          executor_));
+
+  for (const auto i : folly::irange(total)) {
+    EXPECT_EQ(1, visitCount[i].load());
+  }
 }
 
 TEST_P(CoroUtilsTest, runEachFunc) {

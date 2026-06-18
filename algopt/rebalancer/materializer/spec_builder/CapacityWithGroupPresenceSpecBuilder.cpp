@@ -337,28 +337,31 @@ CapacityWithGroupPresenceSpecBuilder::groupAndScopeItemConstraints(
     ExpressionBuilder& expressionBuilder) const {
   const auto& scopeItemIds = getRelevantMainScopeItemIds();
   const auto& mainGroupIds = getRelevantMainGroupIds();
-  std::vector<ConstraintInfo> constraints;
-  constraints.reserve(scopeItemIds.size() * mainGroupIds.size());
-  for (auto mainScopeItemId : scopeItemIds) {
-    for (auto mainGroupId : mainGroupIds) {
-      auto groupScopeItemUtil = co_await getGroupUtilInMainScopeItem(
-          mainGroupId,
-          mainScopeItemId,
-          expressionBuilder,
-          /*makeContinuousPenaltyTerm=*/false);
+  const auto numGroups = mainGroupIds.size();
+  const auto totalPairs = scopeItemIds.size() * numGroups;
 
-      auto constraintExpr =
-          getConstraintExpr(mainScopeItemId, mainGroupId, groupScopeItemUtil);
-      auto additionalPenaltyExpr = co_await getAdditionalPenaltyExpr(
-          mainScopeItemId,
-          mainGroupId,
-          expressionBuilder,
-          /*aggregationGroupIds=*/std::nullopt);
+  std::vector<ConstraintInfo> constraints(totalPairs, ConstraintInfo{nullptr});
+  co_await CoroUtils::runEachTaskBatched<size_t>(
+      0, totalPairs, [&](size_t pairIdx) -> folly::coro::Task<void> {
+        const auto mainScopeItemId = scopeItemIds[pairIdx / numGroups];
+        const auto mainGroupId = mainGroupIds[pairIdx % numGroups];
 
-      constraints.emplace_back(
-          std::move(constraintExpr), std::move(additionalPenaltyExpr));
-    }
-  }
+        auto groupScopeItemUtil = co_await getGroupUtilInMainScopeItem(
+            mainGroupId,
+            mainScopeItemId,
+            expressionBuilder,
+            /*makeContinuousPenaltyTerm=*/false);
+        auto constraintExpr =
+            getConstraintExpr(mainScopeItemId, mainGroupId, groupScopeItemUtil);
+        auto additionalPenaltyExpr = co_await getAdditionalPenaltyExpr(
+            mainScopeItemId,
+            mainGroupId,
+            expressionBuilder,
+            /*aggregationGroupIds=*/std::nullopt);
+
+        constraints[pairIdx] = ConstraintInfo{
+            std::move(constraintExpr), std::move(additionalPenaltyExpr)};
+      });
 
   co_return constraints;
 }

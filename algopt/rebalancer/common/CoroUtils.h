@@ -161,6 +161,62 @@ class CoroUtils {
   }
 
   /**
+   *runEachTaskBatched(...) is like runEachTask(...) but splits the integer
+   *index range [begin, end) into one task per executor thread (each task
+   *walks its slice serially) instead of one task per index. Use when the
+   *range can dwarf the thread count and per-index work is small enough that
+   *coroutine-creation overhead matters. Falls back to a serial inline loop
+   *when no multi-thread executor is available.
+   */
+  template <typename IndexType, class CoroGenerateFunc>
+  static inline folly::coro::Task<void> runEachTaskBatched(
+      IndexType begin,
+      IndexType end,
+      const CoroGenerateFunc& coroGenerator,
+      ExecutorPtr givenExecutor = nullptr) {
+    static_assert(
+        std::is_same_v<
+            std::invoke_result_t<decltype(coroGenerator), IndexType>,
+            folly::coro::Task<void>>,
+        "Expect coroFunc to take an 'IndexType' as argument and return folly::coro::Task<void>");
+
+    const size_t totalItems = static_cast<size_t>(end - begin);
+    if (totalItems == 0) {
+      co_return;
+    }
+
+    // Fallback to serial execution if no suitable executor is present
+    const auto currentCoroExecutor = co_await folly::coro::co_current_executor;
+    const auto numThreads =
+        canUseExistingExecutor(currentCoroExecutor, givenExecutor.get());
+    if (!numThreads) {
+      for (IndexType i = begin; i < end; ++i) {
+        co_await coroGenerator(i);
+      }
+      co_return;
+    }
+
+    const size_t numBatches = std::min(*numThreads, totalItems);
+    const size_t minItemsPerBatch = totalItems / numBatches;
+    const size_t nBatchesWithExtra = totalItems % numBatches;
+
+    co_await runEachTask<size_t>(
+        0,
+        numBatches,
+        [&](size_t batchIdx) -> folly::coro::Task<void> {
+          const size_t itemsInThisBatch =
+              minItemsPerBatch + (batchIdx < nBatchesWithExtra ? 1 : 0);
+          const size_t startIdx = batchIdx * minItemsPerBatch +
+              std::min(batchIdx, nBatchesWithExtra);
+          const size_t endIdx = startIdx + itemsInThisBatch;
+          for (size_t i = startIdx; i < endIdx; ++i) {
+            co_await coroGenerator(static_cast<IndexType>(begin + i));
+          }
+        },
+        std::move(givenExecutor));
+  }
+
+  /**
    *runEachFunc(...) is used to run several functions (possibly) in parallel.
    *'IndexType' is typically int/iterator that is used to iterate and generate
    *the coroutine functions.
