@@ -87,6 +87,7 @@ option(EXAMPLES "Build example/demo executables" OFF)
 
 option(BENCHMARKS "Build benchmark executables" OFF)
 option(INSTALL_BENCHMARKS "Install benchmark executables (requires BENCHMARKS=ON)" OFF)
+option(TESTS "Build tests" OFF)
 
 # Set CMAKE_MODULE_PATH to include fbcode_builder CMake modules
 # This must be done before find_package calls so that FBThrift's
@@ -110,13 +111,10 @@ list(APPEND CMAKE_PREFIX_PATH
 find_package(Boost REQUIRED COMPONENTS thread)
 find_package(fmt CONFIG REQUIRED)
 find_package(folly CONFIG REQUIRED)
-find_package(GTest REQUIRED)
 find_package(FBThrift REQUIRED)
 find_package(highs CONFIG)
 
-
 find_package(glog CONFIG REQUIRED)
-include(GoogleTest)
 
 set(THRIFT1 "${FBTHRIFT_COMPILER}")
 # ThriftLibrary.cmake is installed alongside fbthrift headers
@@ -428,23 +426,33 @@ if(highs_FOUND OR USE_HIGHS)
     target_link_libraries(rebalancer PRIVATE highs::highs)
 endif()
 
-# Find test_main.cpp from source tree,
-# path varies between in-fbsource and shipit builds.
-file(GLOB_RECURSE test_main_file "*/test_main.cpp")
-# Get the first match
-list(GET test_main_file 0 test_main_file)
-if(NOT test_main_file)
-    message(FATAL_ERROR "Could not find test_main.cpp in source tree")
+# GTest is needed by the test binary (TESTS) and is also linked by the
+# benchmark executables (see benchmark_link_libs below), so resolve it
+# whenever either is enabled.
+if(TESTS OR BENCHMARKS)
+    find_package(GTest REQUIRED)
+    include(GoogleTest)
 endif()
-add_library(
-    test_main
-    ${test_main_file}
-)
-target_link_libraries(test_main
-    PUBLIC
-        Folly::folly
-        GTest::gtest
-)
+
+if(TESTS)
+    # Find test_main.cpp from source tree,
+    # path varies between in-fbsource and shipit builds.
+    file(GLOB_RECURSE test_main_file "*/test_main.cpp")
+    # Get the first match
+    list(GET test_main_file 0 test_main_file)
+    if(NOT test_main_file)
+        message(FATAL_ERROR "Could not find test_main.cpp in source tree")
+    endif()
+    add_library(
+        test_main
+        ${test_main_file}
+    )
+    target_link_libraries(test_main
+        PUBLIC
+            Folly::folly
+            GTest::gtest
+    )
+endif()
 
 if(EXAMPLES)
     # rebalancer links folly/fbthrift/fmt PRIVATELY so they don't propagate
@@ -504,68 +512,70 @@ if(BENCHMARKS)
     endif()
 endif()
 
-add_executable(rebalancer_tests.exe ${rebalancer_test_files})
-target_link_libraries(rebalancer_tests.exe
-    PUBLIC
-        rebalancer
-        Folly::folly
-        Folly::follybenchmark
-        FBThrift::thriftprotocol
-        FBThrift::thriftmetadata
-        FBThrift::thrifttype
-        FBThrift::rpcmetadata
-        fmt::fmt
-        test_main
-        GTest::gtest
-        GTest::gmock
-        Boost::thread
-)
-target_include_directories(rebalancer_tests.exe
-    PUBLIC
-        ${FBTHRIFT_INCLUDE_DIR}
-        ${CMAKE_CURRENT_BINARY_DIR}
-        ${THRIFT_OUTPUT_DIR}
-)
-if(highs_FOUND OR USE_HIGHS)
-    target_link_libraries(rebalancer_tests.exe PUBLIC highs::highs)
-endif()
-# rebalancer_tests.exe links against librebalancer (a shared library
-# living in the build tree alongside the test binary). Tell the dynamic
-# loader to look there at run time so gtest_discover_tests / ctest can
-# launch the binary without a separately-installed librebalancer.
-#
-# Append to BOTH BUILD_RPATH and INSTALL_RPATH because getdeps sets
-# CMAKE_BUILD_WITH_INSTALL_RPATH=ON on macOS, in which case the
-# build-tree binary uses INSTALL_RPATH at link time. On Linux the
-# build-tree binary uses BUILD_RPATH instead.
-if(APPLE)
-    set(_rebalancer_loader_rpath "@loader_path")
-else()
-    set(_rebalancer_loader_rpath "$ORIGIN")
-endif()
-set_property(TARGET rebalancer_tests.exe APPEND PROPERTY
-    BUILD_RPATH "${_rebalancer_loader_rpath}"
-)
-set_property(TARGET rebalancer_tests.exe APPEND PROPERTY
-    INSTALL_RPATH "${_rebalancer_loader_rpath}"
-)
-
-# Enable CTest and register tests for GitHub Actions
-enable_testing()
-gtest_discover_tests(rebalancer_tests.exe
-  DISCOVERY_MODE PRE_TEST
-  PROPERTIES TIMEOUT 120
-)
-
-find_package(Python3 COMPONENTS Interpreter)
-if(Python3_FOUND)
-    add_test(
-        NAME check_benchmark_paths
-        COMMAND ${Python3_EXECUTABLE}
-            "${CMAKE_CURRENT_SOURCE_DIR}/tools/check_benchmark_paths.py"
-            "${CMAKE_CURRENT_SOURCE_DIR}/algopt"
-        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+if(TESTS)
+    add_executable(rebalancer_tests.exe ${rebalancer_test_files})
+    target_link_libraries(rebalancer_tests.exe
+        PUBLIC
+            rebalancer
+            Folly::folly
+            Folly::follybenchmark
+            FBThrift::thriftprotocol
+            FBThrift::thriftmetadata
+            FBThrift::thrifttype
+            FBThrift::rpcmetadata
+            fmt::fmt
+            test_main
+            GTest::gtest
+            GTest::gmock
+            Boost::thread
     )
+    target_include_directories(rebalancer_tests.exe
+        PUBLIC
+            ${FBTHRIFT_INCLUDE_DIR}
+            ${CMAKE_CURRENT_BINARY_DIR}
+            ${THRIFT_OUTPUT_DIR}
+    )
+    if(highs_FOUND OR USE_HIGHS)
+        target_link_libraries(rebalancer_tests.exe PUBLIC highs::highs)
+    endif()
+    # rebalancer_tests.exe links against librebalancer (a shared library
+    # living in the build tree alongside the test binary). Tell the dynamic
+    # loader to look there at run time so gtest_discover_tests / ctest can
+    # launch the binary without a separately-installed librebalancer.
+    #
+    # Append to BOTH BUILD_RPATH and INSTALL_RPATH because getdeps sets
+    # CMAKE_BUILD_WITH_INSTALL_RPATH=ON on macOS, in which case the
+    # build-tree binary uses INSTALL_RPATH at link time. On Linux the
+    # build-tree binary uses BUILD_RPATH instead.
+    if(APPLE)
+        set(_rebalancer_loader_rpath "@loader_path")
+    else()
+        set(_rebalancer_loader_rpath "$ORIGIN")
+    endif()
+    set_property(TARGET rebalancer_tests.exe APPEND PROPERTY
+        BUILD_RPATH "${_rebalancer_loader_rpath}"
+    )
+    set_property(TARGET rebalancer_tests.exe APPEND PROPERTY
+        INSTALL_RPATH "${_rebalancer_loader_rpath}"
+    )
+
+    # Enable CTest and register tests for GitHub Actions
+    enable_testing()
+    gtest_discover_tests(rebalancer_tests.exe
+      DISCOVERY_MODE PRE_TEST
+      PROPERTIES TIMEOUT 120
+    )
+
+    find_package(Python3 COMPONENTS Interpreter)
+    if(Python3_FOUND)
+        add_test(
+            NAME check_benchmark_paths
+            COMMAND ${Python3_EXECUTABLE}
+                "${CMAKE_CURRENT_SOURCE_DIR}/tools/check_benchmark_paths.py"
+                "${CMAKE_CURRENT_SOURCE_DIR}/algopt"
+            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+        )
+    endif()
 endif()
 
 ################################################

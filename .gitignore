@@ -10,3 +10,4 @@ __pycache__/
 !.claude/skills/**
 node_modules/
 .cmake_prefix_path
+docs/
