@@ -637,19 +637,6 @@ static void runInstance(Bundle&& bundle) {
     problem.runId() = FLAGS_persist_to_manifold_with_new_run_id;
   }
 
-  const bool oldInstance =
-      (!FLAGS_run_id.empty() || !FLAGS_run_ids_file.empty());
-
-  const bool shouldUploadToManifold =
-      !oldInstance || shouldPersistWithNewRunId || FLAGS_override_backup;
-
-  // entities::Universe has copied all data out of the Thrift universe and the
-  // solve path never reads problem.universe() again. Free it to reclaim memory,
-  // but only when we won't re-upload the problem to Manifold.
-  if (!shouldUploadToManifold) {
-    problem.universe().reset();
-  }
-
   std::shared_ptr<RebalancerLog> logger = nullptr;
   if (*problem.enableScubaLogger()) {
 #ifndef REBALANCER_OSS_BUILD
@@ -681,6 +668,12 @@ static void runInstance(Bundle&& bundle) {
     }
     return solution;
   };
+
+  const bool oldInstance =
+      (!FLAGS_run_id.empty() || !FLAGS_run_ids_file.empty());
+
+  const bool shouldUploadToManifold =
+      !oldInstance || shouldPersistWithNewRunId || FLAGS_override_backup;
 
   std::optional<AssignmentSolution> solution = std::nullopt;
   try {
