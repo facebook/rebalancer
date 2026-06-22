@@ -496,4 +496,85 @@ CO_TEST_F(ColocateGroupsMoveTypeTest, VerifyMoveSetsBasicNoBetterMove) {
       ((4 * 4 + 1 * 1) * 2) + ((4 * 4 + 1 * 1) * 2), getTotalMovesEvaluated());
 }
 
+// Builds a colocation set with a huge candidate space: 4 related groups that
+// can each move to all 100 containers of the destination region, i.e.
+// 100^4 = 100M candidate move sets. With the time-limit guard, findBestMove
+// stops enumerating at ~the time limit and returns quickly; without it,
+// enumerating 100M move sets takes many seconds (and gigabytes of memory), so
+// the bound below catches a regression that drops the guard.
+CO_TEST_F(ColocateGroupsMoveTypeTest, FindBestMoveStopsAtTimeLimit) {
+  constexpr int kNumGroups = 4;
+  constexpr int kNumDstContainers = 100;
+
+  entities::Map<std::string, std::vector<std::string>> assignment;
+  std::vector<std::string> srcContainers;
+  std::vector<std::string> dstContainers;
+  entities::Map<std::string, std::vector<std::string>> tenantToObjects;
+  entities::Map<std::string, double> objectNameToLoad;
+  for (int g = 1; g <= kNumGroups; ++g) {
+    const auto containerName = "container" + std::to_string(g);
+    const auto objectName = "object" + std::to_string(g);
+    const auto tenantName = "tenant" + std::to_string(g);
+    srcContainers.push_back(containerName);
+    assignment[containerName] = {objectName};
+    tenantToObjects[tenantName] = {objectName};
+    objectNameToLoad[objectName] = static_cast<double>(g);
+  }
+  for (int d = 0; d < kNumDstContainers; ++d) {
+    const auto containerName = "container" + std::to_string(1000 + d);
+    dstContainers.push_back(containerName);
+    assignment[containerName] = {};
+  }
+
+  setInitialAssignment(assignment);
+  co_await addScope("region", {{"src", srcContainers}, {"dst", dstContainers}});
+  co_await addPartition("tenant", tenantToObjects);
+  co_await addObjectDimension(
+      "traffic_load", objectNameToLoad, /*defaultValue=*/0.0);
+  buildUniverse();
+
+  entities::Map<entities::ObjectId, double> objectToLoad;
+  auto containerSet = std::make_shared<PackerSet<entities::ContainerId>>();
+  for (int g = 1; g <= kNumGroups; ++g) {
+    objectToLoad[object("object" + std::to_string(g))] = static_cast<double>(g);
+    containerSet->insert(container("container" + std::to_string(g)));
+  }
+  for (int d = 0; d < kNumDstContainers; ++d) {
+    containerSet->insert(container("container" + std::to_string(1000 + d)));
+  }
+  createProblem(
+      {object_lookup(
+          makeObjectVector(objectToLoad, getUniversePtr()),
+          containerSet,
+          getUniversePtr(),
+          Assignment(getUniverse().getContainers().getInitialAssignment()))},
+      const_expr(0, getUniversePtr()));
+
+  interface::ColocateGroupsMoveTypeSpec spec;
+  spec.partitionName() = "tenant";
+  spec.colocationScopeName() = "region";
+  interface::ColocateGroupsMoveTypeRelatedGroupsInfo relatedGroupsInfo;
+  relatedGroupsInfo.relatedGroups() = {
+      "tenant1", "tenant2", "tenant3", "tenant4"};
+  spec.relatedGroupsList() = {relatedGroupsInfo};
+  auto colocateMoveType =
+      ColocateGroupsMoveType(interface::LocalSearchSolverSpec{}, spec);
+
+  constexpr double kTimeLimitSecs = 0.01;
+  const algopt::Timer timer(/*autoStart=*/true);
+  colocateMoveType.findBestMove(
+      getMovesEvaluator(),
+      container("container1") /*hotContainer*/,
+      getMoveStatsAggregator(),
+      getEmptySearchHints(),
+      kTimeLimitSecs);
+  const double elapsedSecs = timer.getSeconds();
+
+  // With the guard this returns at ~kTimeLimitSecs. The bound is intentionally
+  // generous (vs. the ~0.01s limit) to tolerate setup overhead and scheduling
+  // jitter on loaded CI hosts, while staying well below the many seconds a full
+  // enumeration of 100M move sets would take without the guard (~14s observed).
+  EXPECT_LT(elapsedSecs, 2.0);
+}
+
 } // namespace facebook::rebalancer::packer::tests

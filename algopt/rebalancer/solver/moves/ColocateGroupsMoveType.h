@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "algopt/rebalancer/algopt_common/Timer.h"
 #include "algopt/rebalancer/entities/Set.h"
 #include "algopt/rebalancer/solver/moves/MoveType.h"
 
@@ -119,7 +120,9 @@ class ColocateGroupsMoveType : public MoveType {
       const RelatedGroupsInfoId& relatedGroupsInfo,
       std::optional<entities::ScopeItemId> sourceScopeItemIdOpt,
       const std::vector<entities::ObjectId>& representativeObjectPerGroup,
-      const Problem& problem) const;
+      const Problem& problem,
+      const algopt::Timer& timer,
+      double timeLimit) const;
 
   static std::vector<entities::ObjectId> getRepresentativeObjectPerGroup(
       entities::GroupId hotObjectGroupId,
@@ -140,7 +143,9 @@ class ColocateGroupsMoveType : public MoveType {
       const std::vector<entities::Set<entities::ContainerId>>&
           destinationContainersPerGroup,
       const std::vector<entities::ObjectId>& representativeObjectPerGroup,
-      const Problem& problem);
+      const Problem& problem,
+      const algopt::Timer& timer,
+      double timeLimit);
 
  private:
   std::optional<SpecInfo> specInfo_ = std::nullopt;

@@ -102,7 +102,9 @@ MoveResult ColocateGroupsMoveType::findBestMove(
         relatedGroupsInfo,
         sourceScopeItemIdOpt,
         representativeObjectPerGroup,
-        problem);
+        problem,
+        timer,
+        timeLimit);
 
     const std::function<MoveResult(MoveSet)> evaluate =
         [&stats, &evaluator](MoveSet moveset) {
@@ -132,7 +134,9 @@ std::vector<MoveSet> ColocateGroupsMoveType::getMoveSetsForRelatedGroups(
     const RelatedGroupsInfoId& relatedGroupsInfo,
     std::optional<entities::ScopeItemId> sourceScopeItemIdOpt,
     const std::vector<entities::ObjectId>& representativeObjectPerGroup,
-    const Problem& problem) const {
+    const Problem& problem,
+    const algopt::Timer& timer,
+    double timeLimit) const {
   const auto& universe = problem.getUniverse();
   const auto& colocationScope = universe.getScope(specInfo_->colocationScopeId);
   // if the group has a specific set of colocation scope items, then only those
@@ -145,6 +149,11 @@ std::vector<MoveSet> ColocateGroupsMoveType::getMoveSetsForRelatedGroups(
 
   std::vector<MoveSet> moveSets;
   for (auto destinationScopeItem : destinationScopeItemIds) {
+    if (timer.getSeconds() >= timeLimit) {
+      // Out of time before enumerating the remaining destination scope items;
+      // return whatever was collected so far.
+      break;
+    }
     if (sourceScopeItemIdOpt &&
         sourceScopeItemIdOpt.value() == destinationScopeItem) {
       continue;
@@ -172,7 +181,11 @@ std::vector<MoveSet> ColocateGroupsMoveType::getMoveSetsForRelatedGroups(
     }
 
     auto moveSetsToDestinationScopeItem = getMoveSetsToDestinationScopeItem(
-        destinationContainersPerGroup, representativeObjectPerGroup, problem);
+        destinationContainersPerGroup,
+        representativeObjectPerGroup,
+        problem,
+        timer,
+        timeLimit);
 
     moveSets.insert(
         moveSets.end(),
@@ -232,11 +245,23 @@ std::vector<MoveSet> ColocateGroupsMoveType::getMoveSetsToDestinationScopeItem(
     const std::vector<entities::Set<entities::ContainerId>>&
         destinationContainersPerGroup,
     const std::vector<entities::ObjectId>& representativeObjectPerGroup,
-    const Problem& problem) {
+    const Problem& problem,
+    const algopt::Timer& timer,
+    double timeLimit) {
   std::vector<MoveSet> moveSets;
   auto cartestianProduct =
       MultiCollectionCartesianProduct(destinationContainersPerGroup);
+  // Sample the clock every kTimeCheckInterval iterations rather than on every
+  // one: the candidate space can be ~1B, so reading the clock per iteration
+  // adds measurable overhead. This still bounds the overrun to at most
+  // kTimeCheckInterval extra move sets.
+  constexpr size_t kTimeCheckInterval = 1024;
+  size_t numProcessed = 0;
   for (const auto& destinationContainers : cartestianProduct) {
+    if ((numProcessed++ & (kTimeCheckInterval - 1)) == 0 &&
+        timer.getSeconds() >= timeLimit) {
+      return moveSets;
+    }
     MoveSet moveSet;
     for (const auto j : folly::irange(destinationContainers.size())) {
       auto objectId = representativeObjectPerGroup.at(j);
