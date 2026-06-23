@@ -174,6 +174,16 @@ standalone executable when `-DTESTS=ON` is set.
 For **Python usage**, the source build does not produce a Python package.
 Use `pip install rebalancer` instead (see [PyPI](#pypi) below).
 
+### Install a Prebuilt Package
+
+#### PyPI
+
+```bash
+pip install rebalancer
+```
+
+Then try the Python snippet from the [Quick Example](#quick-example) above.
+
 ## Development Setup
 
 ### Pre-commit hooks
