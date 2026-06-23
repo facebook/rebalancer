@@ -576,6 +576,12 @@ class ProblemSolver {
   // Bundle suitable for serialization or replay.
   Bundle getBundle() const;
 
+  // Serialize the bundle (problem + optional solution) to `path` using the same
+  // format as Manifold (zstd-compressed Thrift Binary), loadable by the
+  // standalone Explorer. Needs no Manifold. Call after solve(). Throws on write
+  // failure.
+  void saveBundle(const std::string& path) const;
+
   // Print the command that re-runs the given run from its Manifold
   // snapshot via the standalone solver. Used by the background uploader.
   static void printReRunManifoldCommand(const std::string& runId);
