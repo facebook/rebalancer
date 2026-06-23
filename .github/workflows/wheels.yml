@@ -198,3 +198,42 @@ jobs:
         name: wheels-${{ matrix.os }}-${{ matrix.py }}
         path: wheelhouse/*.whl
         if-no-files-found: error
+
+  # Cross-glibc smoke test: run the Linux wheel on ubuntu-latest (glibc 2.39)
+  # to catch patchelf string-table corruption that only manifests on newer
+  # glibc.  The cibuildwheel test (CIBW_TEST_COMMAND) runs inside the
+  # manylinux_2_28 build container (AlmaLinux 8, glibc 2.28) where the
+  # corruption silently passes; this job runs on a fresh Ubuntu 24.04 host
+  # where the dynamic linker reads DT_STRTAB strictly and fails on corrupted
+  # NEEDED entries such as "ev" or "3.1.5".
+  test-linux-glibc:
+    name: test-linux-glibc-${{ matrix.py }}
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        py: [cp312, cp313, cp314]
+    steps:
+    - uses: actions/checkout@v6
+      with:
+        fetch-depth: 1
+
+    - uses: actions/download-artifact@v4
+      with:
+        name: wheels-linux-${{ matrix.py }}
+        path: wheelhouse
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        # Map cibuildwheel ABI tags to setup-python version strings.
+        python-version: |
+          ${{ matrix.py == 'cp312' && '3.12' ||
+              matrix.py == 'cp313' && '3.13' ||
+              '3.14' }}
+
+    - name: Install wheel and run smoke test
+      run: |
+        pip install wheelhouse/rebalancer-*-manylinux*.whl
+        python tools/wheels/test_bindings.py -v
