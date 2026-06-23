@@ -66,6 +66,28 @@ else
     echo "WARNING: chrpath not found; skipping RPATH pre-clear. Install chrpath to avoid patchelf string-table corruption."
 fi
 
+# Strip debug symbols from getdeps libs before auditwheel runs.
+#
+# patchelf corrupts .init_array (C++ static constructors crash at dlopen)
+# when it must move the .dynstr section to make room for the extended SONAME
+# strings auditwheel adds (e.g. "libfolly-92ded3c6.so.0.58.0-dev").  The
+# move happens because the existing PT_LOAD segments leave no gap.
+# Stripping debug sections (.debug_*, .gnu_debuglink, etc.) from the
+# getdeps-installed shared libs before auditwheel runs shrinks each file,
+# leaving enough free space in the last PT_LOAD segment that patchelf can
+# extend .dynstr in-place — no section move, no .init_array corruption.
+# --strip-debug removes only debug info; it keeps .dynsym, .dynstr, and all
+# executable code, so symbol lookup and dynamic linking are unaffected.
+echo "Pre-stripping debug symbols from getdeps libs..."
+for lib_dir in $(ls -d /tmp/fbcode_builder_getdeps-*/installed/*/lib \
+                          /tmp/fbcode_builder_getdeps-*/installed/*/lib64 \
+                       2>/dev/null); do
+    find "$lib_dir" -name '*.so' -o -name '*.so.*' 2>/dev/null | while read -r so; do
+        strip --strip-debug "$so" 2>/dev/null || true
+    done
+done
+echo "Done pre-stripping debug symbols."
+
 LD_LIBRARY_PATH="$(ls -d /tmp/fbcode_builder_getdeps-*/installed/*/lib \
                           /tmp/fbcode_builder_getdeps-*/installed/*/lib64 \
                        2>/dev/null | tr '\n' ':'):${LD_LIBRARY_PATH:-}" \
