@@ -224,6 +224,27 @@ g++ -std=c++20 test_solve.cpp -I/usr/local/include -L/usr/local/lib -lrebalancer
 # → PASS: 2-2 split achieved
 ```
 
+#### macOS Homebrew
+
+> **Note:** A Homebrew tap is coming. Until then, install from the formula file
+> directly — Homebrew will fetch the prebuilt bottle from GitHub Releases.
+
+```bash
+brew install https://raw.githubusercontent.com/facebookincubator/rebalancer/main/Formula/rebalancer.rb
+```
+
+Compile and run the smoke test:
+
+```bash
+curl -LO https://raw.githubusercontent.com/facebookincubator/rebalancer/main/tools/packages/test_solve.cpp
+clang++ -std=c++20 test_solve.cpp \
+    -I$(brew --prefix rebalancer)/include \
+    -L$(brew --prefix rebalancer)/lib -lrebalancer \
+    -Wl,-rpath,$(brew --prefix rebalancer)/lib \
+    -o test_solve && ./test_solve
+# → PASS: 2-2 split achieved
+```
+
 ## Development Setup
 
 ### Pre-commit hooks
