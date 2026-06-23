@@ -400,6 +400,11 @@ class ProblemSolverPy {
     return *this;
   }
 
+  ProblemSolverPy& saveBundle(const std::string& path) {
+    solver_->saveBundle(path);
+    return *this;
+  }
+
   ProblemSolverPy& publishMetrics() {
     solver_->publishMetrics();
     return *this;
@@ -877,6 +882,19 @@ NB_MODULE(_rebalancer, m) {
           "Serialize the configured problem (and any solution) and upload\n"
           "the snapshot to Manifold for later replay via the standalone\n"
           "solver. No-op outside Meta infrastructure.\n\n"
+          "Returns:\n"
+          "  self, for fluent chaining.")
+      .def(
+          "save_bundle",
+          &ProblemSolverPy::saveBundle,
+          nb::arg("path"),
+          self,
+          "Serialize the bundle (problem + any solution) to ``path`` using the\n"
+          "same format as Manifold (zstd-compressed Thrift Binary), loadable\n"
+          "by the standalone Rebalancer Explorer. Needs no Manifold. Call\n"
+          "after ``solve`` to include the solution.\n\n"
+          "Args:\n"
+          "  path: file path to write the bundle to.\n"
           "Returns:\n"
           "  self, for fluent chaining.")
       .def(

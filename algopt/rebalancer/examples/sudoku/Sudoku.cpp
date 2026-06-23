@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "algopt/rebalancer/examples/common/BundleOutput.h"
 #include "algopt/rebalancer/interface/ProblemSolverFactory.h"
 
 #include "fmt/core.h"
@@ -228,6 +229,7 @@ static void solve_sudoku(
   solver->addSolver(solver_spec);
 
   auto solution = solver->solve();
+  facebook::rebalancer::examples::maybeSaveBundle(*solver);
 
   if (*solution.finalObjective()->value() > 0.01) {
     XLOG(FATAL) << "failed to solve sudoku completely";

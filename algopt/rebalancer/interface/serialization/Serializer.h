@@ -16,6 +16,7 @@
 
 #include "algopt/rebalancer/interface/thrift/gen-cpp2/Types_types.h"
 
+#include <folly/compression/Compression.h>
 #include <folly/json/json.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
@@ -44,6 +45,27 @@ class Serializer {
     T problem;
     apache::thrift::SimpleJSONSerializer{}.deserialize(serialized, problem);
     return problem;
+  }
+
+  // zstd-compressed Thrift Binary: the same format used to persist bundles to
+  // Manifold. Prefer over the SimpleJSON methods for bundles.
+  template <class T>
+  static std::string serializeBinaryZstd(const T& value) {
+    std::string binary;
+    apache::thrift::BinarySerializer{}.serialize(value, &binary);
+    const auto codec =
+        folly::compression::getCodec(folly::compression::CodecType::ZSTD);
+    return codec->compress(binary);
+  }
+
+  template <class T>
+  static T deserializeBinaryZstd(const std::string& compressed) {
+    const auto codec =
+        folly::compression::getCodec(folly::compression::CodecType::ZSTD);
+    const std::string binary = codec->uncompress(compressed);
+    T value;
+    apache::thrift::BinarySerializer{}.deserialize(binary, value);
+    return value;
   }
 
  private:

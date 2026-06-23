@@ -34,7 +34,9 @@ folly::coro::Task<std::shared_ptr<ModelServer>> FileSandboxFactory::create(
     throw std::runtime_error(
         fmt::format("Unable to read bundle from {}", manifoldId));
   }
-  auto bundle = interface::Serializer::deserialize<interface::Bundle>(content);
+  // Bundles on disk use the same format as Manifold (zstd-compressed Binary).
+  auto bundle =
+      interface::Serializer::deserializeBinaryZstd<interface::Bundle>(content);
   co_return std::make_shared<ModelServer>(std::move(bundle));
 }
 

@@ -97,6 +97,15 @@ class ProblemSolver:
         self._ps.persistToManifold(manifold_upload_handle)
         return self
 
+    def saveBundle(self, path: str) -> ProblemSolver:
+        """Serialize the bundle (problem + any solution) to ``path`` using the
+        same format as Manifold (zstd-compressed Thrift Binary), loadable by the
+        standalone Rebalancer Explorer. Call after ``solve`` to include the
+        solution.
+        """
+        self._ps.saveBundle(path)
+        return self
+
     ##################
     # Problem building
     ##################

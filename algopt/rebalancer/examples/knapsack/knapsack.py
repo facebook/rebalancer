@@ -29,6 +29,8 @@ Problem:
 
 """
 
+import argparse
+
 from algopt.rebalancer.interface.py_client.ProblemSolver import ProblemSolver
 from rebalancer.interface.thrift.Types.thrift_types import AssignmentSolution
 from rebalancer.interface.thrift.v2.ProblemSolver.thrift_types import (
@@ -56,7 +58,7 @@ VALUES: list[int] = [10, 30, 25, 50, 35, 30, 15, 40, 30, 35, 45, 10, 20, 30, 25]
 BINS: list[int] = [100, 100, 100, 100, 100]
 
 
-def main() -> None:
+def main(bundle_out: str | None = None) -> None:
     solver: ProblemSolver = ProblemSolver(
         service_name="knapsack", service_scope="examples"
     )
@@ -133,6 +135,12 @@ def main() -> None:
     solution: AssignmentSolution = solver.solve()
     solver.persistToManifold()
 
+    # If --bundle_out is given, write a Bundle the Explorer can load (same
+    # format as Manifold: zstd-compressed Thrift Binary).
+    if bundle_out:
+        solver.saveBundle(bundle_out)
+        print(f"Wrote problem bundle to {bundle_out}")
+
     # Print results
     print("=" * 60)
     print("MULTIPLE KNAPSACK PROBLEM - SOLUTION")
@@ -196,5 +204,20 @@ def main() -> None:
         )
 
 
+def cli() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--bundle_out",
+        default=None,
+        help=(
+            "If set, write the solved problem+solution as a Bundle to this path "
+            "(same format as Manifold: zstd-compressed Thrift Binary), loadable "
+            "by the Rebalancer Explorer."
+        ),
+    )
+    args = parser.parse_args()
+    main(bundle_out=args.bundle_out)
+
+
 if __name__ == "__main__":
-    main()
+    cli()
