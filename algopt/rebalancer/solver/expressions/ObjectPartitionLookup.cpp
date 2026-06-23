@@ -686,8 +686,13 @@ algopt::lp::Expression ObjectPartitionLookup<Policy>::lp(
         expr += penalty;
         break;
       case ObjectPartitionLookupPenaltyTransform::STEP:
+        // Without groupsAllowed use `sum` (integer in MIP) not the continuous
+        // `penalty`: step(max(0,sum))==step(sum) but `penalty>=2*eps` is
+        // satisfiable with sum=0, so the Step lower-bound constraint would not
+        // force a real assignment. With groupsAllowed, `w` can set penalty=0
+        // even when sum>0 to ignore groups, so `penalty` must be the child.
         expr += Step::encodeLp(
-            penalty,
+            addGroupConstraint ? penalty : sum,
             Bounds{.lower_bound = 0, .upper_bound = sum_ub},
             /*childIsInteger=*/false,
             *this,
