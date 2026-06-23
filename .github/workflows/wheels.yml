@@ -239,10 +239,26 @@ jobs:
         pip install wheelhouse/rebalancer-*-manylinux*.whl
         # Minimal import check first so we can distinguish import-time crashes
         # (patchelf .init_array corruption) from test-execution crashes.
-        python -X faulthandler -c "
+        # On failure, capture a gdb C-level backtrace to identify the exact
+        # constructor function that segfaults.
+        if python -X faulthandler -c "
         from rebalancer import ProblemSolver
         ps = ProblemSolver(service_name='rebalancer', service_scope='glibc-test')
         assert ps.ping() == 4, f'ping returned {ps.ping()}'
         print('import + ping ok')
-        "
-        python -X faulthandler tools/wheels/test_bindings.py -v
+        "; then
+          python -X faulthandler tools/wheels/test_bindings.py -v
+        else
+          echo "--- import failed; running gdb backtrace ---"
+          sudo apt-get install -y gdb 2>/dev/null || true
+          gdb -batch \
+            -ex 'set confirm off' \
+            -ex 'set pagination off' \
+            -ex 'handle SIGSEGV stop print' \
+            -ex 'run' \
+            -ex 'bt full' \
+            -ex 'info sharedlibrary' \
+            --args python3 -X faulthandler -c \
+              "from rebalancer import ProblemSolver; print('ok')" 2>&1 || true
+          exit 1
+        fi
