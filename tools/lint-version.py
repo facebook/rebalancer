@@ -174,10 +174,12 @@ def main(skip_index_check: bool = False) -> None:
     ).stdout.split()
     if tags:
         latest = Version(tags[0].lstrip("v"))
-        if v <= latest:
-            raise VersionError(
-                f"version.txt ({v}) is not greater than latest tag ({latest})"
-            )
+        # Three cases:
+        #   v > latest  — new release requested; passes here, release.yml proceeds.
+        #   v == latest — no bump; passes here, release.yml skips gracefully.
+        #   v < latest  — version rolled back; always an error.
+        if v < latest:
+            raise VersionError(f"version.txt ({v}) rolls back latest tag ({latest})")
 
     if skip_index_check:
         print("lint-version: skipping index check (--skip-index-check)")

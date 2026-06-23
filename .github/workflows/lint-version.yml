@@ -40,4 +40,8 @@ jobs:
     - name: Install dependencies
       run: pip install packaging
     - name: Lint version.txt
-      run: python3 tools/lint-version.py
+      # --skip-index-check: whether the version is already on PyPI is a
+      # release gate, not a lint check. The pre-flight step in publish-testpypi
+      # owns that check; running it here causes false failures on PRs that touch
+      # this file without bumping the version.
+      run: python3 tools/lint-version.py --skip-index-check
