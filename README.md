@@ -78,7 +78,9 @@ auto solution = solver->solve();
 
 ## Installation
 
-### Ubuntu
+### Build from Source
+
+#### Ubuntu
 
 ```bash
 # Prereqs
@@ -105,7 +107,7 @@ cmake -GNinja \
 ninja
 ```
 
-#### HiGHS (open source MIP solver)
+##### HiGHS (open source MIP solver)
 
 Pick one of the following:
 
@@ -122,7 +124,7 @@ cd HiGHS && mkdir build && cd build
 cmake -GNinja .. && ninja
 ```
 
-### macOS
+#### macOS
 
 > **Prerequisite:** Install [Homebrew](https://brew.sh) if you don't have it.
 > After installing, open a new terminal so the `brew` command is available
@@ -144,7 +146,7 @@ cmake -GNinja \
 ninja
 ```
 
-### Fedora
+#### Fedora
 
 ```bash
 sudo dnf install boost-devel.x86_64 fbthrift-devel.x86_64 glog-devel.x86_64 gtest-devel.x86_64 gmock-devel.x86_64 fmt-devel.x86_64
