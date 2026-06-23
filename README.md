@@ -184,6 +184,30 @@ pip install rebalancer
 
 Then try the Python snippet from the [Quick Example](#quick-example) above.
 
+#### Debian / Ubuntu
+
+```bash
+# Primary (requires gh CLI — https://cli.github.com)
+gh release download --repo facebookincubator/rebalancer --pattern "*.deb"
+sudo dpkg -i rebalancer_*.deb
+
+# Fallback (curl)
+curl -sL $(curl -s https://api.github.com/repos/facebookincubator/rebalancer/releases/latest \
+  | grep "browser_download_url.*amd64\.deb" | cut -d'"' -f4) -o rebalancer.deb
+sudo dpkg -i rebalancer.deb
+```
+
+The package's postinstall script runs `ldconfig` automatically.
+
+Compile and run the smoke test:
+
+```bash
+curl -LO https://raw.githubusercontent.com/facebookincubator/rebalancer/main/tools/packages/test_solve.cpp
+g++ -std=c++20 test_solve.cpp -I/usr/local/include -L/usr/local/lib -lrebalancer \
+    -Wl,-rpath,/usr/local/lib -o test_solve && ./test_solve
+# → PASS: 2-2 split achieved
+```
+
 ## Development Setup
 
 ### Pre-commit hooks
