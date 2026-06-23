@@ -1,0 +1,151 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Builds every image in docker-compose.yml (the shared build-base, the explorer,
+# the JSON proxy, and the bundle-seeder) and smoke-tests the whole stack together:
+# the seeder populates the bundles volume, the explorer serves it, and a request
+# through the proxy exercises seeder -> explorer -> proxy end to end. This is NOT a
+# getdeps-generated workflow, so it is safe to edit by hand (unlike getdeps_*.yml).
+
+name: docker-explorer
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+    - 'Dockerfile.base'
+    - 'Dockerfile.explorer'
+    - 'Dockerfile.bundles'
+    - 'Dockerfile.proxy'
+    - 'docker-compose.yml'
+    - 'docker-compose.ci.yml'
+    - '.dockerignore'
+    - 'algopt/rebalancer/**'
+    - 'algopt/lp/**'
+    - 'rebalancer/explorer/**'
+    - 'tools/**'
+    - 'CMakeLists.txt'
+    - 'build/fbcode_builder/**'
+    - '.github/workflows/docker-explorer.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docker-explorer-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: build-and-smoke-test-images
+    runs-on: 16-core-ubuntu
+    # The build-base image builds folly/fbthrift/boost and the rest of the getdeps
+    # tree from source with no sccache, so the first (uncached) run is slow.
+    timeout-minutes: 120
+    steps:
+    - uses: actions/checkout@v6
+      with:
+        fetch-depth: 1
+
+    - name: Show disk space at start
+      run: df -h
+    - name: Free up disk space
+      # The from-source dependency build is large; reclaim space the runner
+      # image wastes on toolchains we do not use.
+      run: |
+        sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc \
+          /usr/local/.ghcup /usr/local/share/powershell
+        df -h
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Build all images
+      # One build graph: the shared rebalancer-build base (deps + project compile)
+      # is built once and reused by explorer, bundles, and proxy. The CI overlay
+      # persists that heavy layer in the GitHub Actions cache across runs.
+      run: docker compose -f docker-compose.yml -f docker-compose.ci.yml build
+
+    - name: Smoke test - full stack via docker compose
+      env:
+        # The proxy runs with --disable_auth, so this value is unused; set it to
+        # silence the "variable is not set" warning from compose.
+        REBALANCER_PROXY_AUTH_TOKEN: ci-unused
+      run: |
+        set -euo pipefail
+
+        # Start the stack. compose runs bundle-seeder to completion (explorer
+        # depends_on it with service_completed_successfully) before starting the
+        # explorer and then the proxy, so `up -d` returns with everything wired.
+        docker compose up -d --no-build
+
+        # 1) bundle-seeder: ran once and populated the shared bundles volume.
+        seeder=$(docker compose ps -aq bundle-seeder)
+        echo "=== bundle-seeder logs ==="
+        docker compose logs bundle-seeder
+        code=$(docker inspect -f '{{.State.ExitCode}}' "$seeder")
+        [ "$code" = "0" ] || { echo "ERROR: bundle-seeder exited $code"; exit 1; }
+        docker compose logs bundle-seeder | grep -q "Seeded example bundles" \
+          || { echo "ERROR: seeder did not report seeding"; exit 1; }
+        echo "bundle-seeder OK"
+
+        # 2) explorer: the Thrift server boots and reports listening.
+        listening=false
+        for _ in $(seq 1 60); do
+          if docker compose logs explorer 2>&1 | grep -q "Rebalancer Explorer service listening"; then
+            listening=true; break
+          fi
+          if [ -z "$(docker compose ps --status running -q explorer)" ]; then
+            echo "ERROR: explorer exited before reporting ready"
+            docker compose logs explorer; exit 1
+          fi
+          sleep 2
+        done
+        [ "$listening" = true ] || { echo "ERROR: explorer not listening in time"; docker compose logs explorer; exit 1; }
+        echo "explorer OK"
+
+        # 3) proxy: liveness probe on the only published port (8081), no backend.
+        ok=false
+        for _ in $(seq 1 30); do
+          if curl -fsS http://127.0.0.1:8081/healthz 2>/dev/null | grep -q '"status":"ok"'; then
+            ok=true; break
+          fi
+          sleep 2
+        done
+        [ "$ok" = true ] || { echo "ERROR: proxy /healthz failed"; docker compose logs proxy; exit 1; }
+        echo "proxy /healthz OK"
+
+        # 4) End-to-end: proxy -> explorer -> a seeded bundle. getHandle loads the
+        #    vertex_cover bundle the seeder produced, touching every image.
+        resp=$(curl -fsS -X POST http://127.0.0.1:8081/v2/getHandle \
+          -H 'Content-Type: application/json' \
+          -d '{"request":{"manifoldId":"/bundles/vertex_cover.bundle"}}')
+        echo "getHandle response: $resp"
+        # HandleResponse always has a "handle"; curl -f already required HTTP 2xx,
+        # so a well-formed response proves proxy -> explorer -> bundle all worked.
+        echo "$resp" | grep -q '"handle"' \
+          || { echo "ERROR: unexpected getHandle response"; docker compose logs explorer proxy; exit 1; }
+        echo "end-to-end getHandle OK"
+
+    - name: Dump logs on failure
+      if: failure()
+      run: docker compose logs || true
+
+    - name: Teardown
+      if: always()
+      run: docker compose down -v || true

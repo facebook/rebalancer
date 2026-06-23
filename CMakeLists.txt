@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.20 FATAL_ERROR)
 
-file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/version.txt" REBALANCER_VERSION LIMIT_COUNT 1)
+file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/version.txt"
+    REBALANCER_VERSION LIMIT_COUNT 1)
 string(STRIP "${REBALANCER_VERSION}" REBALANCER_VERSION)
 
 # Wheel-build hook: scikit-build-core invokes cmake from a tmp dir and can't
@@ -17,7 +18,8 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/.cmake_prefix_path")
     if(_wheel_prefix)
         string(REPLACE ":" ";" _wheel_prefix_list "${_wheel_prefix}")
         list(APPEND CMAKE_PREFIX_PATH ${_wheel_prefix_list})
-        message(STATUS "Wheel build: appended ${_wheel_prefix_list} to CMAKE_PREFIX_PATH")
+        message(STATUS "Wheel build: appended ${_wheel_prefix_list} "
+            "to CMAKE_PREFIX_PATH")
         # FindBoost looks at BOOST_ROOT before CMAKE_PREFIX_PATH; pluck the
         # boost-<hash> entry out so module-mode discovery hits the
         # getdeps-installed boost. Set BOOST_INCLUDEDIR / BOOST_LIBRARYDIR
@@ -74,7 +76,9 @@ if(USE_XPRESS)
     add_compile_definitions(REBALANCER_USE_XPRESS)
 endif()
 
-option(REBALANCER_BUILD_WEBSITE_EXAMPLES "Build website reference examples" OFF)
+option(REBALANCER_BUILD_WEBSITE_EXAMPLES
+    "Build website reference examples" OFF)
+option(REBALANCER_BUILD_EXPLORER "Build Rebalancer Explorer server" OFF)
 
 # Demo / example executables (Sudoku, NQueens, EightQueens, WebBalancing,
 # ShardAllocation, Replayer, StandaloneSolver, etc.). They're useful for
@@ -86,8 +90,15 @@ option(REBALANCER_BUILD_WEBSITE_EXAMPLES "Build website reference examples" OFF)
 option(EXAMPLES "Build example/demo executables" OFF)
 
 option(BENCHMARKS "Build benchmark executables" OFF)
-option(INSTALL_BENCHMARKS "Install benchmark executables (requires BENCHMARKS=ON)" OFF)
+option(INSTALL_BENCHMARKS
+    "Install benchmark executables (requires BENCHMARKS=ON)" OFF)
 option(TESTS "Build tests" OFF)
+
+# Test executables (rebalancer_tests.exe + test_main) are part of the default
+# ALL target but are never installed. Production/packaging builds (e.g. the
+# explorer Docker image) pass -DBUILD_TESTS=OFF to skip compiling them.
+# getdeps' --no-tests only skips *running* tests, not building them.
+option(BUILD_TESTS "Build test executables" ON)
 
 # Set CMAKE_MODULE_PATH to include fbcode_builder CMake modules
 # This must be done before find_package calls so that FBThrift's
@@ -111,8 +122,22 @@ list(APPEND CMAKE_PREFIX_PATH
 find_package(Boost REQUIRED COMPONENTS thread)
 find_package(fmt CONFIG REQUIRED)
 find_package(folly CONFIG REQUIRED)
+# RPC-enabled FBThrift's exported targets reference fizz/wangle/mvfst but its
+# config doesn't find_dependency() them, so locate them before
+# find_package(FBThrift).
+if(REBALANCER_BUILD_EXPLORER)
+    find_package(fizz CONFIG REQUIRED)
+    find_package(wangle CONFIG REQUIRED)
+    find_package(mvfst CONFIG REQUIRED)
+endif()
 find_package(FBThrift REQUIRED)
 find_package(highs CONFIG)
+if(REBALANCER_BUILD_EXPLORER)
+    find_package(gflags CONFIG REQUIRED)
+    find_package(Re2 REQUIRED)
+    # Needed by the HTTP/JSON proxy (rebalancer_explorer_proxy) below.
+    find_package(proxygen CONFIG REQUIRED)
+endif()
 
 find_package(glog CONFIG REQUIRED)
 
@@ -127,9 +152,12 @@ message(STATUS "FBTHRIFT_INCLUDE_DIR: ${FBTHRIFT_INCLUDE_DIR}")
 set(CMAKE_CXX_STANDARD
     20
     CACHE STRING
-          "The C++ standard whose features are requested to build this target.")
+    "The C++ standard whose features are requested to build this target.")
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-nullability -Wno-deprecated-declarations -Wno-nullability-completeness")
+string(APPEND CMAKE_CXX_FLAGS
+    " -Wno-nullability"
+    " -Wno-deprecated-declarations"
+    " -Wno-nullability-completeness")
 # Enable Clang's compile-time thread safety analysis when available.
 # The REBALANCER_GUARDED_BY / REBALANCER_EXCLUDES macros in
 # common/ThreadAnnotations.h are no-ops on compilers that lack support.
@@ -148,9 +176,14 @@ if(APPLE AND CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64")
 endif()
 
 # Used to make <algopt/rebalancer/...> a viable include path.
-set(THRIFT_OUTPUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/thrift_out")
-file(MAKE_DIRECTORY ${THRIFT_OUTPUT_DIR})
-include_directories("${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_CURRENT_BINARY_DIR}" "${THRIFT_OUTPUT_DIR}")
+set(THRIFT_OUT "${CMAKE_CURRENT_BINARY_DIR}/thrift_out")
+file(MAKE_DIRECTORY ${THRIFT_OUT})
+# algopt/ roots let explorer sources resolve their "rebalancer/explorer/..."
+# includes (source tree + thrift_out).
+include_directories(
+    "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_CURRENT_BINARY_DIR}" "${THRIFT_OUT}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/algopt" "${THRIFT_OUT}/algopt"
+)
 
 add_definitions(-DREBALANCER_OSS_BUILD)
 
@@ -159,7 +192,8 @@ if(highs_FOUND OR USE_HIGHS)
     add_compile_definitions(REBALANCER_USE_HIGHS)
     message(STATUS "Building Rebalancer with HiGHS support.")
 else()
-    message(WARNING "HiGHS not found. Building Rebalancer without HiGHS support.")
+    message(WARNING
+        "HiGHS not found. Building Rebalancer without HiGHS support.")
 endif()
 
 set(CXX_STANDARD_REQUIRED ON)
@@ -178,22 +212,28 @@ endif()
 ################################################
 # Generate Thrift code
 ################################################
+set(THRIFT_OUTPUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/thrift_out")
+file(MAKE_DIRECTORY ${THRIFT_OUTPUT_DIR})
 
 
-# Gather the Thrift files and generate them. This isn't the most ergonomic setup because
-# we would like to be able to edit these files without rerunning cmake setup. But it will
-# work for now. TODO: Fix this.
+# Gather the Thrift files and generate them. This isn't the most ergonomic
+# setup because we would like to be able to edit these files without rerunning
+# cmake setup. But it will work for now. TODO: Fix this.
 file(GLOB_RECURSE thrift_files "*.thrift")
 foreach(FILE ${thrift_files})
     cmake_path(GET FILE PARENT_PATH FILE_PATH)
     cmake_path(GET FILE FILENAME FILE_NAME)
 
-    file(RELATIVE_PATH RELATIVE_FILE_PATH "${CMAKE_CURRENT_SOURCE_DIR}" "${FILE_PATH}")
+    file(RELATIVE_PATH RELATIVE_FILE_PATH
+        "${CMAKE_CURRENT_SOURCE_DIR}" "${FILE_PATH}")
     set(OUTPUT_PATH "${THRIFT_OUTPUT_DIR}/${RELATIVE_FILE_PATH}")
     file(MAKE_DIRECTORY ${OUTPUT_PATH})
 
     message(STATUS
-        "${THRIFT1} --gen mstch_cpp2:json,include_prefix=${RELATIVE_FILE_PATH} -o ${OUTPUT_PATH} -I ${CMAKE_CURRENT_BINARY_DIR} -I ${FBTHRIFT_INCLUDE_DIR} ${FILE}"
+        "${THRIFT1} --gen "
+        "mstch_cpp2:json,include_prefix=${RELATIVE_FILE_PATH} "
+        "-o ${OUTPUT_PATH} -I ${CMAKE_CURRENT_BINARY_DIR} "
+        "-I ${FBTHRIFT_INCLUDE_DIR} ${FILE}"
       )
 
     execute_process(
@@ -213,7 +253,13 @@ endforeach()
 # Categorize source files
 ################################################
 
-function(categorize_source_files INPUT_FILES TEST_FILES BENCHMARK_FILES EXAMPLE_FILES EXECUTABLE_FILES LIBRARY_FILES)
+function(categorize_source_files
+    INPUT_FILES
+    TEST_FILES
+    BENCHMARK_FILES
+    EXAMPLE_FILES
+    EXECUTABLE_FILES
+    LIBRARY_FILES)
     # Clear output lists
     set(tests "")
     set(benchmarks "")
@@ -292,6 +338,12 @@ endfunction()
 file(GLOB_RECURSE all_cpp_files "*.cpp")
 message(STATUS "All source files: ${all_cpp_files}")
 
+# Rebalancer Explorer is exported into this repository, but it has its own
+# packaging/dependency manifest and is not part of the core librebalancer
+# build.
+list(FILTER all_cpp_files EXCLUDE REGEX
+    "rebalancer/explorer/")
+
 # Optionally exclude website reference examples (broken/WIP)
 if(NOT REBALANCER_BUILD_WEBSITE_EXAMPLES)
     list(FILTER all_cpp_files EXCLUDE REGEX "examples/website/")
@@ -313,8 +365,20 @@ categorize_source_files(
     rebalancer_library_files
 )
 
+# examples/common/ are shared helpers, not standalone examples. The categorizer
+# treats everything under examples/ as one, so split them out for a support lib
+# the examples link against instead of each becoming its own (broken) .exe.
+set(rebalancer_examples_common_files ${rebalancer_example_files})
+list(FILTER rebalancer_examples_common_files INCLUDE REGEX "examples/common/")
+list(FILTER rebalancer_example_files EXCLUDE REGEX "examples/common/")
+
 # Collect thrift-generated .cpp files and add to the library sources
 file(GLOB_RECURSE thrift_gen_cpp_files "${THRIFT_OUTPUT_DIR}/*.cpp")
+set(explorer_thrift_gen_cpp_files ${thrift_gen_cpp_files})
+list(FILTER explorer_thrift_gen_cpp_files INCLUDE REGEX
+    "[/\\\\]rebalancer[/\\\\]explorer[/\\\\]")
+list(FILTER thrift_gen_cpp_files EXCLUDE REGEX
+    "[/\\\\]rebalancer[/\\\\]explorer[/\\\\]")
 list(LENGTH thrift_gen_cpp_files thrift_gen_count)
 message(STATUS "Found ${thrift_gen_count} thrift-generated .cpp files")
 list(APPEND rebalancer_library_files ${thrift_gen_cpp_files})
@@ -336,11 +400,14 @@ function(create_executables TARGET_NAME EXECUTABLE_FILES)
 
         # Skip if this target name already exists
         if(TARGET "${exec_name}.exe")
-            message(WARNING "Target ${exec_name}.exe already exists. Skipping creation.")
+            message(WARNING
+                "Target ${exec_name}.exe already exists. Skipping creation.")
             continue()
         endif()
 
-        message(STATUS "Creating executable target: ${exec_name}.exe from source file: ${exec_file}")
+        message(STATUS
+            "Creating executable target: ${exec_name}.exe "
+            "from source file: ${exec_file}")
         add_executable("${exec_name}.exe" ${exec_file})
         target_include_directories("${exec_name}.exe"
             PUBLIC
@@ -369,63 +436,178 @@ function(create_executables TARGET_NAME EXECUTABLE_FILES)
             COMMENT "Building all ${TARGET_NAME}"
         )
 
-        message(STATUS "Created meta-target '${TARGET_NAME}' target with: ${executable_targets}")
+        message(STATUS
+            "Created meta-target '${TARGET_NAME}' target with: "
+            "${executable_targets}")
     endif()
 endfunction()
 
 add_library(rebalancer SHARED ${rebalancer_library_files})
-# Deps are PRIVATE: rebalancer links them but does not propagate -lfolly etc.
-# to its consumers. This keeps _rebalancer.so (the Python extension) from
-# acquiring direct LC_LOAD_DYLIB entries for getdeps-installed dylibs (e.g.
-# @rpath/libfolly.0.58.0-dev.dylib) whose rpath isn't set in the wheel layout
-# — delocate-wheel fails if it can't resolve those deps.
-#
-# With all deps as shared libs (BUILD_SHARED_LIBS=ON in their manifests),
-# runtime consumers get folly/fbthrift/fmt/glog/gflags via the DT_NEEDED
-# chain from librebalancer.so — no direct linker flags needed. The old
-# gflags double-DEFINE problem that required Linux PRIVATE / macOS PUBLIC
-# toggling is gone now that each dep is a single shared library.
-#
-# Public headers and compile defs are still exposed to consumers via the
-# explicit target_include_directories / target_compile_definitions below.
 target_link_libraries(rebalancer
-    PRIVATE
+    PUBLIC
         Folly::folly
         FBThrift::thriftprotocol
         FBThrift::thriftmetadata
         FBThrift::thrifttype
         FBThrift::rpcmetadata
         fmt::fmt
-        glog::glog
 )
 target_include_directories(rebalancer
     PUBLIC
-        $<TARGET_PROPERTY:Folly::folly,INTERFACE_INCLUDE_DIRECTORIES>
-        $<TARGET_PROPERTY:FBThrift::thriftprotocol,INTERFACE_INCLUDE_DIRECTORIES>
-        $<TARGET_PROPERTY:FBThrift::thriftmetadata,INTERFACE_INCLUDE_DIRECTORIES>
-        $<TARGET_PROPERTY:FBThrift::thrifttype,INTERFACE_INCLUDE_DIRECTORIES>
-        $<TARGET_PROPERTY:FBThrift::rpcmetadata,INTERFACE_INCLUDE_DIRECTORIES>
-        $<TARGET_PROPERTY:fmt::fmt,INTERFACE_INCLUDE_DIRECTORIES>
-        $<TARGET_PROPERTY:glog::glog,INTERFACE_INCLUDE_DIRECTORIES>
         ${FBTHRIFT_INCLUDE_DIR}
         ${CMAKE_CURRENT_BINARY_DIR}
         ${THRIFT_OUTPUT_DIR}
-)
-target_compile_definitions(rebalancer
-    PUBLIC
-        $<TARGET_PROPERTY:Folly::folly,INTERFACE_COMPILE_DEFINITIONS>
-        $<TARGET_PROPERTY:FBThrift::thriftprotocol,INTERFACE_COMPILE_DEFINITIONS>
-        $<TARGET_PROPERTY:FBThrift::thriftmetadata,INTERFACE_COMPILE_DEFINITIONS>
-        $<TARGET_PROPERTY:FBThrift::thrifttype,INTERFACE_COMPILE_DEFINITIONS>
-        $<TARGET_PROPERTY:FBThrift::rpcmetadata,INTERFACE_COMPILE_DEFINITIONS>
-        $<TARGET_PROPERTY:fmt::fmt,INTERFACE_COMPILE_DEFINITIONS>
-        $<TARGET_PROPERTY:glog::glog,INTERFACE_COMPILE_DEFINITIONS>
 )
 
 if(highs_FOUND OR USE_HIGHS)
     target_link_libraries(rebalancer PRIVATE highs::highs)
 endif()
 
+if(REBALANCER_BUILD_EXPLORER)
+    set(_exp_cpp algopt/rebalancer/explorer/cpp_server)
+    set(rebalancer_explorer_sources
+        ${_exp_cpp}/RebalancerExplorerHandlerBase.cpp
+        ${_exp_cpp}/lib/FilterModel.cpp
+        ${_exp_cpp}/lib/GroupModel.cpp
+        ${_exp_cpp}/lib/LoadModel.cpp
+        ${_exp_cpp}/lib/Utils.cpp
+        ${_exp_cpp}/server/ExplorerServerHandler.cpp
+        ${_exp_cpp}/server/ModelServer.cpp
+        ${_exp_cpp}/server/FileSandboxFactory.cpp
+        ${_exp_cpp}/server/StandaloneExplorerServiceHandler.cpp
+    )
+
+    add_library(
+        rebalancer_explorer
+        ${rebalancer_explorer_sources}
+        ${explorer_thrift_gen_cpp_files}
+    )
+    target_link_libraries(rebalancer_explorer
+        PUBLIC
+            rebalancer
+            FBThrift::thriftcpp2
+            Folly::folly
+            fmt::fmt
+            ${RE2_LIBRARY}
+    )
+    target_include_directories(rebalancer_explorer
+        PUBLIC
+            ${FBTHRIFT_INCLUDE_DIR}
+            ${CMAKE_CURRENT_BINARY_DIR}
+            ${THRIFT_OUTPUT_DIR}
+            ${RE2_INCLUDE_DIR}
+    )
+
+    add_executable(
+        rebalancer_explorer_server.exe
+        ${_exp_cpp}/server/StandaloneExplorerService.cpp
+    )
+    set_target_properties(
+        rebalancer_explorer_server.exe
+        PROPERTIES OUTPUT_NAME "rebalancer_explorer_server"
+    )
+    target_link_libraries(rebalancer_explorer_server.exe
+        PRIVATE
+            rebalancer_explorer
+            FBThrift::thriftcpp2
+            Folly::folly
+            fmt::fmt
+            gflags
+            glog::glog
+    )
+    target_include_directories(rebalancer_explorer_server.exe
+        PRIVATE
+            ${FBTHRIFT_INCLUDE_DIR}
+            ${CMAKE_CURRENT_BINARY_DIR}
+            ${THRIFT_OUTPUT_DIR}
+    )
+    if(APPLE)
+        set(_rebalancer_explorer_loader_rpath "@loader_path/../lib")
+    else()
+        set(_rebalancer_explorer_loader_rpath "$ORIGIN/../lib")
+    endif()
+    set_property(TARGET rebalancer_explorer_server.exe APPEND PROPERTY
+        BUILD_RPATH "${_rebalancer_explorer_loader_rpath}"
+    )
+    set_property(TARGET rebalancer_explorer_server.exe APPEND PROPERTY
+        INSTALL_RPATH "${_rebalancer_explorer_loader_rpath}"
+    )
+    # Install so fixup-dyn-deps bundles it; the server loads it via RPATH.
+    install(TARGETS rebalancer_explorer
+        LIBRARY DESTINATION lib
+        ARCHIVE DESTINATION lib
+    )
+    install(TARGETS rebalancer_explorer_server.exe RUNTIME DESTINATION bin)
+
+    # ----- HTTP/JSON proxy in front of the Explorer Thrift service -----
+    # External callers POST /v2/<method> with JSON; the proxy transcodes
+    # JSON <-> Thrift and forwards to a single configured Explorer backend.
+    # Sources live alongside the rest of the explorer (rebalancer/explorer/
+    # proxy/); the paths below use the same prefix as the explorer sources
+    # above.
+    add_executable(
+        rebalancer_explorer_proxy.exe
+        algopt/rebalancer/explorer/proxy/RebalancerExplorerProxy.cpp
+        algopt/rebalancer/explorer/proxy/JsonProxyHandler.cpp
+    )
+    set_target_properties(
+        rebalancer_explorer_proxy.exe
+        PROPERTIES OUTPUT_NAME "rebalancer_explorer_proxy"
+    )
+    target_link_libraries(rebalancer_explorer_proxy.exe
+        PRIVATE
+            rebalancer_explorer
+            proxygen::proxygenhttpserver
+            proxygen::proxygen
+            FBThrift::thriftcpp2
+            Folly::folly
+            fmt::fmt
+            gflags
+            glog::glog
+    )
+    target_include_directories(rebalancer_explorer_proxy.exe
+        PRIVATE
+            ${FBTHRIFT_INCLUDE_DIR}
+            ${CMAKE_CURRENT_BINARY_DIR}
+            ${THRIFT_OUTPUT_DIR}
+    )
+    # getdeps builds c-ares as a static archive off the default linker search
+    # path, so proxygen's transitive DNS dependency can fail to resolve at link
+    # time. Link it explicitly when found. (getdeps/OSS-only; Buck resolves
+    # proxygen's transitive deps itself, so there is no fbcode equivalent.)
+    find_library(CARES_LIBRARY NAMES cares c-ares)
+    if(CARES_LIBRARY)
+        target_link_libraries(
+            rebalancer_explorer_proxy.exe PRIVATE ${CARES_LIBRARY})
+    endif()
+    set_property(TARGET rebalancer_explorer_proxy.exe APPEND PROPERTY
+        BUILD_RPATH "${_rebalancer_explorer_loader_rpath}"
+    )
+    set_property(TARGET rebalancer_explorer_proxy.exe APPEND PROPERTY
+        INSTALL_RPATH "${_rebalancer_explorer_loader_rpath}"
+    )
+    install(TARGETS rebalancer_explorer_proxy.exe RUNTIME DESTINATION bin)
+endif()
+
+if(EXAMPLES)
+    # Helper lib (maybeSaveBundle, --bundle_out) linked into every example.
+    add_library(rebalancer_examples_common STATIC
+        ${rebalancer_examples_common_files})
+    target_link_libraries(rebalancer_examples_common
+        PUBLIC rebalancer Folly::folly)
+    target_include_directories(rebalancer_examples_common
+        PUBLIC
+            ${FBTHRIFT_INCLUDE_DIR}
+            ${CMAKE_CURRENT_BINARY_DIR}
+            ${THRIFT_OUTPUT_DIR}
+    )
+    create_executables(rebalancer_exes "${rebalancer_exe_files}"
+        rebalancer rebalancer_examples_common Folly::folly)
+    create_executables(rebalancer_examples "${rebalancer_example_files}"
+        rebalancer rebalancer_examples_common Folly::folly)
+endif()
+
+if(BUILD_TESTS)
 # GTest is needed by the test binary (TESTS) and is also linked by the
 # benchmark executables (see benchmark_link_libs below), so resolve it
 # whenever either is enabled.
@@ -454,24 +636,9 @@ if(TESTS)
     )
 endif()
 
-if(EXAMPLES)
-    # rebalancer links folly/fbthrift/fmt PRIVATELY so they don't propagate
-    # to consumers automatically. Examples that directly call folly/fmt APIs
-    # need them on their own link line.
-    set(_example_deps
-        rebalancer
-        Folly::folly
-        FBThrift::thriftprotocol
-        FBThrift::thriftmetadata
-        FBThrift::thrifttype
-        FBThrift::rpcmetadata
-        fmt::fmt
-    )
-    create_executables(rebalancer_exes "${rebalancer_exe_files}" ${_example_deps})
-    create_executables(rebalancer_examples "${rebalancer_example_files}" ${_example_deps})
-endif()
 if(BENCHMARKS)
-    # Split benchmark files into executables (have int main) and support libraries
+    # Split benchmark files into executables (have int main) and support
+    # libraries
     set(rebalancer_benchmark_exe_files "")
     set(rebalancer_benchmark_lib_files "")
     foreach(file ${rebalancer_benchmark_files})
@@ -486,7 +653,8 @@ if(BENCHMARKS)
 
     # Build benchmark support library (BenchmarkUtils, etc.)
     if(rebalancer_benchmark_lib_files)
-        add_library(rebalancer_benchmark_support ${rebalancer_benchmark_lib_files})
+        add_library(rebalancer_benchmark_support
+            ${rebalancer_benchmark_lib_files})
         target_link_libraries(rebalancer_benchmark_support
             PUBLIC
                 rebalancer
@@ -500,15 +668,19 @@ if(BENCHMARKS)
         )
     endif()
 
-    set(benchmark_link_libs rebalancer Folly::follybenchmark GTest::gtest Boost::thread)
+    set(benchmark_link_libs
+        rebalancer Folly::follybenchmark GTest::gtest Boost::thread)
     if(rebalancer_benchmark_lib_files)
         list(APPEND benchmark_link_libs rebalancer_benchmark_support)
     endif()
 
     if(INSTALL_BENCHMARKS)
-        create_executables(rebalancer_benchmarks "${rebalancer_benchmark_exe_files}" ${benchmark_link_libs})
+        create_executables(rebalancer_benchmarks
+            "${rebalancer_benchmark_exe_files}" ${benchmark_link_libs})
     else()
-        create_executables(rebalancer_benchmarks "${rebalancer_benchmark_exe_files}" NO_INSTALL ${benchmark_link_libs})
+        create_executables(rebalancer_benchmarks
+            "${rebalancer_benchmark_exe_files}"
+            NO_INSTALL ${benchmark_link_libs})
     endif()
 endif()
 
@@ -517,13 +689,8 @@ if(TESTS)
     target_link_libraries(rebalancer_tests.exe
         PUBLIC
             rebalancer
-            Folly::folly
             Folly::follybenchmark
             FBThrift::thriftprotocol
-            FBThrift::thriftmetadata
-            FBThrift::thrifttype
-            FBThrift::rpcmetadata
-            fmt::fmt
             test_main
             GTest::gtest
             GTest::gmock
@@ -577,6 +744,7 @@ if(TESTS)
         )
     endif()
 endif()
+endif() # BUILD_TESTS
 
 ################################################
 # Install targets
@@ -596,32 +764,6 @@ if(NOT SKBUILD)
 
     install(DIRECTORY ${THRIFT_OUTPUT_DIR}/algopt/ DESTINATION include/algopt
             FILES_MATCHING PATTERN "*.h" PATTERN "*.tcc")
-
-    # Packaging smoke test — only built in the SDK artifact context.
-    # Pass -DPACKAGING_TEST=ON (via build_linux_sdk.sh extra-cmake-defines)
-    # to enable; off by default so normal CI builds are unaffected.
-    option(PACKAGING_TEST "Build and install the packaging smoke test binary" OFF)
-    if(PACKAGING_TEST)
-        add_executable(test_solve tools/packages/test_solve.cpp)
-        # test_solve.cpp includes rebalancer headers which transitively pull in
-        # folly coro / cancellation templates that instantiate to symbols in
-        # libfolly.so. With PRIVATE folly on rebalancer, cmake doesn't add
-        # -lfolly to test_solve — add it explicitly so the linker can resolve
-        # those symbols. build_linux_sdk.sh's patchelf pass converts the
-        # resulting absolute DT_NEEDED paths to SONAMEs + $ORIGIN rpath.
-        target_link_libraries(test_solve PRIVATE
-            rebalancer
-            Folly::folly
-            FBThrift::thriftprotocol
-            FBThrift::thriftmetadata
-            FBThrift::thrifttype
-            FBThrift::rpcmetadata
-        )
-        set_target_properties(test_solve PROPERTIES
-            INSTALL_RPATH "\$ORIGIN/../lib:\$ORIGIN/../lib/rebalancer"
-        )
-        install(TARGETS test_solve RUNTIME DESTINATION bin)
-    endif()
 endif()
 
 # When invoked by scikit-build-core (during a `pip install` / wheel build),
@@ -629,12 +771,6 @@ endif()
 # auditwheel/delocate can bundle it. SKBUILD is set by scikit-build-core
 # only; a normal cmake invocation leaves these targets untouched.
 if(SKBUILD)
-    # INSTALL_RPATH_USE_LINK_PATH: include all linked library directories in the
-    # installed librebalancer.{so,dylib}'s RPATH. On macOS delocate-wheel walks
-    # the RPATH of every lib in the wheel to find and bundle transitive deps.
-    # Without this, librebalancer.dylib's INSTALL_RPATH is empty (cmake strips
-    # the build RPATH on install) and delocate can't find @rpath/libfolly.dylib.
-    set_target_properties(rebalancer PROPERTIES INSTALL_RPATH_USE_LINK_PATH TRUE)
     install(TARGETS rebalancer
         LIBRARY DESTINATION ${SKBUILD_PROJECT_NAME}/_lib
         ARCHIVE DESTINATION ${SKBUILD_PROJECT_NAME}/_lib
@@ -643,47 +779,19 @@ if(SKBUILD)
     ############################################
     # nanobind Python extension (_rebalancer)
     ############################################
-    find_package(Python 3.12 REQUIRED COMPONENTS Interpreter Development.Module)
+    find_package(Python 3.9 REQUIRED COMPONENTS Interpreter Development.Module)
     find_package(nanobind CONFIG REQUIRED)
 
     nanobind_add_module(_rebalancer
         NB_STATIC
         ${CMAKE_CURRENT_SOURCE_DIR}/algopt/rebalancer/python/Bindings.cpp
     )
-    # Bindings.cpp instantiates fmt templates and folly/thrift types that
-    # require link-time symbol resolution. With PRIVATE deps on rebalancer,
-    # these don't propagate to _rebalancer. Use -undefined dynamic_lookup
-    # (macOS) / --allow-shlib-undefined (Linux) so the linker accepts the
-    # undefined folly/thrift symbols — they resolve at dlopen time through
-    # _rebalancer.so's → librebalancer dependency chain which loads libfolly.
-    # fmt is still linked explicitly since it's reliably findable by delocate
-    # (Homebrew on Mac, bundled in lib/rebalancer/ on Linux).
-    target_link_libraries(_rebalancer
+    target_link_libraries(_rebalancer PRIVATE rebalancer)
+    target_include_directories(_rebalancer
         PRIVATE
-            rebalancer
-            fmt::fmt
-    )
-    if(APPLE)
-        target_link_options(_rebalancer PRIVATE -undefined dynamic_lookup)
-    else()
-        target_link_options(_rebalancer PRIVATE -Wl,--allow-shlib-undefined)
-    endif()
-    # The wheel layout places _rebalancer.cpython-*.so at the package root
-    # and librebalancer.{so,dylib} one level down in _lib/. Tell the dynamic
-    # loader where to look so the @rpath/librebalancer.* load command in
-    # _rebalancer resolves. Without this, delocate-wheel (macOS) / auditwheel
-    # (Linux) fail to walk the dep tree and bundle librebalancer into the
-    # wheel.
-    if(APPLE)
-        set(_rebalancer_ext_rpath "@loader_path/_lib")
-    else()
-        set(_rebalancer_ext_rpath "$ORIGIN/_lib")
-    endif()
-    set_property(TARGET _rebalancer APPEND PROPERTY
-        BUILD_RPATH "${_rebalancer_ext_rpath}"
-    )
-    set_property(TARGET _rebalancer APPEND PROPERTY
-        INSTALL_RPATH "${_rebalancer_ext_rpath}"
+            ${FBTHRIFT_INCLUDE_DIR}
+            ${CMAKE_CURRENT_BINARY_DIR}
+            ${THRIFT_OUTPUT_DIR}
     )
     # Install the extension into the wheel package; the wrapper __init__.py
     # already lives in src/rebalancer/ (picked up via wheel.packages in
