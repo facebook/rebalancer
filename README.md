@@ -208,6 +208,22 @@ g++ -std=c++20 test_solve.cpp -I/usr/local/include -L/usr/local/lib -lrebalancer
 # → PASS: 2-2 split achieved
 ```
 
+#### Fedora / RHEL
+
+```bash
+gh release download --repo facebookincubator/rebalancer --pattern "*.rpm"
+sudo rpm -i rebalancer-*.rpm
+```
+
+Compile and run the smoke test:
+
+```bash
+curl -LO https://raw.githubusercontent.com/facebookincubator/rebalancer/main/tools/packages/test_solve.cpp
+g++ -std=c++20 test_solve.cpp -I/usr/local/include -L/usr/local/lib -lrebalancer \
+    -Wl,-rpath,/usr/local/lib -o test_solve && ./test_solve
+# → PASS: 2-2 split achieved
+```
+
 ## Development Setup
 
 ### Pre-commit hooks
