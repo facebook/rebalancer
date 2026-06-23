@@ -356,7 +356,7 @@ solver.add_constraint(
 
 - [ColocateGroupsSpec](colocate-groups) - Control group spread/colocation
 - [GroupIsolationLimitSpec](group-isolation-limit) - Prevent groups from sharing scope items
-- [Partitions](../../core-concepts/scopes-and-partitions) - How to define groups
+- [Partitions](../../core-concepts/overview#partitions) - How to define groups
 
 ## Source Code
 

@@ -263,5 +263,5 @@ See these complete examples using BalanceSpec:
 ## Next Steps
 
 - See [Load Balancing Cookbook](../../cookbook/load-balancing) for complete example
-- Learn about [Scopes](../../core-concepts/scopes-and-partitions) to use BalanceSpec effectively
-- Understand [Goal Priorities](../../core-concepts/goals-vs-constraints#goal-priorities) for multi-goal problems
+- Learn about [Scopes](../../core-concepts/overview#scopes) to use BalanceSpec effectively
+- Understand [Goal Priorities](../../core-concepts/overview#goals-and-constraints) for multi-goal problems

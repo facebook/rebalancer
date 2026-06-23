@@ -49,7 +49,7 @@ import TabItem from '@theme/TabItem';
 
 ### Limit Structure
 
-See [Limit documentation](../../core-concepts/scopes-and-partitions) for details. Common usage:
+See [Limit documentation](../../core-concepts/overview#partitions) for details. Common usage:
 
 | Limit Type | Example | Meaning |
 |------------|---------|---------|

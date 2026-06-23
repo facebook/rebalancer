@@ -2,297 +2,74 @@
 sidebar_position: 1
 ---
 
-# Core Concepts Overview
+# Core Concepts
 
-Rebalancer provides a domain-specific language (DSL) for expressing assignment problems. Understanding these core concepts will help you model and solve complex problems effectively.
+To ensure reusability of the specs, Rebalancer defines a set of modeling constructs that can flexibly represent user requirements.
 
-## The Assignment Problem Model
+## Assignment Problem
 
-At its heart, Rebalancer solves problems of the form:
+Any assignment problem that aims to place objects into a pre-defined set of containers can be modeled as a Rebalancer Assignment Problem.
 
-> **"Assign each object to exactly one container, subject to constraints, while optimizing objectives."**
+![Objects assigned to bins while minimizing objectives and satisfying constraints](pathname:///img/core-concepts/assignment-problem.png)
 
-This simple abstraction is surprisingly powerful and can model many real-world problems:
+A Rebalancer problem can be built using the following modeling constructs:
 
-**Systems Engineering:**
-- **Load balancing**: Assign tasks (objects) to servers (containers)
-  - *Constraints*: CPU/memory capacity limits per server
-  - *Objectives*: Balance load across servers, minimize movement
+* **Object**: Define what objects are in the problem
+* **Container**: Define what containers are in the problem
+* **Dimension**: Dimensions can be used to model *properties* of objects and containers.
+   * For example, if objects are tasks that we want to place in servers (containers), the CPU request of a task could be modeled as a task dimension and the CPU capacity of a server can be modeled as a container dimension.
 
-- **Database sharding**: Assign shards (objects) to hosts (containers)
-  - *Constraints*: Storage capacity, at least 2 replicas per shard in different racks
-  - *Objectives*: Balance storage and query load, ensure fault tolerance
+* **Scopes and Scope Items**: Scopes can be used to group containers based on common properties.
+   * In a datacenter of servers, servers belong to distinct racks. A scope can be used to specify the partitioning of servers into distinct racks. This is useful when we want to define some objectives or constraints at a higher level of logical grouping rather than on individual containers.
 
-**Operations & Logistics:**
-- **Delivery routing**: Assign drivers (objects) to routes (containers)
-  - *Constraints*: Time windows, vehicle capacity, driver hours
-  - *Objectives*: Balance workload across drivers, minimize total distance
+* **Partition and Groups**: Partitions can be used to group objects based on common properties.
+   * For example, in a task assignment problem where we want to assign tasks to servers, multiple tasks may belong to the same job. A partition can be used to encode this information on what distinct jobs exist in the problem and which tasks belong to which job. Similar to scopes, partitions can be used to define objectives and constraints at a higher level of grouping rather than on individual objects.
 
-- **Warehouse task assignment**: Assign picking tasks (objects) to workers (containers)
-  - *Constraints*: Worker skill levels, maximum tasks per worker
-  - *Objectives*: Maximize throughput, balance workload
+## Dimensions
 
-**Healthcare:**
-- **Patient-bed assignment**: Assign patients (objects) to hospital beds (containers)
-  - *Constraints*: Care requirements, isolation needs, bed availability
-  - *Objectives*: Minimize patient transfers, balance nurse workload
+A dimension is a mapping of each object and container to a number that captures some real world property of interest. For example, the memory dimension of a server (a container) specifies the server's memory capacity, while the memory dimension of a task (an object) specifies the amount of memory needed to run the task.
 
-**Education:**
-- **Student-class assignment**: Assign students (objects) to courses (containers)
-  - *Constraints*: Prerequisites, class size limits, time conflicts
-  - *Objectives*: Maximize student preferences, balance class sizes
+* Dimensions can also represent complex relationships. For example, we can define a `prohibitedObjects` dimension, where an object takes a value of 1 or 0, depending on its assignability to a bin.
 
-## Core Building Blocks
+![Tasks with CPU load and a machine with CPU capacity, modeled as dimensions](pathname:///img/core-concepts/dimensions.png)
 
-### 1. Objects and Containers
+### Dynamic Dimensions
 
-- **Objects**: Things that need to be assigned (tasks, shards, workloads)
-- **Containers**: Places where objects go (servers, hosts, racks)
+The examples of object dimensions seen so far are **static** — such as the memory dimension of a task — and only depend on the object. Rebalancer also supports the notion of dynamic dimensions where the contribution of an object also depends on the container it is assigned to. For example, depending on the (container) server it is assigned to, the memory/CPU requirements of a task can vary.
 
-Every object is assigned to exactly one container. Containers can hold multiple objects.
+Another place where dynamic dimensions are used is to [avoid certain assignments](../reference/placement/avoid-assignments).
 
-**Learn more**: [Objects and Containers](objects-and-containers)
+## Scopes
 
-### 2. Dimensions
+Rebalancer uses scopes to represent the hierarchical structure of containers. For example, the `datacenter` and `rack` scopes represent servers in a datacenter or rack. *A scope divides containers into sets called scope items*.
 
-**Dimensions** represent resource types or properties:
+For example, under the `rack` scope, the scope items `rack1` and `rack2` represent the set of servers in those specific racks.
 
-- **Object dimensions**: CPU usage, memory requirement, network bandwidth
-- **Container dimensions**: CPU capacity, memory capacity, network bandwidth
+![A scope dividing containers into scope items, such as racks](pathname:///img/core-concepts/scopes.png)
 
-Dimensions let you express multi-resource problems: "This task needs 2 CPU and 4GB RAM, this host has 16 CPU and 64GB RAM."
+## Partitions
 
-**Learn more**: [Dimensions](dimensions)
+Similar to scopes and scope items for containers, an object partition is an aggregation of objects, which may not be necessarily disjoint. *Each set in the partition is referred to as a group*.
 
-### 3. Scopes
+For example, in the context of cluster management, all tasks are partitioned into jobs and a job is a group of tasks that run the same executable.
 
-**Scopes** group containers for constraints and goals:
+![An object partition grouping tasks into jobs](pathname:///img/core-concepts/partitions.png)
 
-- `scope="host"`: Each individual host
-- `scope="rack"`: Groups of hosts by rack
-- `scope="datacenter"`: Groups of hosts by datacenter
+## Goals and Constraints
 
-Example: "No more than 100GB of memory used per rack" uses `scope="rack"`.
+Once a problem is described in terms of objects, containers, dimensions, scopes, and partitions, you express *what makes a good assignment* using **specs**. A spec is a reusable, named building block that captures a common modeling need — such as keeping utilization under a limit (**capacity**), spreading load evenly (**balance**), keeping a group's members apart (**diversity**), or reducing churn (**minimize movement**). Each spec refers back to the constructs you have already defined: a `CapacitySpec`, for example, names a `dimension` to measure and a `scope` over which the limit applies, while a group-based spec such as `GroupCountSpec` additionally names a `partition`.
 
-**Learn more**: [Scopes and Partitions](scopes-and-partitions)
+A spec is applied to a problem in one of two ways:
 
-### 4. Partitions (Groups)
+* **Constraint**: a hard requirement that the solution must satisfy. If the initial assignment already violates it, Rebalancer treats it as a high-priority objective and tries hard to repair it.
+* **Goal**: a soft objective that Rebalancer minimizes as well as possible, traded off against other goals according to its weight (or a strict priority order).
 
-**Partitions** group objects by some property:
+Most specs can be used as **either** a constraint or a goal — the same `CapacitySpec` can require that memory is never exceeded (constraint) or merely encourage it (goal). A few are inherently one or the other: `MinimizeMovementSpec` only makes sense as a goal, while `AvoidAssignmentsSpec` only makes sense as a constraint.
 
-- Group tasks by tenant
-- Group shards by database
-- Group containers by service
+See the [Goals & Constraints Reference](../reference/) for the full catalog of available specs and whether each can act as a goal, a constraint, or both.
 
-Example: "Keep shards from the same database on different hosts" uses partitions.
+## Example
 
-**Learn more**: [Scopes and Partitions](scopes-and-partitions)
+![Figure 1: Rebalancer specs for assigning tasks to servers](pathname:///img/core-concepts/example.png)
 
-### 5. Goals and Constraints
-
-- **Goals**: Objectives to optimize (minimize imbalance, minimize movement)
-- **Constraints**: Hard rules that must be satisfied (capacity limits, avoid assignments)
-
-Goals are soft - Rebalancer tries to satisfy them as well as possible. Constraints are hard - the solution must satisfy them (or they're treated as high-priority goals if initially broken).
-
-**Learn more**: [Goals vs Constraints](goals-vs-constraints)
-
-## How These Fit Together
-
-Here's a complete example showing all concepts:
-
-### Problem: Database Shard Placement
-
-**Objects**: 1000 database shards
-**Containers**: 10 hosts across 2 datacenters
-**Object Dimensions**: Each shard has memory_requirement and query_load
-**Container Dimensions**: Each host has memory_capacity
-**Scopes**:
-- `host` scope (individual hosts)
-- `datacenter` scope (groups of hosts)
-
-**Partitions**: Shards grouped by `database_id`
-**Goals**: Balance `query_load` across hosts
-**Constraints**:
-- Capacity: `memory_requirement` doesn't exceed `memory_capacity` per host
-- Diversity: Each database has shards in both datacenters
-
-### In Code
-
-import Tabs from '@theme/Tabs';
-import TabItem from '@theme/TabItem';
-
-<Tabs groupId="programming-language">
-<TabItem value="python" label="Python" default>
-
-```python
-from rebalancer import ProblemSolver
-from rebalancer.specs import (
-    BalanceSpec,
-    CapacitySpec,
-    ConstraintSpec,
-    GoalSpec,
-    GroupCountSpec,
-    Limit,
-)
-
-solver = ProblemSolver(service_name="shard-placement", service_scope="prod")
-
-# Objects and containers
-solver.set_object_name("shard")
-solver.set_container_name("host")
-solver.set_assignment(current_placement)
-
-# Object dimensions
-solver.add_object_dimension("memory_requirement", shard_memory)
-solver.add_object_dimension("query_load", shard_qps)
-
-# Container dimensions
-solver.add_container_dimension("memory_capacity", host_memory)
-
-# Scopes
-solver.add_scope("datacenter", host_to_dc)
-
-# Partitions
-solver.add_partition("database", shard_to_database)
-
-# Goals: balance query load
-solver.add_goal(
-    GoalSpec(
-        balanceSpec=BalanceSpec(
-            name="balance-qps", scope="host", dimension="query_load"
-        )
-    ),
-    weight=1.0,
-)
-
-# Constraints: respect memory capacity
-solver.add_constraint(
-    ConstraintSpec(
-        capacitySpec=CapacitySpec(
-            name="memory-capacity",
-            scope="host",
-            dimension="memory_requirement",
-        )
-    )
-)
-
-# Constraints: diversity across datacenters
-solver.add_constraint(
-    ConstraintSpec(
-        groupCountSpec=GroupCountSpec(
-            name="datacenter-diversity",
-            scope="datacenter",
-            partitionName="database",
-            limit=Limit(type="ABSOLUTE", globalLimit=1.0),
-        )
-    )
-)
-```
-
-</TabItem>
-<TabItem value="cpp" label="C++">
-
-```cpp
-ProblemSolver solver(executor, "shard-placement", "prod");
-
-// Objects and containers
-solver.setObjectName("shard");
-solver.setContainerName("host");
-solver.setAssignment(current_placement);
-
-// Object dimensions
-solver.addObjectDimension("memory_requirement", shard_memory);
-solver.addObjectDimension("query_load", shard_qps);
-
-// Container dimensions
-solver.addContainerDimension("memory_capacity", host_memory);
-
-// Scopes
-solver.addScope("datacenter", host_to_dc);
-
-// Partitions
-solver.addPartition("database", shard_to_database);
-
-// Goals: balance query load
-BalanceSpec balanceQps;
-balanceQps.name() = "balance-qps";
-balanceQps.scope() = "host";
-balanceQps.dimension() = "query_load";
-solver.addGoal(balanceQps, 1.0);
-
-// Constraints: respect memory capacity
-CapacitySpec memCapacity;
-memCapacity.name() = "memory-capacity";
-memCapacity.scope() = "host";
-memCapacity.dimension() = "memory_requirement";
-solver.addConstraint(memCapacity);
-
-// Constraints: diversity across datacenters
-GroupCountSpec dcDiversity;
-dcDiversity.name() = "datacenter-diversity";
-dcDiversity.scope() = "datacenter";
-dcDiversity.partition() = "database";
-dcDiversity.limit() = Limit();
-dcDiversity.limit()->globalLimit() = 1.0;
-solver.addConstraint(dcDiversity);
-```
-
-</TabItem>
-</Tabs>
-
-## The Mental Model
-
-When solving a problem with Rebalancer:
-
-1. **Identify your assignment**: What goes where?
-   - Objects = things to assign
-   - Containers = places they go
-
-2. **Define resources**: What matters?
-   - Dimensions = resource types
-
-3. **Structure the problem**: How are things organized?
-   - Scopes = how containers are grouped
-   - Partitions = how objects are grouped
-
-4. **State requirements**: What must be true?
-   - Constraints = hard rules
-   - Goals = soft objectives
-
-5. **Solve and inspect**: Let Rebalancer find the solution
-
-## Visualization
-
-```
-┌─────────────────────────────────────────────────────┐
-│ Problem                                             │
-│                                                     │
-│  Objects                          Containers        │
-│  ┌──────┐                        ┌──────────┐     │
-│  │ obj1 │────assigned to─────────│ container1│     │
-│  └──────┘                        └──────────┘     │
-│  ┌──────┐                        ┌──────────┐     │
-│  │ obj2 │────assigned to─────────│ container2│     │
-│  └──────┘                        └──────────┘     │
-│     ↓ dimensions                      ↓ dimensions │
-│  [cpu, mem]                       [capacity]       │
-│     ↓ partitions                      ↓ scopes     │
-│  [groups]                         [racks, DCs]     │
-│                                                     │
-│  Goals: minimize(imbalance)                        │
-│  Constraints: capacity not exceeded                │
-└─────────────────────────────────────────────────────┘
-```
-
-## Next Steps
-
-Dive deeper into each concept:
-
-1. [Objects and Containers](objects-and-containers) - The basics
-2. [Dimensions](dimensions) - Multi-resource problems
-3. [Scopes and Partitions](scopes-and-partitions) - Grouping and hierarchy
-4. [Goals vs Constraints](goals-vs-constraints) - Optimization vs requirements
-5. [Groups](groups) - Advanced object grouping
-
-Or jump to practical examples in the [Cookbook](../cookbook/).
+As a concrete example of using these constructs, **Figure 1** defines two dimensions, CPU and storage, to model resources; a rack scope as a fault domain; and a job partition where each group comprises tasks that run the same executable.

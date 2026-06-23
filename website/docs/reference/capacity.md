@@ -472,6 +472,6 @@ See these complete examples using CapacitySpec:
 
 ## Next Steps
 
-- Learn about [Dimensions](../core-concepts/dimensions) to understand capacity modeling
-- See [Scopes](../core-concepts/scopes-and-partitions) for applying capacity at different levels
+- Learn about [Dimensions](../core-concepts/overview#dimensions) to understand capacity modeling
+- See [Scopes](../core-concepts/overview#scopes) for applying capacity at different levels
 - Check [Shard Placement Cookbook](../cookbook/shard-placement) for real-world capacity constraints

@@ -266,7 +266,7 @@ Congratulations! You've solved your first assignment problem with Rebalancer.
 
 To learn more:
 
-- **Add resource dimensions**: [Working with Dimensions](../core-concepts/dimensions)
+- **Add resource dimensions**: [Working with Dimensions](../core-concepts/overview#dimensions)
 - **Use more goals**: [Goals & Constraints Reference](../reference/)
 - **Solve real problems**: [Cookbook Examples](../cookbook/)
 - **Choose the right solver**: [Solver Guide](../solvers/overview)

@@ -335,5 +335,5 @@ size_class > region > container
 
 - Try [SingleColdestStratified](single-coldest-stratified) for capacity-focused stratification
 - Learn about [SingleRandomObjectStratified](single-random-object-stratified) for object stratification
-- Review [Scopes and Partitions](../../core-concepts/scopes-and-partitions) for hierarchy design
+- Review [Scopes and Partitions](../../core-concepts/overview#scopes) for hierarchy design
 - See [Move Types Overview](../) for choosing move types

@@ -330,5 +330,5 @@ resource_bin > workload_type > object
 
 - Learn about [SingleRandomStratified](single-random-stratified) for container stratification
 - Try [SingleColdestStratified](single-coldest-stratified) for capacity-focused stratification
-- Review [Groups and Partitions](../../core-concepts/scopes-and-partitions) for partition design
+- Review [Groups and Partitions](../../core-concepts/overview#partitions) for partition design
 - See [Move Types Overview](../) for choosing move types

@@ -903,4 +903,4 @@ auto best = (solution1.objectiveValue < solution2.objectiveValue)
 ## Related Documentation
 
 - [Solver Overview](overview) - Choosing solvers
-- [Goals vs Constraints](../core-concepts/goals-vs-constraints) - Priority strategies
+- [Goals vs Constraints](../core-concepts/overview#goals-and-constraints) - Priority strategies

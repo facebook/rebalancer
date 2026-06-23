@@ -346,4 +346,4 @@ ColocateGroups does NOT help when:
 - Learn about [GroupMoveWithHintStrategies](group-move-with-hint-strategies) for hint-based group moves
 - Try [GroupRouting](group-routing) for group-aware routing
 - Review [Move Types Overview](../) for choosing move types
-- See core concepts on [Groups](../../core-concepts/groups) for partition setup
+- See core concepts on [Groups](../../core-concepts/overview#partitions) for partition setup

@@ -385,7 +385,7 @@ solver.add_constraint(
 
 - [GroupCountSpec](group-count) - Control groups per scope item (complementary)
 - [GroupIsolationLimitSpec](group-isolation-limit) - Prevent groups from sharing scope items
-- [Partitions](../../core-concepts/scopes-and-partitions) - How to define groups
+- [Partitions](../../core-concepts/overview#partitions) - How to define groups
 
 ## Source Code
 
