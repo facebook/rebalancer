@@ -96,7 +96,7 @@ echo "Done pre-stripping debug symbols."
 # to repair them with lief below.
 echo "Snapshotting original NEEDED entries..."
 python3 - <<'PYEOF' > /tmp/repair_linux_needed.json
-import json, subprocess, glob, os, re
+import json, subprocess, glob, os, re, sys
 
 snapshot = {}   # soname_of_lib -> [original_needed_sonames]
 for lib_dir in glob.glob('/tmp/fbcode_builder_getdeps-*/installed/*/lib') + \
@@ -118,7 +118,6 @@ for lib_dir in glob.glob('/tmp/fbcode_builder_getdeps-*/installed/*/lib') + \
         if soname:
             snapshot[soname] = needed
 json.dump(snapshot, sys.stdout)
-import sys
 PYEOF
 echo "Snapshot written."
 
