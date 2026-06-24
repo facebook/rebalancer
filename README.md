@@ -16,9 +16,71 @@ There is a finite (but easily extensible) set of predefined expressions that can
 
 Users interact with Rebalancer via an interface which is available in C++ and Python.
 
+## Quick Example
+
+Four tasks, two hosts, one capacity constraint — `host0` starts overloaded with
+three tasks and `host1` has one. Rebalancer finds a balanced 2-2 assignment using
+local search or, optionally, a MIP solver backed by HiGHS, Gurobi, or FICO Xpress:
+
+**Python**
+
+```python
+from rebalancer import ProblemSolver
+from rebalancer.specs import (
+    CapacitySpec, ConstraintSpec, LocalSearchSolverSpec,
+    MoveTypeSpec, SingleMoveTypeSpec, SwapMoveTypeSpec, SolverSpec,
+)
+
+solver = ProblemSolver(service_name="rebalancer", service_scope="example")
+(solver
+    .set_object_name("task")
+    .set_container_name("host")
+    .set_assignment({"host0": ["task0", "task1", "task2"], "host1": ["task3"]})
+    .add_object_dimension("memory", {"task0": 10, "task1": 10, "task2": 10, "task3": 10})
+    .add_container_dimension("memory", {}, default_value=20.0)
+    .add_constraint(ConstraintSpec(capacitySpec=CapacitySpec(
+        name="memory_capacity", scope="host", dimension="memory")))
+    .add_solver(SolverSpec(localSearchSolverSpec=LocalSearchSolverSpec(
+        moveTypeList=[MoveTypeSpec(singleMoveTypeSpec=SingleMoveTypeSpec()),
+                      MoveTypeSpec(swapMoveTypeSpec=SwapMoveTypeSpec())])))
+)
+solution = solver.solve()
+print(solution["assignment"])
+# → e.g. {'task0': 'host1', 'task1': 'host0', 'task2': 'host0', 'task3': 'host1'}
+```
+
+**C++**
+
+```cpp
+auto solver = ProblemSolverFactory::makeProblemSolver("rebalancer", "example");
+solver->setObjectName("task");
+solver->setContainerName("host");
+solver->setAssignment({
+    {"host0", {"task0", "task1", "task2"}},
+    {"host1", {"task3"}},
+});
+solver->addObjectDimension("memory",
+    {{"task0", 10}, {"task1", 10}, {"task2", 10}, {"task3", 10}});
+solver->addContainerDimension("memory", {}, /*defaultValue=*/ 20.0);
+
+CapacitySpec cap;
+cap.name() = "memory_capacity"; cap.scope() = "host"; cap.dimension() = "memory";
+solver->addConstraint(cap);
+
+LocalSearchSolverSpec ls;
+ls.moveTypeList() = {ProblemSolver::makeMoveTypeSpec(SingleMoveTypeSpec{}),
+                     ProblemSolver::makeMoveTypeSpec(SwapMoveTypeSpec{})};
+solver->addSolver(ls);
+
+auto solution = solver->solve();
+// solution.assignment() maps task → host
+```
+
 ## Installation
 
-### Ubuntu
+### Build from Source
+
+#### Ubuntu
 
 ```bash
 # Prereqs
@@ -45,7 +107,7 @@ cmake -GNinja \
 ninja
 ```
 
-#### HiGHS (open source MIP solver)
+##### HiGHS (open source MIP solver)
 
 Pick one of the following:
 
@@ -62,7 +124,7 @@ cd HiGHS && mkdir build && cd build
 cmake -GNinja .. && ninja
 ```
 
-### macOS
+#### macOS
 
 > **Prerequisite:** Install [Homebrew](https://brew.sh) if you don't have it.
 > After installing, open a new terminal so the `brew` command is available
@@ -84,10 +146,103 @@ cmake -GNinja \
 ninja
 ```
 
-### Fedora
+#### Fedora
 
 ```bash
 sudo dnf install boost-devel.x86_64 fbthrift-devel.x86_64 glog-devel.x86_64 gtest-devel.x86_64 gmock-devel.x86_64 fmt-devel.x86_64
+```
+
+#### After Building
+
+The default build produces the Rebalancer library. To build and run the bundled
+examples, pass `-DTESTS=ON` to CMake and rebuild:
+
+```bash
+# From rebalancer/build/
+cmake -GNinja -DTESTS=ON -DCMAKE_BUILD_TYPE=Debug ..
+ninja TasksOnHosts.exe
+./TasksOnHosts.exe
+```
+
+This runs the tasks-on-hosts example — distributing tasks across hosts by memory
+capacity — and prints the resulting assignment to stdout.
+
+More examples are in `algopt/rebalancer/examples/` (shard allocation, web
+balancing, knapsack, and others). Each `.cpp` file in that tree is built as a
+standalone executable when `-DTESTS=ON` is set.
+
+For **Python usage**, the source build does not produce a Python package.
+Use `pip install rebalancer` instead (see [PyPI](#pypi) below).
+
+### Install a Prebuilt Package
+
+#### PyPI
+
+```bash
+pip install rebalancer
+```
+
+Then try the Python snippet from the [Quick Example](#quick-example) above.
+
+#### Debian / Ubuntu
+
+```bash
+# Primary (requires gh CLI — https://cli.github.com)
+gh release download --repo facebookincubator/rebalancer --pattern "*.deb"
+sudo dpkg -i rebalancer_*.deb
+
+# Fallback (curl)
+curl -sL $(curl -s https://api.github.com/repos/facebookincubator/rebalancer/releases/latest \
+  | grep "browser_download_url.*amd64\.deb" | cut -d'"' -f4) -o rebalancer.deb
+sudo dpkg -i rebalancer.deb
+```
+
+The package's postinstall script runs `ldconfig` automatically.
+
+Compile and run the smoke test:
+
+```bash
+curl -LO https://raw.githubusercontent.com/facebookincubator/rebalancer/main/tools/packages/test_solve.cpp
+g++ -std=c++20 test_solve.cpp -I/usr/local/include -L/usr/local/lib -lrebalancer \
+    -Wl,-rpath,/usr/local/lib -o test_solve && ./test_solve
+# → PASS: 2-2 split achieved
+```
+
+#### Fedora / RHEL
+
+```bash
+gh release download --repo facebookincubator/rebalancer --pattern "*.rpm"
+sudo rpm -i rebalancer-*.rpm
+```
+
+Compile and run the smoke test:
+
+```bash
+curl -LO https://raw.githubusercontent.com/facebookincubator/rebalancer/main/tools/packages/test_solve.cpp
+g++ -std=c++20 test_solve.cpp -I/usr/local/include -L/usr/local/lib -lrebalancer \
+    -Wl,-rpath,/usr/local/lib -o test_solve && ./test_solve
+# → PASS: 2-2 split achieved
+```
+
+#### macOS Homebrew
+
+> **Note:** A Homebrew tap is coming. Until then, install from the formula file
+> directly — Homebrew will fetch the prebuilt bottle from GitHub Releases.
+
+```bash
+brew install https://raw.githubusercontent.com/facebookincubator/rebalancer/main/Formula/rebalancer.rb
+```
+
+Compile and run the smoke test:
+
+```bash
+curl -LO https://raw.githubusercontent.com/facebookincubator/rebalancer/main/tools/packages/test_solve.cpp
+clang++ -std=c++20 test_solve.cpp \
+    -I$(brew --prefix rebalancer)/include \
+    -L$(brew --prefix rebalancer)/lib -lrebalancer \
+    -Wl,-rpath,$(brew --prefix rebalancer)/lib \
+    -o test_solve && ./test_solve
+# → PASS: 2-2 split achieved
 ```
 
 ## Development Setup
