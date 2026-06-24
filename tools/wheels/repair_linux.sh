@@ -213,10 +213,15 @@ for whl in glob.glob(f'{dest}/*.whl'):
                                     changed = True
                                     fixed += 1
                                     break
-                if changed:
-                    elf.write(path)
+                # Always rewrite through lief, even if no entries were
+                # corrected. patchelf leaves DT_STRTAB pointing to a new
+                # string table that differs from what readelf/.dynstr shows.
+                # When lief rebuilds the ELF it sets DT_STRTAB = the rebuilt
+                # .dynstr, resolving the inconsistency that causes the runtime
+                # linker to find empty NEEDED strings.
+                elf.write(path)
 
-        print(f'lief fixup complete: {fixed} entries corrected.')
+        print(f'lief fixup complete: {fixed} entries corrected (all bundled libs rewritten).')
 
         # Repack the wheel in-place
         os.remove(whl)
