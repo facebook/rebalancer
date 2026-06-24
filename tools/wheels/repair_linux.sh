@@ -78,15 +78,24 @@ fi
 # extend .dynstr in-place — no section move, no .init_array corruption.
 # --strip-debug removes only debug info; it keeps .dynsym, .dynstr, and all
 # executable code, so symbol lookup and dynamic linking are unaffected.
-echo "Pre-stripping debug symbols from getdeps libs..."
+# Use --strip-unneeded (not --strip-debug) so the post-build GHA strip step
+# is a no-op on these libs.  The GHA step runs strip --strip-unneeded on
+# every .so in the repaired wheel AFTER the manylinux smoke test passes.
+# If auditwheel's patchelf adds a new PT_LOAD segment for the extended
+# .dynstr, a second strip --strip-unneeded can drop that segment, making
+# DT_STRTAB point to an unmapped address on glibc 2.39 (which is strict
+# about PT_LOAD coverage) while glibc 2.28 is lenient.  Pre-stripping fully
+# ensures patchelf only has to cope with debug-symbol-free libs and the
+# post-build strip has nothing left to do.
+echo "Pre-stripping getdeps libs (--strip-unneeded)..."
 for lib_dir in $(ls -d /tmp/fbcode_builder_getdeps-*/installed/*/lib \
                           /tmp/fbcode_builder_getdeps-*/installed/*/lib64 \
                        2>/dev/null); do
     find "$lib_dir" -name '*.so' -o -name '*.so.*' 2>/dev/null | while read -r so; do
-        strip --strip-debug "$so" 2>/dev/null || true
+        strip --strip-unneeded "$so" 2>/dev/null || true
     done
 done
-echo "Done pre-stripping debug symbols."
+echo "Done pre-stripping."
 
 # Record original NEEDED entries from every getdeps-installed shared lib.
 # After auditwheel+patchelf runs, some NEEDED entries in the bundled libs
