@@ -1,0 +1,33 @@
+# Keep the `COPY . /src` build context stable so its layer (and the project
+# compile right after it) stays cached across builds. Anything volatile or
+# unrelated to the C++ build is excluded here. The build needs algopt/, build/,
+# CMake/, CMakeLists.txt, tools/, version.txt, src/, and the *.thrift sources.
+
+# Version control — churns on every git operation, the main cache-buster.
+.git
+.gitignore
+.github
+
+# Build/orchestration files not needed inside the image. Excluding them means
+# editing a Dockerfile or compose file doesn't invalidate COPY . /src.
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# Docs and the docusaurus website — not part of the C++ build.
+docs
+website
+*.md
+AUTHORS
+LICENSE
+logo.svg
+
+# OS packaging — unused by the getdeps build.
+Formula
+nfpm.yaml
+
+# Python / tooling caches.
+**/__pycache__
+**/*.pyc
+**/.venv
+**/node_modules

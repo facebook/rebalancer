@@ -1,0 +1,46 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# The project is compiled once in the shared build image (Dockerfile.base, wired
+# in by compose via additional_contexts). This image just packages it for runtime.
+
+FROM ubuntu:24.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PIP_BREAK_SYSTEM_PACKAGES=1
+
+# Install system libs (libgflags, libssl, ...); fixup-dyn-deps bundles only the
+# from-source libs, so the runtime needs these from the same getdeps set.
+COPY build/fbcode_builder /src/build/fbcode_builder
+WORKDIR /src
+
+RUN apt-get update \
+ && apt-get install -y python3 python3-pip git libc-ares-dev \
+ && python3 build/fbcode_builder/getdeps.py \
+      --allow-system-packages install-system-deps --recursive rebalancer-explorer \
+ && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+COPY --from=rebalancer-build /artifacts/linux /usr/local
+
+# The shared build image also produces the demo/example binaries. This image only
+# serves the explorer + proxy, so drop everything in bin except those two; their
+# shared libs in lib are untouched.
+RUN find /usr/local/bin -type f ! -name 'rebalancer_explorer_*' -delete \
+ && ldconfig
+
+EXPOSE 8080
+
+# Run the Explorer service (StandaloneExplorerService.cpp)
+ENTRYPOINT ["/usr/local/bin/rebalancer_explorer_server"]
+CMD ["--port", "8080"]

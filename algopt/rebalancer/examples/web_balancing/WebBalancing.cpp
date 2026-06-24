@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "algopt/rebalancer/examples/common/BundleOutput.h"
 #include "algopt/rebalancer/interface/ProblemSolverFactory.h"
 
 #include <fmt/format.h>
@@ -218,6 +219,7 @@ static void balance_web_tiers() {
   solver->addSolver(solver_spec);
 
   const auto& solution = solver->solve();
+  facebook::rebalancer::examples::maybeSaveBundle(*solver);
   analyze_result(solution, rps);
 }
 

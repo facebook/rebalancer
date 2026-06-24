@@ -302,6 +302,10 @@ void ProblemSolverBinding::persistToManifold(
   }
 }
 
+void ProblemSolverBinding::saveBundle(const std::string& path) {
+  solver_->saveBundle(path);
+}
+
 // More problem building
 
 void ProblemSolverBinding::setAssignment(

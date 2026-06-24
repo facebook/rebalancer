@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "algopt/rebalancer/examples/common/BundleOutput.h"
 #include "algopt/rebalancer/interface/ProblemSolverFactory.h"
 
 #include <folly/init/Init.h>
@@ -263,6 +264,7 @@ int main(int argc, char** argv) {
   }
 
   const auto& solution = solver->solve();
+  facebook::rebalancer::examples::maybeSaveBundle(*solver);
   print_solution(solution, host_to_rack);
 
   return 0;

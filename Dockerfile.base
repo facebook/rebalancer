@@ -1,0 +1,87 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Shared build image for Dockerfile.explorer and Dockerfile.bundles. It installs
+# system deps, compiles the C++ dep set (folly, fbthrift, ...) AND the project
+# itself (with examples), then RPATH-fixes everything into /artifacts/linux. Both
+# downstream images consume those artifacts -- explorer packages them for runtime,
+# bundles runs the example binaries to bake problem bundles -- so the entire
+# compile happens exactly ONCE here. Compose builds this first via
+# additional_contexts; by hand: docker build -f Dockerfile.base -t rebalancer-build .
+
+FROM ubuntu:24.04 AS builder
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PIP_BREAK_SYSTEM_PACKAGES=1
+
+COPY build/fbcode_builder /src/build/fbcode_builder
+WORKDIR /src
+
+# System deps for rebalancer-explorer (the superset target; the examples need
+# nothing beyond it).
+RUN apt-get update \
+ && apt-get install -y python3 python3-pip git wget gnupg software-properties-common libc-ares-dev \
+ && wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key \
+      | gpg --dearmor -o /usr/share/keyrings/llvm-archive-keyring.gpg \
+ && echo "deb [signed-by=/usr/share/keyrings/llvm-archive-keyring.gpg] http://apt.llvm.org/noble/ llvm-toolchain-noble-19 main" \
+      > /etc/apt/sources.list.d/llvm.list \
+ && apt-get update \
+ && python3 build/fbcode_builder/getdeps.py \
+      --allow-system-packages install-system-deps --recursive rebalancer-explorer \
+ && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Build the dep set BEFORE copying source, so this (expensive) layer stays cached
+# across source changes. --extra-cmake-defines must stay byte-identical to the
+# project build below: it feeds every dep's install-dir hash (getdeps load.py), so
+# any drift rebuilds the deps. It must NOT carry EXAMPLES=ON -- examples come from
+# the manifest's test=on path so the dep hashes are unaffected.
+RUN python3 build/fbcode_builder/getdeps.py \
+      --allow-system-packages build \
+      --build-type RelWithDebInfo \
+      --shared-lib \
+      --no-tests \
+      --src-dir=. \
+      rebalancer-explorer \
+      --only-deps \
+      --extra-cmake-defines '{"CMAKE_C_COMPILER":"gcc","CMAKE_CXX_COMPILER":"g++","BUILD_TESTS":"OFF"}'
+
+COPY . /src
+
+# Build the project + examples (--no-deps); rebuilds on source changes. Examples
+# come from the manifest's [cmake.defines.test=on] EXAMPLES=ON, enabled by omitting
+# --no-tests (test=on applies to the top project only). BUILD_TESTS:OFF still skips
+# test binaries.
+RUN python3 build/fbcode_builder/getdeps.py \
+      --allow-system-packages build \
+      --build-type RelWithDebInfo \
+      --shared-lib \
+      --src-dir=. \
+      rebalancer-explorer \
+      --no-deps \
+      --project-install-prefix rebalancer-explorer:/usr/local \
+      --extra-cmake-defines '{"CMAKE_C_COMPILER":"gcc","CMAKE_CXX_COMPILER":"g++","BUILD_TESTS":"OFF"}'
+
+# RPATH-fix the project binaries + their from-source shared libs into
+# /artifacts/linux so they run standalone; downstream images copy this directory.
+# --shared-lib/--extra-cmake-defines must match the builds above.
+RUN python3 build/fbcode_builder/getdeps.py \
+      --allow-system-packages fixup-dyn-deps \
+      --strip \
+      --shared-lib \
+      --src-dir=. \
+      rebalancer-explorer \
+      /artifacts/linux \
+      --project-install-prefix rebalancer-explorer:/usr/local \
+      --final-install-prefix /usr/local \
+      --extra-cmake-defines '{"CMAKE_C_COMPILER":"gcc","CMAKE_CXX_COMPILER":"g++","BUILD_TESTS":"OFF"}'

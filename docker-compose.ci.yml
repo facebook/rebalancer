@@ -1,0 +1,16 @@
+# CI-only overlay for docker-compose.yml. Exports the heavy build image's layers
+# (the from-source folly/fbthrift dependency tree + the project compile) to the
+# GitHub Actions cache so reruns reuse them. explorer/bundles/proxy consume
+# build-base via additional_contexts, so caching this one image covers the
+# expensive work; the rest is cheap copy/metadata.
+#
+# Requires a buildx "docker-container" builder (docker/setup-buildx-action), which
+# is what supports cache export. Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.ci.yml build
+services:
+  build-base:
+    build:
+      cache_from:
+        - type=gha,scope=rebalancer-build
+      cache_to:
+        - type=gha,mode=max,scope=rebalancer-build

@@ -1,0 +1,43 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+
+# Bakes the example problem bundles and ships them in a tiny image. Running the
+# image copies the baked *.bundle files into /out, which docker-compose mounts as
+# a shared volume the Explorer reads from. The examples are deterministic, so the
+# solving happens once here at build time (not on every container start).
+#
+# The project (incl. the example binaries) is compiled once in the shared build
+# image (Dockerfile.base, wired in by compose via additional_contexts); this image
+# just runs those binaries.
+#
+# Build (depends on the shared build image; build it first, or let compose do it):
+#   docker build -f Dockerfile.base    -t rebalancer-build .
+#   docker build -f Dockerfile.bundles -t rebalancer-bundles .
+
+FROM rebalancer-build AS builder
+
+# Install the RPATH-fixed artifacts, then run each example with --bundle_out.
+RUN cp -a /artifacts/linux/. /usr/local/ \
+ && ldconfig \
+ && /src/tools/generate_example_bundles.sh /usr/local/bin /bundles /src
+
+# Tiny final image: just the baked bundles + a copy-on-run entrypoint.
+FROM busybox:1.36
+
+COPY --from=builder /bundles /opt/bundles
+
+# docker-compose mounts the shared volume here; running the image seeds it.
+VOLUME /out
+ENTRYPOINT ["/bin/sh", "-c", "cp -v /opt/bundles/*.bundle /out/ && echo 'Seeded example bundles to /out'"]

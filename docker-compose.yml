@@ -1,0 +1,110 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Runs the Rebalancer Explorer backend and the JSON proxy together on a shared
+# network. The proxy reaches the backend by its service name ("explorer").
+#
+# Services build their own images:
+#   REBALANCER_PROXY_AUTH_TOKEN=secret docker compose up --build
+# explorer and bundles share the project compile via the "build-base" service;
+# proxy is FROM rebalancer-explorer. All are pulled in via additional_contexts so
+# bases build first.
+#
+# The bundle-seeder runs once, populates the shared "bundles" volume, and exits.
+# The Explorer mounts that volume read-only at /bundles, so a client can load an
+# example with manifoldId "/bundles/vertex_cover.bundle" (and similar).
+#
+# Only the proxy port (8081) is published; the backend stays internal.
+services:
+  # Build-only base: compiles the shared C++ deps AND the project once; explorer
+  # and bundles consume its /artifacts/linux. Can't use a compose profile --
+  # additional_contexts "service:build-base" only resolves while the service is
+  # active. No runtime role, so its command is a no-op (it exits 0 on `up`).
+  build-base:
+    image: rebalancer-build
+    build:
+      context: .
+      dockerfile: Dockerfile.base
+      # Local dev images: skip provenance/SBOM attestations (slow export, can hang
+      # resolving base-image provenance, and not needed here).
+      provenance: false
+      sbom: false
+    command: ["true"]
+    restart: "no"
+
+  # One-shot: copies the baked example bundles into the shared volume, then exits.
+  bundle-seeder:
+    image: rebalancer-bundles
+    build:
+      context: .
+      dockerfile: Dockerfile.bundles
+      # Resolves the bundles' `FROM rebalancer-build` to the shared build image.
+      additional_contexts:
+        rebalancer-build: "service:build-base"
+      provenance: false
+      sbom: false
+    volumes:
+      - bundles:/out
+
+  explorer:
+    image: rebalancer-explorer
+    build:
+      context: .
+      dockerfile: Dockerfile.explorer
+      # Resolves the explorer's `COPY --from=rebalancer-build` to the build image.
+      additional_contexts:
+        rebalancer-build: "service:build-base"
+      provenance: false
+      sbom: false
+    # No published ports: only the proxy talks to it, over the compose network.
+    expose:
+      - "8080"
+    # Wait for the seeder to finish populating the volume before starting.
+    depends_on:
+      bundle-seeder:
+        condition: service_completed_successfully
+    volumes:
+      - bundles:/bundles:ro
+    command: ["--port", "8080"]
+
+  proxy:
+    image: rebalancer-explorer-proxy
+    build:
+      context: .
+      dockerfile: Dockerfile.proxy
+      # Resolves the proxy's `FROM rebalancer-explorer` to the explorer build.
+      additional_contexts:
+        rebalancer-explorer: "service:explorer"
+      provenance: false
+      sbom: false
+    depends_on:
+      - explorer
+    ports:
+      - "8081:8081"
+    environment:
+      # Bearer token external callers must present. Provided from your shell;
+      # never commit a real token.
+      REBALANCER_PROXY_AUTH_TOKEN: "${REBALANCER_PROXY_AUTH_TOKEN}"
+    command:
+      - "--port"
+      - "8081"
+      - "--backend_host"
+      - "explorer"
+      - "--backend_port"
+      - "8080"
+      # Local testing only: bypass bearer-token auth. Remove for any real use.
+      - "--disable_auth"
+
+volumes:
+  bundles:

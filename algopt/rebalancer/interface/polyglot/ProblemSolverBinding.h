@@ -155,6 +155,8 @@ class ProblemSolverBinding {
       std::optional<std::shared_ptr<interface::AsyncManifoldUploadHandle>>
           manifoldUploadHandle = std::nullopt);
 
+  void saveBundle(const std::string& path);
+
   void publishMetrics();
 
   void setAssignment(

@@ -17,6 +17,7 @@
 #include "algopt/rebalancer/common/UuidGenerator.h"
 #include "algopt/rebalancer/interface/Constants.h"
 #include "algopt/rebalancer/interface/CoreSolver.h"
+#include "algopt/rebalancer/interface/serialization/Serializer.h"
 #include "algopt/rebalancer/interface/UniverseProblemBuilder.h"
 #include "algopt/rebalancer/treeprof/Profiler.h"
 
@@ -25,6 +26,7 @@
 #include <folly/coro/BlockingWait.h>
 #include <folly/coro/Task.h>
 #include <folly/executors/CPUThreadPoolExecutor.h>
+#include <folly/FileUtil.h>
 #include <folly/futures/Future.h>
 #include <folly/logging/Init.h>
 #include <folly/logging/xlog.h>
@@ -845,6 +847,13 @@ Bundle ProblemSolver::getBundle() const {
     throw std::runtime_error("Must invoke solve() before getBundle().");
   }
   return getBundleImpl(*problem, universe_.get(), solution);
+}
+
+void ProblemSolver::saveBundle(const std::string& path) const {
+  const auto serialized = Serializer::serializeBinaryZstd(getBundle());
+  if (!folly::writeFile(serialized, path.c_str())) {
+    throw std::runtime_error(fmt::format("Unable to write bundle to {}", path));
+  }
 }
 
 } // namespace facebook::rebalancer::interface

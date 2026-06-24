@@ -1,0 +1,42 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# HTTP/JSON proxy in front of the Rebalancer Explorer Thrift service.
+#
+# External callers POST /v2/<method> with a JSON body; the proxy transcodes
+# JSON <-> Thrift and forwards each call to a single configured Explorer
+# backend over fbthrift/Rocket.
+#
+# This image reuses the rebalancer-explorer runtime image, which already bundles
+# the `rebalancer_explorer_proxy` binary (built by CMakeLists.txt under
+# REBALANCER_BUILD_EXPLORER). It only changes the exposed port and entrypoint.
+#
+# Build the shared build image, then the explorer, then this one:
+#   docker build -f Dockerfile.base     -t rebalancer-build .
+#   docker build -f Dockerfile.explorer -t rebalancer-explorer .
+#   docker build -f Dockerfile.proxy    -t rebalancer-explorer-proxy .
+#
+# Run it (auth required by default; pass a token via the env var):
+#   docker run --rm -p 8081:8081 \
+#     -e REBALANCER_PROXY_AUTH_TOKEN="$(openssl rand -hex 32)" \
+#     rebalancer-explorer-proxy --backend_host=<host> --backend_port=8080
+
+FROM rebalancer-explorer
+
+# Default proxy port. Forwards to the Explorer backend at 127.0.0.1:8080 unless
+# overridden via --backend_host / --backend_port.
+EXPOSE 8081
+
+ENTRYPOINT ["/usr/local/bin/rebalancer_explorer_proxy"]
+CMD ["--port", "8081"]

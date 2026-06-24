@@ -12,12 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "algopt/rebalancer/examples/common/BundleOutput.h"
 #include "algopt/rebalancer/interface/ProblemSolverFactory.h"
 
 #include <glog/logging.h>
 
 #include "fmt/core.h"
 #include <folly/container/irange.h>
+#include <folly/init/Init.h>
 
 using namespace facebook::rebalancer::interface;
 
@@ -37,7 +39,9 @@ static void prettyPrint(
   }
 }
 
-int main([[maybe_unused]] int argc, [[maybe_unused]] char** argv) {
+int main(int argc, char** argv) {
+  const folly::Init init(&argc, &argv);
+
   // Instantiate the solver
   auto solver =
       ProblemSolverFactory::makeProblemSolver("rebalancer", "examples");
@@ -114,6 +118,7 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char** argv) {
 
   // Generate a solution and print it
   auto solution = solver->solve();
+  facebook::rebalancer::examples::maybeSaveBundle(*solver);
   prettyPrint(*solution.assignment());
 
   // Assert that the distribution is as expected

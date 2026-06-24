@@ -188,6 +188,9 @@ unique class ProblemSolverBinding {
     option<manifold.AsyncManifoldUploadHandle> manifoldUploadHandle,
   ) throws;
 
+  @output_name(py="saveBundle")
+  mut void saveBundle(string path) throws;
+
   @output_name(py="publishMetrics")
   mut void publishMetrics() throws;
 

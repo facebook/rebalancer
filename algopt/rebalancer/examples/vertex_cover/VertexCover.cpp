@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "algopt/rebalancer/examples/common/BundleOutput.h"
 #include "algopt/rebalancer/interface/ProblemSolver.h"
 #include "algopt/rebalancer/interface/ProblemSolverFactory.h"
 
@@ -151,6 +152,7 @@ int main(int argc, char** argv) {
   solver->addSolver(optimalSolverSpec);
 
   auto solution = solver->solve();
+  facebook::rebalancer::examples::maybeSaveBundle(*solver);
 
   const std::vector<std::string> header = {"Vertex", "Included in cover?"};
   std::vector<std::vector<std::string>> rows;

@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include "algopt/rebalancer/algopt_common/Utils.h"
+#include "algopt/rebalancer/examples/common/BundleOutput.h"
 #include "algopt/rebalancer/interface/ProblemSolver.h"
 #include "algopt/rebalancer/interface/ProblemSolverFactory.h"
 
@@ -168,6 +169,7 @@ static int solve_eightqueens(bool use_optimal_solver) {
   }
 
   auto solution = solver->solve();
+  facebook::rebalancer::examples::maybeSaveBundle(*solver);
 
   if (!FLAGS_do_not_print_solution) {
     std::stringstream ss;

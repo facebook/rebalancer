@@ -11,3 +11,4 @@ __pycache__/
 node_modules/
 .cmake_prefix_path
 docs/
+.DS_Store
