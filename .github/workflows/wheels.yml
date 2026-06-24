@@ -162,10 +162,26 @@ jobs:
                     zf.extractall(tmpdir)
                 for root, _, files in os.walk(tmpdir):
                     for f in files:
-                        if '.so' in f:
-                            subprocess.run(
-                                ['strip', '--strip-unneeded', os.path.join(root, f)],
-                                check=True)
+                        if '.so' not in f:
+                            continue
+                        fp = os.path.join(root, f)
+                        rel = os.path.relpath(fp, tmpdir)
+                        # Skip bundled deps (rebalancer.libs/) and the
+                        # internal shared library (_lib/librebalancer.so).
+                        # auditwheel's patchelf extends .dynstr in these files
+                        # by adding a new PT_LOAD segment; strip --strip-unneeded
+                        # then fails to re-place .dynstr in that segment and
+                        # leaves it unmapped, causing glibc 2.39 to find only
+                        # empty strings at DT_STRTAB.  These files are already
+                        # pre-stripped in repair_linux.sh before auditwheel runs
+                        # (strip --strip-unneeded on the getdeps sources), so
+                        # stripping them again here is a no-op on content but
+                        # dangerous on ELF structure.
+                        if 'rebalancer.libs' in rel or rel.startswith('rebalancer/_lib/'):
+                            continue
+                        subprocess.run(
+                            ['strip', '--strip-unneeded', fp],
+                            check=True)
                 # Regenerate RECORD so pip's integrity check passes after we
                 # modified the .so files.
                 record_path = next(
@@ -198,3 +214,67 @@ jobs:
         name: wheels-${{ matrix.os }}-${{ matrix.py }}
         path: wheelhouse/*.whl
         if-no-files-found: error
+
+  # Cross-glibc smoke test: run the Linux wheel on ubuntu-latest (glibc 2.39)
+  # to catch patchelf string-table corruption that only manifests on newer
+  # glibc.  The cibuildwheel test (CIBW_TEST_COMMAND) runs inside the
+  # manylinux_2_28 build container (AlmaLinux 8, glibc 2.28) where the
+  # corruption silently passes; this job runs on a fresh Ubuntu 24.04 host
+  # where the dynamic linker reads DT_STRTAB strictly and fails on corrupted
+  # NEEDED entries such as "ev" or "3.1.5".
+  test-linux-glibc:
+    name: test-linux-glibc-${{ matrix.py }}
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        py: [cp312, cp313, cp314]
+    steps:
+    - uses: actions/checkout@v6
+      with:
+        fetch-depth: 1
+
+    - uses: actions/download-artifact@v4
+      with:
+        name: wheels-linux-${{ matrix.py }}
+        path: wheelhouse
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        # Map cibuildwheel ABI tags to setup-python version strings.
+        python-version: |
+          ${{ matrix.py == 'cp312' && '3.12' ||
+              matrix.py == 'cp313' && '3.13' ||
+              '3.14' }}
+        allow-prereleases: true
+
+    - name: Install wheel and run smoke test
+      run: |
+        pip install wheelhouse/rebalancer-*-manylinux*.whl
+        # Minimal import check first so we can distinguish import-time crashes
+        # (patchelf .init_array corruption) from test-execution crashes.
+        # On failure, capture a gdb C-level backtrace to identify the exact
+        # constructor function that segfaults.
+        if python -X faulthandler -c "
+        from rebalancer import ProblemSolver
+        ps = ProblemSolver(service_name='rebalancer', service_scope='glibc-test')
+        assert ps.ping() == 4, f'ping returned {ps.ping()}'
+        print('import + ping ok')
+        "; then
+          python -X faulthandler tools/wheels/test_bindings.py -v
+        else
+          echo "--- import failed; running gdb backtrace ---"
+          sudo apt-get install -y gdb 2>/dev/null || true
+          gdb -batch \
+            -ex 'set confirm off' \
+            -ex 'set pagination off' \
+            -ex 'handle SIGSEGV stop print' \
+            -ex 'run' \
+            -ex 'bt full' \
+            -ex 'info sharedlibrary' \
+            --args python3 -X faulthandler -c \
+              "from rebalancer import ProblemSolver; print('ok')" 2>&1 || true
+          exit 1
+        fi

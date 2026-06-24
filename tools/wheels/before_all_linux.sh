@@ -32,7 +32,7 @@ export PY=/opt/python/cp310-cp310/bin/python
 # There's no prebuilt clang19 on this distro and LLVM upstream stopped
 # publishing rhel-8 x86_64 binaries for the 19.x series. clang 20 is
 # forward-compatible with the project's "clang19+" requirement.
-dnf install -y clang lld gdb
+dnf install -y clang lld gdb chrpath
 clang_dir=$(dirname "$(command -v clang)")
 ln -sf "$clang_dir/clang"   "$clang_dir/clang-19"
 ln -sf "$clang_dir/clang++" "$clang_dir/clang++-19"
