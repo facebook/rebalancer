@@ -41,7 +41,6 @@ interface::MovesSummary MovesSummaryHelper::makeMovesSummary(
     const std::optional<int> stageId,
     std::optional<int> cycleId) {
   interface::MovesSummary summary;
-  const auto& precision = p.getUniverse().getPrecision();
 
   // Add all the moves performed to the summary
   for (const auto& move : move_result.getMoveSet()) {
@@ -66,9 +65,12 @@ interface::MovesSummary MovesSummaryHelper::makeMovesSummary(
     const auto& objDeltas = move_result.getObjectiveDeltas();
     for (const auto pos : folly::irange(objDeltas.size())) {
       for (const auto& delta : objDeltas.at(pos)) {
-        // if there is no change to the objective value, then do not add it to
-        // summary.objectives()
-        if (precision.compare(delta.oldValue, delta.newValue) == 0) {
+        // Record any objective change. Do not use precision
+        // comparisons. ObjectiveDeltas are in terms of user defined objectives
+        // and it is possible that each user defined objective is below the
+        // tolerance while their sum, which is based off which a move is taken,
+        // is above the tolerance.
+        if (delta.oldValue == delta.newValue) {
           continue;
         }
 
