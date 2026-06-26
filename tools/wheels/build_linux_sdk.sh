@@ -44,11 +44,12 @@ $PY build/fbcode_builder/getdeps.py --allow-system-packages \
 #   lib/librebalancer.so
 #   lib/libfolly.so libfmt.so libglog.so libgflags.so libfbthrift*.so ...
 #   include/algopt/**/*.h  (source + thrift-generated headers)
+# PACKAGING_TEST=ON is now in the getdeps manifest [cmake.defines] so it is
+# part of the cache key; --extra-cmake-defines was excluded from the key and
+# caused getdeps to reuse a stale cached build that omitted test_solve.
 $PY build/fbcode_builder/getdeps.py --allow-system-packages \
     build --build-type RelWithDebInfo --src-dir=. --no-tests rebalancer \
-    --project-install-prefix rebalancer:/usr/local \
-    --extra-cmake-defines \
-    '{"PACKAGING_TEST":"ON"}'
+    --project-install-prefix rebalancer:/usr/local
 
 # Copy the installed tree (lib/, bin/) to the output directory.
 # fixup-dyn-deps copies all shared libs, strips debug symbols, and rewrites
@@ -61,6 +62,29 @@ $PY build/fbcode_builder/getdeps.py --allow-system-packages \
 # the pristine getdeps-built binary afterwards and patch it ourselves.
 REBALANCER_PREFIX=$(ls -d /tmp/fbcode_builder_getdeps-*/installed/rebalancer 2>/dev/null | head -1)
 TEST_SOLVE_SRC="$REBALANCER_PREFIX/usr/local/bin/test_solve"
+
+# Belt-and-suspenders: if the getdeps cache was primed before the manifest
+# gained PACKAGING_TEST=ON, test_solve may still be absent. Build it directly
+# from the installed headers/library so the SDK artifact is always complete.
+if [[ ! -f "$TEST_SOLVE_SRC" ]]; then
+    echo "test_solve absent from getdeps install; building directly"
+    mkdir -p "$(dirname "$TEST_SOLVE_SRC")"
+    EXTRA_INCLUDES=""
+    for inc in /tmp/fbcode_builder_getdeps-*/installed/*/include; do
+        [ -d "$inc" ] && EXTRA_INCLUDES="$EXTRA_INCLUDES -I$inc"
+    done
+    clang++ -std=c++20 \
+        -I"$REBALANCER_PREFIX/usr/local/include" \
+        $EXTRA_INCLUDES \
+        -L"$REBALANCER_PREFIX/usr/local/lib" \
+        -lrebalancer \
+        -Wl,--allow-shlib-undefined \
+        -o "$TEST_SOLVE_SRC" \
+        /project/tools/packages/test_solve.cpp
+    chmod +x "$TEST_SOLVE_SRC"
+    echo "Built test_solve → $TEST_SOLVE_SRC"
+fi
+
 if [[ -f "$TEST_SOLVE_SRC" ]]; then
     cp "$TEST_SOLVE_SRC" /tmp/test_solve_pristine
     echo "Stashed pristine test_solve from $TEST_SOLVE_SRC"
