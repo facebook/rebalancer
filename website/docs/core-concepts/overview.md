@@ -2,6 +2,8 @@
 sidebar_position: 1
 ---
 
+import useBaseUrl from '@docusaurus/useBaseUrl';
+
 # Core Concepts
 
 To ensure reusability of the specs, Rebalancer defines a set of modeling constructs that can flexibly represent user requirements.
@@ -10,7 +12,7 @@ To ensure reusability of the specs, Rebalancer defines a set of modeling constru
 
 Any assignment problem that aims to place objects into a pre-defined set of containers can be modeled as a Rebalancer Assignment Problem.
 
-![Objects assigned to bins while minimizing objectives and satisfying constraints](pathname:///img/core-concepts/assignment-problem.png)
+<img src={useBaseUrl('/img/core-concepts/assignment-problem.png')} alt="Objects assigned to bins while minimizing objectives and satisfying constraints" />
 
 A Rebalancer problem can be built using the following modeling constructs:
 
@@ -31,7 +33,7 @@ A dimension is a mapping of each object and container to a number that captures 
 
 * Dimensions can also represent complex relationships. For example, we can define a `prohibitedObjects` dimension, where an object takes a value of 1 or 0, depending on its assignability to a bin.
 
-![Tasks with CPU load and a machine with CPU capacity, modeled as dimensions](pathname:///img/core-concepts/dimensions.png)
+<img src={useBaseUrl('/img/core-concepts/dimensions.png')} alt="Tasks with CPU load and a machine with CPU capacity, modeled as dimensions" />
 
 ### Dynamic Dimensions
 
@@ -43,7 +45,7 @@ Rebalancer uses scopes to represent the hierarchical structure of containers. Fo
 
 For example, under the `rack` scope, the scope items `rack1` and `rack2` represent the set of servers in those specific racks.
 
-![A scope dividing containers into scope items, such as racks](pathname:///img/core-concepts/scopes.png)
+<img src={useBaseUrl('/img/core-concepts/scopes.png')} alt="A scope dividing containers into scope items, such as racks" />
 
 ## Partitions
 
@@ -51,7 +53,7 @@ Similar to scopes and scope items for containers, an object partition is an aggr
 
 For example, in the context of cluster management, all tasks are partitioned into jobs and a job is a group of tasks that run the same executable.
 
-![An object partition grouping tasks into jobs](pathname:///img/core-concepts/partitions.png)
+<img src={useBaseUrl('/img/core-concepts/partitions.png')} alt="An object partition grouping tasks into jobs" />
 
 ## Goals and Constraints
 
@@ -68,6 +70,6 @@ See the [Goals & Constraints Reference](../reference/) for the full catalog of a
 
 ## Example
 
-![Figure 1: Rebalancer specs for assigning tasks to servers](pathname:///img/core-concepts/example.png)
+<img src={useBaseUrl('/img/core-concepts/example.png')} alt="Figure 1: Rebalancer specs for assigning tasks to servers" />
 
 As a concrete example of using these constructs, **Figure 1** defines two dimensions, CPU and storage, to model resources; a rack scope as a fault domain; and a job partition where each group comprises tasks that run the same executable.
