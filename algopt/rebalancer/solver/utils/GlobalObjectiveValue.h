@@ -49,20 +49,6 @@ class GlobalObjectiveValue {
   // remaining values was not necessary
   bool isPartial() const;
 
-  // mainly used by tests to assert, sorting, etc. uses precisionCompare method
-  static bool equals(
-      const GlobalObjectiveValue& value1,
-      const GlobalObjectiveValue& value2,
-      const Precision& precision);
-  static bool lt(
-      const GlobalObjectiveValue& value1,
-      const GlobalObjectiveValue& value2,
-      const Precision& precision);
-  static bool gt(
-      const GlobalObjectiveValue& value1,
-      const GlobalObjectiveValue& value2,
-      const Precision& precision);
-
   // Returns true iff `candidate` is strictly better than `current` for the
   // purpose of accepting a local-search move. Lexicographic: the first position
   // that differs beyond tolerance decides; at earlier within-tolerance ("tied")

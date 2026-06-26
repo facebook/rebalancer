@@ -63,9 +63,6 @@ TEST(GlobalObjectiveValueTest, IsStrictlyBetterForbidsTiedWorsening) {
   // Drift steps worsen the higher-priority component within tolerance.
   EXPECT_FALSE(GlobalObjectiveValue::isStrictlyBetter(b, a, precision)); // A->B
   EXPECT_FALSE(GlobalObjectiveValue::isStrictlyBetter(c, b, precision)); // B->C
-  // ...even though the old tolerance-band comparison accepted them (the bug).
-  EXPECT_TRUE(GlobalObjectiveValue::lt(b, a, precision));
-  EXPECT_TRUE(GlobalObjectiveValue::lt(c, b, precision));
 
   // A genuine, significant improvement is still accepted.
   EXPECT_TRUE(GlobalObjectiveValue::isStrictlyBetter(a, c, precision)); // C->A
@@ -84,16 +81,16 @@ TEST(GlobalObjectiveValueTest, Comparators) {
   GlobalObjectiveValue val1, val2;
 
   // uninitialized are equal
-  EXPECT_TRUE(GlobalObjectiveValue::equals(val1, val2, precision));
+  EXPECT_EQ(0, GlobalObjectiveValue::precisionCompare(val1, val2, precision));
 
   // initialized < uninitialized
   val1.append(1.0);
-  EXPECT_TRUE(GlobalObjectiveValue::lt(val1, val2, precision));
-  EXPECT_TRUE(GlobalObjectiveValue::gt(val2, val1, precision));
+  EXPECT_LT(GlobalObjectiveValue::precisionCompare(val1, val2, precision), 0);
+  EXPECT_GT(GlobalObjectiveValue::precisionCompare(val2, val1, precision), 0);
 
   val2.append(-1.0);
-  EXPECT_TRUE(GlobalObjectiveValue::lt(val2, val1, precision));
-  EXPECT_TRUE(GlobalObjectiveValue::gt(val1, val2, precision));
+  EXPECT_LT(GlobalObjectiveValue::precisionCompare(val2, val1, precision), 0);
+  EXPECT_GT(GlobalObjectiveValue::precisionCompare(val1, val2, precision), 0);
 }
 
 TEST(GlobalObjectiveValueTest, Partial) {
@@ -107,8 +104,8 @@ TEST(GlobalObjectiveValueTest, Partial) {
   auto val2 = GlobalObjectiveValue::makeWithFixedSize(2);
   val2.append(0);
 
-  EXPECT_TRUE(GlobalObjectiveValue::lt(val2, val1, precision));
-  EXPECT_TRUE(GlobalObjectiveValue::gt(val1, val2, precision));
+  EXPECT_LT(GlobalObjectiveValue::precisionCompare(val2, val1, precision), 0);
+  EXPECT_GT(GlobalObjectiveValue::precisionCompare(val1, val2, precision), 0);
 
   EXPECT_EQ("(0, __)", val2.toString());
 }

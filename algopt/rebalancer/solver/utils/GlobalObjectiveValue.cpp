@@ -118,20 +118,6 @@ int GlobalObjectiveValue::precisionCompare(
   return 0;
 }
 
-bool GlobalObjectiveValue::equals(
-    const GlobalObjectiveValue& value1,
-    const GlobalObjectiveValue& value2,
-    const Precision& precision) {
-  return precisionCompare(value1, value2, precision) == 0;
-}
-
-bool GlobalObjectiveValue::lt(
-    const GlobalObjectiveValue& value1,
-    const GlobalObjectiveValue& value2,
-    const Precision& precision) {
-  return precisionCompare(value1, value2, precision) < 0;
-}
-
 bool GlobalObjectiveValue::isStrictlyBetter(
     const GlobalObjectiveValue& candidate,
     const GlobalObjectiveValue& current,
@@ -207,13 +193,6 @@ GlobalObjectiveValue GlobalObjectiveValue::subtract(
   }
 
   return difference;
-}
-
-bool GlobalObjectiveValue::gt(
-    const GlobalObjectiveValue& value1,
-    const GlobalObjectiveValue& value2,
-    const Precision& precision) {
-  return precisionCompare(value1, value2, precision) > 0;
 }
 
 string GlobalObjectiveValue::toString() const {
