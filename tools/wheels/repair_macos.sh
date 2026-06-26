@@ -63,14 +63,12 @@ zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])
 #   librebalancer.dylib: needs its own transitive deps (libfolly, libglog, …).
 prefix_file="$project_dir/.cmake_prefix_path"
 lib_dirs=()
-delocate_L_args=()
 if [[ -f "$prefix_file" ]]; then
     while IFS= read -r prefix; do
         [[ -z "$prefix" ]] && continue
         libdir="${prefix}/lib"
         [[ -d "$libdir" ]] || continue
         lib_dirs+=("$libdir")
-        delocate_L_args+=("-L" "$libdir")
     done < <(tr ':' '\n' < "$prefix_file")
 else
     echo "repair_macos: WARNING: $prefix_file not found; delocate may fail"
@@ -114,8 +112,10 @@ print('repair_macos: repacked to', out)
 " "$tmpdir/wheel" "$repacked" "$wheel_name"
 
 # Standard delocate repair: bundles transitive deps and rewrites LC_LOAD_DYLIB.
-# -L <dir> provides extra fallback search paths so delocate can locate any
-# @rpath dep that couldn't be found through LC_RPATH alone.
+# The LC_RPATH entries patched into both binaries above are sufficient for
+# delocate to locate all @rpath deps. Do NOT pass -L here: in delocate-wheel,
+# -L sets the *destination directory for bundled libs inside the wheel*, not
+# a library search path — passing absolute getdeps paths as -L causes delocate
+# to try copying Homebrew libs onto themselves (SameFileError).
 delocate-wheel --require-archs "$delocate_archs" \
-    "${delocate_L_args[@]}" \
     -w "$dest_dir" -v "$repacked/$wheel_name"
