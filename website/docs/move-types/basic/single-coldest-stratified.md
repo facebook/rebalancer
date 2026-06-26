@@ -268,7 +268,7 @@ SingleColdestStratified does NOT help when:
 - Verify objective function includes capacity terms
 - Check container potential calculation
 - May need explicit capacity constraints/goals
-- Consider [MinimizeContainers](../../reference/balance-optimize/minimize-containers) goal
+- Consider `MinimizeContainers` goal
 
 ### Problem: Getting stuck in local optimum
 
@@ -314,12 +314,12 @@ SingleColdestStratified does NOT help when:
 
 **Capacity-focused**:
 - [SwapFullWithEmpty](../swap/swap-full-with-empty) - Move all to empty
-- [MinimizeContainers](../../reference/balance-optimize/minimize-containers) - Goal for consolidation
+- `MinimizeContainers` - Goal for consolidation
 
 **Use together**:
 1. SingleColdestStratified for capacity balancing
 2. [Swap](../swap/) for fine-tuning
-3. [MinimizeContainers](../../reference/balance-optimize/minimize-containers) goal
+3. `MinimizeContainers` goal
 
 ## Source Code
 
@@ -332,5 +332,5 @@ SingleColdestStratified does NOT help when:
 
 - Learn about [SingleRandomStratified](single-random-stratified) for random stratified sampling
 - Try [SingleRandomObjectStratified](single-random-object-stratified) for object stratification
-- Review [MinimizeContainers](../../reference/balance-optimize/minimize-containers) for consolidation goals
+- Review `MinimizeContainers` for consolidation goals
 - See [Move Types Overview](../) for choosing move types

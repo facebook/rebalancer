@@ -225,7 +225,7 @@ SwapFullWithEmpty does NOT help when:
 **Consolidation strategy order**:
 1. **SwapFullWithEmpty** - Empty problematic containers
 2. [Single](../basic/single) - Pack remaining objects efficiently
-3. [MinimizeContainers](../../reference/balance-optimize/minimize-containers) goal - Drive toward fewer containers
+3. `MinimizeContainers` goal - Drive toward fewer containers
 
 ## Troubleshooting
 
@@ -236,7 +236,7 @@ SwapFullWithEmpty does NOT help when:
 **Solutions**:
 - Check if empty containers exist (`containers - used_containers`)
 - Verify objective function rewards consolidation
-- May need [MinimizeContainers](../../reference/balance-optimize/minimize-containers) goal
+- May need `MinimizeContainers` goal
 - Use [Single](../basic/single) to create empty containers first
 
 ### Problem: Capacity violations when moving to empty
@@ -288,7 +288,7 @@ SwapFullWithEmpty does NOT help when:
 
 **Consolidation moves**:
 - **SwapFullWithEmpty** - Move all to empty (this)
-- [MinimizeContainers](../../reference/balance-optimize/minimize-containers) - Goal to reduce containers
+- `MinimizeContainers` - Goal to reduce containers
 - [Single](../basic/single) - Move individual objects
 
 **Full container moves**:
@@ -298,7 +298,7 @@ SwapFullWithEmpty does NOT help when:
 **Use together**:
 1. SwapFullWithEmpty to empty problematic containers
 2. [Single](../basic/single) to pack efficiently
-3. [MinimizeContainers](../../reference/balance-optimize/minimize-containers) goal to drive consolidation
+3. `MinimizeContainers` goal to drive consolidation
 
 ## Source Code
 
@@ -309,5 +309,5 @@ SwapFullWithEmpty does NOT help when:
 ## Next Steps
 
 - Learn about [SwapFullContainers](swap-full-containers) for full container swaps
-- Try [MinimizeContainers](../../reference/balance-optimize/minimize-containers) goal for consolidation
+- Try `MinimizeContainers` goal for consolidation
 - See [Move Types Overview](../) for choosing move types

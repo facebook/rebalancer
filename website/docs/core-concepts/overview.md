@@ -37,8 +37,6 @@ A dimension is a mapping of each object and container to a number that captures 
 
 The examples of object dimensions seen so far are **static** — such as the memory dimension of a task — and only depend on the object. Rebalancer also supports the notion of dynamic dimensions where the contribution of an object also depends on the container it is assigned to. For example, depending on the (container) server it is assigned to, the memory/CPU requirements of a task can vary.
 
-Another place where dynamic dimensions are used is to [avoid certain assignments](../reference/placement/avoid-assignments).
-
 ## Scopes
 
 Rebalancer uses scopes to represent the hierarchical structure of containers. For example, the `datacenter` and `rack` scopes represent servers in a datacenter or rack. *A scope divides containers into sets called scope items*.

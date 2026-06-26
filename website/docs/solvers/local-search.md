@@ -87,7 +87,7 @@ Local Search explores different types of moves. Each move type searches a differ
 - **Example**: [ColocateGroups](../move-types/group/colocate-groups)
 
 **[Fixed Source/Dest](../move-types/fixed/fixed-dest)**: Only consider moves from/to specific containers
-- **When**: Draining specific containers ([ToFree](../reference/to-free)) or filling specific containers
+- **When**: Draining specific containers (`ToFree`) or filling specific containers
 - **Cost**: Reduced search space, faster
 - **Example**: [FixedSource](../move-types/fixed/fixed-source) for draining
 
@@ -415,7 +415,7 @@ Take time to find best solution:
 
 ### Draining Containers
 
-Use [FixedSource](../move-types/fixed/fixed-source) move type for draining specific containers (e.g., with [ToFreeSpec](../reference/to-free)):
+Use [FixedSource](../move-types/fixed/fixed-source) move type for draining specific containers (e.g., with `ToFreeSpec`):
 
 <Tabs groupId="programming-language">
 <TabItem value="python" label="Python">

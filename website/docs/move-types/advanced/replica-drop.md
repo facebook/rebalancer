@@ -300,7 +300,7 @@ ReplicaDrop does NOT help when:
 
 ## Next Steps
 
-- Learn about [GroupCount constraint](../../reference/groups/group-count) for controlling replica counts
+- Learn about `GroupCount` constraint for controlling replica counts
 - Try [Single](../basic/single) for general optimization
 - Review [Move Types Overview](../) for choosing move types
 

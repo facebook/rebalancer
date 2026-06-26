@@ -71,12 +71,12 @@ You can define as many dimensions as you need (CPU, disk, and so on) and use the
 
 A **goal** (also called an *objective*) describes something to *optimize*: the closer the solution gets to it, the better. A model can have several goals.
 
-Let's add a goal that balances memory use across hosts. For this, we use a [BalanceSpec](../reference/balance-optimize/balance) goal on the `memory` dimension we just defined:
+Let's add a goal that balances memory use across hosts. For this, we use a `BalanceSpec` goal on the `memory` dimension we just defined:
 
 ```cpp file=algopt/rebalancer/examples/website/getting_started/tasks_on_hosts/tasks_on_hosts.cpp start=balance_start end=balance_end
 ```
 
-A `BalanceSpec` goal pushes every host toward the same *relative utilization*---memory used divided by memory available. Here we use the default `LINEAR` formula; you can read more about `BalanceSpec` and the formulas it supports in the [BalanceSpec](../reference/balance-optimize/balance) reference.
+A `BalanceSpec` goal pushes every host toward the same *relative utilization*---memory used divided by memory available. Here we use the default `LINEAR` formula; you can read more about `BalanceSpec` and the formulas it supports in the `BalanceSpec` reference.
 
 `addGoal()` also takes two optional arguments. The *weight* (second argument, default 1) sets a goal's influence when several goals are combined into a weighted sum. The *tuple position* (third argument) puts a goal in its own priority tier: the solver fully optimizes a higher tier before trading anything away for a lower one. We use the defaults here.
 
@@ -109,7 +109,7 @@ First, `host0` is going down for maintenance, so we need it empty. A `ToFreeSpec
 ```cpp file=algopt/rebalancer/examples/website/getting_started/tasks_on_hosts/tasks_on_hosts.cpp start=tofree_start end=tofree_end
 ```
 
-Second, we want each job to survive a rack failure: if a rack loses power, every host in it goes offline at once, so we keep a job's two tasks in different racks. Using the `job` partition and the `rack` scope, a [group count](../reference/groups/group-count) constraint with a limit of 1 says: at most one task of any job per rack.
+Second, we want each job to survive a rack failure: if a rack loses power, every host in it goes offline at once, so we keep a job's two tasks in different racks. Using the `job` partition and the `rack` scope, a group count constraint with a limit of 1 says: at most one task of any job per rack.
 
 ```cpp file=algopt/rebalancer/examples/website/getting_started/tasks_on_hosts/tasks_on_hosts.cpp start=groupcount_start end=groupcount_end
 ```
