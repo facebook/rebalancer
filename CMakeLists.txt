@@ -764,6 +764,31 @@ if(NOT SKBUILD)
 
     install(DIRECTORY ${THRIFT_OUTPUT_DIR}/algopt/ DESTINATION include/algopt
             FILES_MATCHING PATTERN "*.h" PATTERN "*.tcc")
+
+    # Packaging smoke test — only built in the SDK artifact context.
+    # PACKAGING_TEST=ON is set permanently in the getdeps manifest [cmake.defines]
+    # so it is part of the cache key; off by default so normal CI builds are unaffected.
+    option(PACKAGING_TEST "Build and install the packaging smoke test binary" OFF)
+    if(PACKAGING_TEST)
+        add_executable(test_solve tools/packages/test_solve.cpp)
+        # test_solve.cpp includes rebalancer headers which transitively pull in
+        # folly coro / cancellation templates that instantiate to symbols in
+        # libfolly.so. With PRIVATE folly on rebalancer, cmake doesn't add
+        # -lfolly to test_solve — add it explicitly so the linker can resolve
+        # those symbols.
+        target_link_libraries(test_solve PRIVATE
+            rebalancer
+            Folly::folly
+            FBThrift::thriftprotocol
+            FBThrift::thriftmetadata
+            FBThrift::thrifttype
+            FBThrift::rpcmetadata
+        )
+        set_target_properties(test_solve PROPERTIES
+            INSTALL_RPATH "\$ORIGIN/../lib:\$ORIGIN/../lib/rebalancer"
+        )
+        install(TARGETS test_solve RUNTIME DESTINATION bin)
+    endif()
 endif()
 
 # When invoked by scikit-build-core (during a `pip install` / wheel build),

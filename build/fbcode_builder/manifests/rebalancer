@@ -16,6 +16,12 @@ builder = cmake
 
 [cmake.defines]
 CMAKE_POSITION_INDEPENDENT_CODE=ON
+# Always build the packaging smoke-test binary so it is included in
+# getdeps' cache key. Without this, --extra-cmake-defines PACKAGING_TEST=ON
+# (passed from build_linux_sdk.sh) was silently excluded from the cache key,
+# causing getdeps to reuse a stale cached build that predated PACKAGING_TEST
+# and omit test_solve from the SDK artifact.
+PACKAGING_TEST=ON
 
 # Build the example/demo executables only when getdeps is invoked with
 # tests enabled (test=on -- the default for `getdeps build` without
