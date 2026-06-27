@@ -74,6 +74,7 @@ if [[ ! -f "$TEST_SOLVE_SRC" ]]; then
         [ -d "$inc" ] && EXTRA_INCLUDES="$EXTRA_INCLUDES -I$inc"
     done
     clang++ -std=c++20 \
+        -DREBALANCER_OSS_BUILD \
         -I"$REBALANCER_PREFIX/usr/local/include" \
         $EXTRA_INCLUDES \
         -L"$REBALANCER_PREFIX/usr/local/lib" \
