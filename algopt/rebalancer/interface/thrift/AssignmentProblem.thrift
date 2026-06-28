@@ -15,6 +15,7 @@
 package "meta.com/algopt/rebalancer"
 
 include "algopt/rebalancer/solver/if/packer.thrift"
+include "configerator/structs/thrift_explorer/annotations.thrift" as thrift_explorer
 include "algopt/rebalancer/interface/thrift/Types.thrift"
 include "algopt/rebalancer/entities/thrift/Entities.thrift"
 include "thrift/annotation/thrift.thrift"
@@ -59,6 +60,9 @@ struct AssignmentProblem {
   1024: optional string scubaLoggingLabel;
 }
 
+@thrift_explorer.Context{
+  description = "A bundle of a rebalancer problem and the corresponding solution if any.",
+}
 struct Bundle {
   1: AssignmentProblem problem;
   2: optional Types.AssignmentSolution solution;

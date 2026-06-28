@@ -765,6 +765,13 @@ if(NOT SKBUILD)
     install(DIRECTORY ${THRIFT_OUTPUT_DIR}/algopt/ DESTINATION include/algopt
             FILES_MATCHING PATTERN "*.h" PATTERN "*.tcc")
 
+    # Install thrift-generated headers for stub thrift files that live outside
+    # algopt/ (e.g. configerator/structs/thrift_explorer/). The generated C++
+    # headers for our .thrift files include these transitively, so SDK users
+    # need them to compile against the installed headers.
+    install(DIRECTORY ${THRIFT_OUTPUT_DIR}/configerator/ DESTINATION include/configerator
+            FILES_MATCHING PATTERN "*.h" PATTERN "*.tcc")
+
     # Packaging smoke test — only built in the SDK artifact context.
     # PACKAGING_TEST=ON is set permanently in the getdeps manifest [cmake.defines]
     # so it is part of the cache key; off by default so normal CI builds are unaffected.
