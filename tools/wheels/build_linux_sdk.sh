@@ -70,6 +70,9 @@ TEST_SOLVE_SRC="$REBALANCER_PREFIX/usr/local/bin/test_solve"
 # and build just the test_solve target in the already-compiled tree.
 CMAKE_BUILD_DIR=$(ls -d /tmp/fbcode_builder_getdeps-*/build/rebalancer 2>/dev/null | head -1)
 echo "Building test_solve via cmake in $CMAKE_BUILD_DIR"
+# Touch CMakeLists.txt so cmake detects a source change and re-runs CMakeLists.txt
+# fully (not the fast incremental check), ensuring PACKAGING_TEST=ON is processed.
+touch /project/CMakeLists.txt
 cmake -DPACKAGING_TEST=ON -S /project -B "$CMAKE_BUILD_DIR"
 cmake --build "$CMAKE_BUILD_DIR" --target test_solve --parallel "$(nproc)"
 mkdir -p "$(dirname "$TEST_SOLVE_SRC")"
