@@ -63,30 +63,17 @@ $PY build/fbcode_builder/getdeps.py --allow-system-packages \
 REBALANCER_PREFIX=$(ls -d /tmp/fbcode_builder_getdeps-*/installed/rebalancer 2>/dev/null | head -1)
 TEST_SOLVE_SRC="$REBALANCER_PREFIX/usr/local/bin/test_solve"
 
-# Build test_solve directly from the installed headers and library. This is
-# simpler and more reliable than routing it through cmake/getdeps: cmake's
-# --extra-cmake-defines is excluded from getdeps' cache key, so any cmake-
-# based approach risks stale cache hits that omit the binary. Building it
-# here always produces a fresh binary with the correct flags.
-echo "Building test_solve from installed headers"
+# Build test_solve via cmake in the existing getdeps build directory.
+# cmake knows the exact link graph for test_solve (folly, fbthrift, glog,
+# etc.); replicating it with manual -l flags is fragile. We reconfigure
+# with -DPACKAGING_TEST=ON (not via the manifest, so not in the cache key)
+# and build just the test_solve target in the already-compiled tree.
+CMAKE_BUILD_DIR=$(ls -d /tmp/fbcode_builder_getdeps-*/build/rebalancer 2>/dev/null | head -1)
+echo "Building test_solve via cmake in $CMAKE_BUILD_DIR"
+cmake -DPACKAGING_TEST=ON -S /project -B "$CMAKE_BUILD_DIR"
+cmake --build "$CMAKE_BUILD_DIR" --target test_solve --parallel "$(nproc)"
 mkdir -p "$(dirname "$TEST_SOLVE_SRC")"
-EXTRA_INCLUDES=""
-EXTRA_LIBDIRS=""
-for dep in /tmp/fbcode_builder_getdeps-*/installed/*/; do
-    [ -d "$dep/include" ] && EXTRA_INCLUDES="$EXTRA_INCLUDES -I$dep/include"
-    [ -d "$dep/lib" ]     && EXTRA_LIBDIRS="$EXTRA_LIBDIRS -L$dep/lib"
-done
-clang++ -std=c++20 \
-    -DREBALANCER_OSS_BUILD \
-    -I"$REBALANCER_PREFIX/usr/local/include" \
-    $EXTRA_INCLUDES \
-    -L"$REBALANCER_PREFIX/usr/local/lib" \
-    $EXTRA_LIBDIRS \
-    -lrebalancer -lfolly \
-    -Wl,--copy-dt-needed-entries \
-    -Wl,--allow-shlib-undefined \
-    -o "$TEST_SOLVE_SRC" \
-    /project/tools/packages/test_solve.cpp
+cp "$CMAKE_BUILD_DIR/test_solve" "$TEST_SOLVE_SRC"
 chmod +x "$TEST_SOLVE_SRC"
 echo "Built test_solve → $TEST_SOLVE_SRC"
 
