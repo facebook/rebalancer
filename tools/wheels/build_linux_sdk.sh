@@ -82,7 +82,7 @@ clang++ -std=c++20 \
     $EXTRA_INCLUDES \
     -L"$REBALANCER_PREFIX/usr/local/lib" \
     $EXTRA_LIBDIRS \
-    -lrebalancer -lfolly \
+    -lrebalancer -lfolly -lthrifttype -lthriftprotocol -lthriftmetadata -lrpcmetadata \
     -Wl,--allow-shlib-undefined \
     -o "$TEST_SOLVE_SRC" \
     /project/tools/packages/test_solve.cpp
