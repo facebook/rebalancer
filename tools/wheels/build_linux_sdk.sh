@@ -71,14 +71,17 @@ TEST_SOLVE_SRC="$REBALANCER_PREFIX/usr/local/bin/test_solve"
 echo "Building test_solve from installed headers"
 mkdir -p "$(dirname "$TEST_SOLVE_SRC")"
 EXTRA_INCLUDES=""
-for inc in /tmp/fbcode_builder_getdeps-*/installed/*/include; do
-    [ -d "$inc" ] && EXTRA_INCLUDES="$EXTRA_INCLUDES -I$inc"
+EXTRA_LIBDIRS=""
+for dep in /tmp/fbcode_builder_getdeps-*/installed/*/; do
+    [ -d "$dep/include" ] && EXTRA_INCLUDES="$EXTRA_INCLUDES -I$dep/include"
+    [ -d "$dep/lib" ]     && EXTRA_LIBDIRS="$EXTRA_LIBDIRS -L$dep/lib"
 done
 clang++ -std=c++20 \
     -DREBALANCER_OSS_BUILD \
     -I"$REBALANCER_PREFIX/usr/local/include" \
     $EXTRA_INCLUDES \
     -L"$REBALANCER_PREFIX/usr/local/lib" \
+    $EXTRA_LIBDIRS \
     -lrebalancer -lfolly \
     -Wl,--allow-shlib-undefined \
     -o "$TEST_SOLVE_SRC" \
