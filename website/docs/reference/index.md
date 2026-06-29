@@ -80,7 +80,7 @@ to the spec's unit tests.
 
 | Spec | Type | Description | Examples |
 |------|------|-------------|----------|
-| AssignmentAffinitiesSpec | Goal | Make specific objects prefer specific scope items | [unit tests](https://github.com/facebookincubator/rebalancer/blob/main/algopt/rebalancer/interface/tests/AssignmentAffinitiesTest.cpp) |
+| [AssignmentAffinitiesSpec](specs/assignment-affinities) | Goal | Make specific objects prefer specific scope items | [unit tests](https://github.com/facebookincubator/rebalancer/blob/main/algopt/rebalancer/interface/tests/AssignmentAffinitiesTest.cpp) |
 | PairAffinitiesSpec | Both | Make pairs of objects prefer the same scope item | [unit tests](https://github.com/facebookincubator/rebalancer/blob/main/algopt/rebalancer/interface/tests/PairAffinitiesTest.cpp) |
 | GroupAssignmentAffinitiesSpec | Goal | Make specific groups prefer specific scope items | [unit tests](https://github.com/facebookincubator/rebalancer/blob/main/algopt/rebalancer/interface/tests/GroupAssignmentAffinitiesTest.cpp) |
 | ScopeAffinitiesSpec | Goal | Reward or penalize each scope item's utilization of a dimension via a per-scope-item weight | [unit tests](https://github.com/facebookincubator/rebalancer/blob/main/algopt/rebalancer/interface/tests/ScopeAffinitiesTest.cpp) |
