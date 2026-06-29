@@ -64,7 +64,7 @@ to the spec's unit tests.
 |------|------|-------------|----------|
 | NonAccepting | Constraint | Prevent objects from moving into the listed scope items | [unit tests](https://github.com/facebook/rebalancer/blob/main/algopt/rebalancer/interface/tests/NonAcceptingTest.cpp) |
 | AvoidAssignments | Constraint | Forbid specific object-to-scope-item assignments | [unit tests](https://github.com/facebook/rebalancer/blob/main/algopt/rebalancer/interface/tests/AvoidAssignmentsTest.cpp) |
-| ColocateGroups | Both | Limit how many scope items each group spreads across (default: one) | [unit tests](https://github.com/facebook/rebalancer/blob/main/algopt/rebalancer/interface/tests/ColocateGroupsTest.cpp) |
+| [ColocateGroups](specs/colocate-groups) | Both | Limit how many scope items each group spreads across (default: one) | [unit tests](https://github.com/facebook/rebalancer/blob/main/algopt/rebalancer/interface/tests/ColocateGroupsTest.cpp) |
 | ExclusiveScopeItems | Both | Forbid pairs of scope items from being used at the same time | [unit tests](https://github.com/facebook/rebalancer/blob/main/algopt/rebalancer/interface/tests/ExclusiveScopeItemsTest.cpp) |
 
 ### Movement
