@@ -63,18 +63,31 @@ $PY build/fbcode_builder/getdeps.py --allow-system-packages \
 REBALANCER_PREFIX=$(ls -d /tmp/fbcode_builder_getdeps-*/installed/rebalancer 2>/dev/null | head -1)
 TEST_SOLVE_SRC="$REBALANCER_PREFIX/usr/local/bin/test_solve"
 
-# Build test_solve via cmake in the existing getdeps build directory.
-# cmake knows the exact link graph for test_solve (folly, fbthrift, glog,
-# etc.); replicating it with manual -l flags is fragile. We reconfigure
-# with -DPACKAGING_TEST=ON (not via the manifest, so not in the cache key)
-# and build just the test_solve target in the already-compiled tree.
-# test_solve is built by cmake via PACKAGING_TEST=ON in the manifest's
-# [cmake.defines] and installed to $REBALANCER_PREFIX/usr/local/bin/.
-# Fail loudly if it's absent rather than attempting a fragile fallback.
+# PACKAGING_TEST=ON in the manifest causes cmake to build and install
+# test_solve. If getdeps hits a stale cache that predates PACKAGING_TEST,
+# test_solve will be absent. In that case, force cmake to re-run configure
+# by patching the cmake cache and deleting build.ninja (which forces cmake
+# to regenerate), then build just the test_solve target.
 if [[ ! -f "$TEST_SOLVE_SRC" ]]; then
-    echo "ERROR: test_solve not found at $TEST_SOLVE_SRC after getdeps build"
-    echo "  PACKAGING_TEST=ON should be in build/fbcode_builder/manifests/rebalancer"
-    exit 1
+    echo "test_solve absent from getdeps install; forcing cmake rebuild"
+    CMAKE_BUILD_DIR=$(ls -d /tmp/fbcode_builder_getdeps-*/build/rebalancer 2>/dev/null | head -1)
+    # Ensure PACKAGING_TEST=ON in the cmake cache
+    if grep -q "^PACKAGING_TEST" "$CMAKE_BUILD_DIR/CMakeCache.txt" 2>/dev/null; then
+        sed -i 's/^PACKAGING_TEST:.*/PACKAGING_TEST:BOOL=ON/' "$CMAKE_BUILD_DIR/CMakeCache.txt"
+    else
+        echo "PACKAGING_TEST:BOOL=ON" >> "$CMAKE_BUILD_DIR/CMakeCache.txt"
+    fi
+    # Deleting build.ninja forces cmake --build to re-run configure, which
+    # re-reads CMakeLists.txt with PACKAGING_TEST=ON and adds test_solve.
+    rm -f "$CMAKE_BUILD_DIR/build.ninja"
+    cmake --build "$CMAKE_BUILD_DIR" --target test_solve --parallel "$(nproc)"
+    mkdir -p "$(dirname "$TEST_SOLVE_SRC")"
+    BUILT_BIN=$(ls "$CMAKE_BUILD_DIR/test_solve" 2>/dev/null || \
+                ls "$CMAKE_BUILD_DIR/bin/test_solve" 2>/dev/null || true)
+    [[ -f "$BUILT_BIN" ]] && cp "$BUILT_BIN" "$TEST_SOLVE_SRC" || {
+        echo "ERROR: cmake build of test_solve failed"; exit 1; }
+    chmod +x "$TEST_SOLVE_SRC"
+    echo "Fallback: built test_solve via cmake → $TEST_SOLVE_SRC"
 fi
 echo "test_solve present at $TEST_SOLVE_SRC"
 
