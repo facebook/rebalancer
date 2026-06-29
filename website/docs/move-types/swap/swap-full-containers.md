@@ -309,4 +309,4 @@ SwapFullContainers does NOT help when:
 - Learn about [SwapFullWithEmpty](swap-full-with-empty) for container consolidation
 - Try [Swap](swap.md) for fine-grained object swaps
 - Review [Move Types Overview](../) for choosing move types
-- See [Capacity](../../reference/capacity) for capacity constraints
+- See [Capacity](../../reference/specs/capacity) for capacity constraints

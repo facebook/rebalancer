@@ -37,7 +37,7 @@ to the spec's unit tests.
 
 | Spec | Type | Description | Examples |
 |------|------|-------------|----------|
-| [CapacitySpec](capacity) | Both | Limit each scope item's utilization for a dimension to a max (or min) | [unit tests](https://github.com/facebookincubator/rebalancer/blob/main/algopt/rebalancer/interface/tests/CapacityTest.cpp) |
+| [CapacitySpec](specs/capacity) | Both | Limit each scope item's utilization for a dimension to a max (or min) | [unit tests](https://github.com/facebookincubator/rebalancer/blob/main/algopt/rebalancer/interface/tests/CapacityTest.cpp) |
 | ToFreeSpec | Both | Drain the listed containers, driving their utilization for a dimension to zero | [unit tests](https://github.com/facebookincubator/rebalancer/blob/main/algopt/rebalancer/interface/tests/ToFreeTest.cpp) |
 | GroupCountSpec | Both | Limit how many objects of a group a scope item holds, or their total for a dimension | [unit tests](https://github.com/facebookincubator/rebalancer/blob/main/algopt/rebalancer/interface/tests/GroupCountTest.cpp) |
 | GroupDiversitySpec | Both | Require each scope item to hold at least, or at most, N distinct groups | [unit tests](https://github.com/facebookincubator/rebalancer/blob/main/algopt/rebalancer/interface/tests/GroupDiversityTest.cpp) |

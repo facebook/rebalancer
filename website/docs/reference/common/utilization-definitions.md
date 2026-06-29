@@ -1,13 +1,14 @@
 ---
-sidebar_position: 1
+sidebar_position: 3
 ---
 
-# Choices of definition
+# Utilization Definitions
 
-The `definition` parameter of [CapacitySpec](../capacity) controls **which objects
-count toward a scope item's utilization**. This page explains every choice with
-one running example: an object `x` moving between two scope items, the **source**
-(which it leaves) and the **destination** (which it enters).
+In [CapacitySpec](../specs/capacity) and several other specs (such as BalanceSpec,
+and GroupCountSpec), the `definition` parameter controls **which
+objects count toward a scope item's utilization**. This page explains every
+choice with one running example: an object `x` moving between two scope items,
+the **source** (which it leaves) and the **destination** (which it enters).
 
 ## The running example
 

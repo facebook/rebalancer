@@ -5,7 +5,7 @@ sidebar_position: 1
 # Limit
 
 A `Limit` is the bound a spec enforces on a value (for example, a scope item's
-utilization in [CapacitySpec](../capacity)). It is a shared building block used
+utilization in [CapacitySpec](../specs/capacity)). It is a shared building block used
 by many specs.
 
 Different specs honor different subsets of its fields. **Setting a field a spec
@@ -49,7 +49,7 @@ Specs without groups only use `scopeItemLimits`, then `globalLimit`. Setting
 | `ABSOLUTE` | a raw value |
 
 What `RELATIVE` is measured against depends on the spec. For example, when
-[CapacitySpec](../capacity) limits a scope item's utilization, the reference is
+[CapacitySpec](../specs/capacity) limits a scope item's utilization, the reference is
 that scope item's capacity (its same-named dimension): a `RELATIVE` limit of
 `0.8` means "at most 80% of the capacity", while an `ABSOLUTE` limit of `0.8`
 means "at most 0.8". If a spec divides by a scope item's dimension value that is
@@ -59,7 +59,7 @@ not defined, that value defaults to `1`, so `RELATIVE` then behaves like
 ## Applicability
 
 Each spec documents which fields it honors. For example,
-[CapacitySpec](../capacity) uses `type`, `globalLimit`, and `scopeItemLimits`;
+[CapacitySpec](../specs/capacity) uses `type`, `globalLimit`, and `scopeItemLimits`;
 group-aware specs additionally use `groupLimits` / `scopeItemToGroupLimits`.
 
 ## Source

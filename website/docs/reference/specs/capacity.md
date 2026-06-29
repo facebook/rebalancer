@@ -106,7 +106,7 @@ helps when moves are not instantaneous in the system being modeled.
 | `DOUBLE_DURING` | `DURING` plus `OLD` |
 | `DOUBLE_DURING_AND_AFTER` | `DOUBLE_DURING` plus `AFTER` |
 
-See [Choices of definition](choices-of-definition) for a detailed explanation of
+See [Utilization definitions](../common/utilization-definitions) for a detailed explanation of
 each, with diagrams and guidance on when to use them (and why `DURING` should not
 be used on its own).
 

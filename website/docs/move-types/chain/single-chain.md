@@ -346,4 +346,4 @@ SingleChain does NOT help when:
 - **Try [SingleEndChain](single-end-chain) first** - better default choice for chains
 - Learn about [SingleChainFast](single-chain-fast) for faster chain moves
 - Review [Move Types Overview](../) for choosing move types
-- See [Capacity](../../reference/capacity) for capacity constraints
+- See [Capacity](../../reference/specs/capacity) for capacity constraints
