@@ -1,4 +1,4 @@
-# CapacitySpec
+# Capacity
 
 **Type**: [Goal or Constraint](#goal-vs-constraint)
 
