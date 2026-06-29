@@ -133,18 +133,24 @@ MoveResult FixedDestSwapMultiMoveType::findBestMove(
 
   // If the move type has swap ratio dimension configured, 1:k swap is required
   // and the swap ratio is determined based on the hotObject and the
-  // swapRatioDimension config
+  // swapRatioDimension config. 1:k swaps need per-source dynamic bundle
+  // recomputation, which is inherently the greedy-on-src iteration
+  // structure (`findBestMoveWithSwapRatio`); there is no implemented
+  // non-greedy 1:k algorithm today. The non-greedy branch falls through
+  // to the regular non-greedy enumeration below, IGNORING the swap-ratio
+  // config — that preserves non-greedy's broad equiv-set sampling at the
+  // cost of not performing size-aware 1:k swaps in non-greedy stages.
+  // Safe to fall through: `srcContainerMoveGenerator_` /
+  // `dstContainerMoveGenerator_` are constructed once from `spec` and do
+  // not bake in the swap-ratio config, and the non-ratio
+  // `filterSourceObjectsByBundleSizeAndSearchSpacePartition` overload
+  // used below doesn't reference it either.
   assert(spec_.rasLocalSearchMetadata());
   const auto& rasMetadata = *spec_.rasLocalSearchMetadata();
   if (rasMetadata.swapRatioDimension().has_value() &&
-      *rasMetadata.useAdaptiveAllotments()) {
-    if (*spec_.greedyOnSrc()) {
-      return findBestMoveWithSwapRatio(
-          evaluator, hotContainer, dstContainer, stats, timeLimit);
-    } else {
-      throw std::runtime_error(
-          "1:k swaps are only supported when greedyOnSrc is enabled");
-    }
+      *rasMetadata.useAdaptiveAllotments() && *spec_.greedyOnSrc()) {
+    return findBestMoveWithSwapRatio(
+        evaluator, hotContainer, dstContainer, stats, timeLimit);
   }
 
   // Original logic for non-swap-ratio case
