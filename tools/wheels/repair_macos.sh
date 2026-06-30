@@ -46,7 +46,9 @@ delocate_archs="${3:-arm64}"
 project_dir="$(cd "$(dirname "$0")/../.." && pwd)"
 
 tmpdir=$(mktemp -d)
-trap "rm -rf $tmpdir" EXIT
+# Single quotes defer $tmpdir expansion to trap-fire time, avoiding
+# word-splitting and ensuring the variable is resolved when the trap runs.
+trap 'rm -rf "$tmpdir"' EXIT
 
 # Extract the wheel (it's a zip file).
 python3 -c "
@@ -79,23 +81,41 @@ fi
 # (→ libfolly, libfmt, etc. that the macOS linker recorded as direct deps).
 for ext in "$tmpdir/wheel/rebalancer/_rebalancer"*.so; do
     [[ -f "$ext" ]] || continue
-    install_name_tool -add_rpath @loader_path/_lib "$ext" 2>/dev/null || true
-    for libdir in "${lib_dirs[@]}"; do
-        install_name_tool -add_rpath "$libdir" "$ext" 2>/dev/null || true
-    done
+    # Log rpath failures rather than suppressing them: a silent failure here
+    # would surface later as an opaque DelocationError.
+    if ! install_name_tool -add_rpath @loader_path/_lib "$ext" 2>&1; then
+        echo "repair_macos: WARNING: could not add @loader_path/_lib rpath to $(basename "$ext") (may already exist)"
+    fi
+    if [[ ${#lib_dirs[@]} -gt 0 ]]; then
+        for libdir in "${lib_dirs[@]}"; do
+            if ! install_name_tool -add_rpath "$libdir" "$ext" 2>&1; then
+                echo "repair_macos: WARNING: could not add rpath $libdir to $(basename "$ext") (may already exist)"
+            fi
+        done
+    fi
     echo "repair_macos: patched rpaths in $(basename "$ext")"
 done
 
 # --- Patch 2: librebalancer.dylib ---
 librebalancer="$tmpdir/wheel/rebalancer/_lib/librebalancer.dylib"
 if [[ -f "$librebalancer" ]]; then
-    for libdir in "${lib_dirs[@]}"; do
-        install_name_tool -add_rpath "$libdir" "$librebalancer" 2>/dev/null || true
-    done
+    if [[ ${#lib_dirs[@]} -gt 0 ]]; then
+        for libdir in "${lib_dirs[@]}"; do
+            if ! install_name_tool -add_rpath "$libdir" "$librebalancer" 2>&1; then
+                echo "repair_macos: WARNING: could not add rpath $libdir to librebalancer.dylib (may already exist)"
+            fi
+        done
+    fi
     echo "repair_macos: patched rpaths in librebalancer.dylib"
 fi
 
 # Repack the patched wheel.
+# Note: this repack does NOT regenerate *.dist-info/RECORD SHA256 hashes for
+# the modified binaries. The RECORD entries will be stale after rpath patching.
+# delocate-wheel rewrites LC_LOAD_DYLIB and updates RECORD as part of its own
+# repair pass, so the final wheel's RECORD is correct. The intermediate repacked
+# wheel (consumed only by delocate-wheel below) has stale RECORD entries but
+# delocate does not validate RECORD on input.
 repacked="$tmpdir/repacked"
 mkdir -p "$repacked"
 wheel_name=$(basename "$wheel")

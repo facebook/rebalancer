@@ -71,6 +71,10 @@ TEST_SOLVE_SRC="$REBALANCER_PREFIX/usr/local/bin/test_solve"
 if [[ ! -f "$TEST_SOLVE_SRC" ]]; then
     echo "test_solve absent from getdeps install; forcing cmake rebuild"
     CMAKE_BUILD_DIR=$(ls -d /tmp/fbcode_builder_getdeps-*/build/rebalancer 2>/dev/null | head -1)
+    if [[ -z "$CMAKE_BUILD_DIR" || ! -d "$CMAKE_BUILD_DIR" ]]; then
+        echo "ERROR: cmake build dir not found under /tmp/fbcode_builder_getdeps-*/build/rebalancer"
+        exit 1
+    fi
     # Ensure PACKAGING_TEST=ON in the cmake cache
     if grep -q "^PACKAGING_TEST" "$CMAKE_BUILD_DIR/CMakeCache.txt" 2>/dev/null; then
         sed -i 's/^PACKAGING_TEST:.*/PACKAGING_TEST:BOOL=ON/' "$CMAKE_BUILD_DIR/CMakeCache.txt"
@@ -84,12 +88,20 @@ if [[ ! -f "$TEST_SOLVE_SRC" ]]; then
     cmake -B "$CMAKE_BUILD_DIR"
     cmake --build "$CMAKE_BUILD_DIR" --target test_solve --parallel "$(nproc)"
     mkdir -p "$(dirname "$TEST_SOLVE_SRC")"
-    BUILT_BIN=$(ls "$CMAKE_BUILD_DIR/test_solve" 2>/dev/null || \
-                ls "$CMAKE_BUILD_DIR/bin/test_solve" 2>/dev/null || true)
-    [[ -f "$BUILT_BIN" ]] && cp "$BUILT_BIN" "$TEST_SOLVE_SRC" || {
-        echo "ERROR: cmake build of test_solve failed"; exit 1; }
-    chmod +x "$TEST_SOLVE_SRC"
-    echo "Fallback: built test_solve via cmake → $TEST_SOLVE_SRC"
+    BUILT_BIN=""
+    if [[ -f "$CMAKE_BUILD_DIR/test_solve" ]]; then
+        BUILT_BIN="$CMAKE_BUILD_DIR/test_solve"
+    elif [[ -f "$CMAKE_BUILD_DIR/bin/test_solve" ]]; then
+        BUILT_BIN="$CMAKE_BUILD_DIR/bin/test_solve"
+    fi
+    if [[ -n "$BUILT_BIN" ]]; then
+        cp "$BUILT_BIN" "$TEST_SOLVE_SRC"
+        chmod +x "$TEST_SOLVE_SRC"
+        echo "Fallback: built test_solve via cmake → $TEST_SOLVE_SRC"
+    else
+        echo "ERROR: cmake built but test_solve binary not found in $CMAKE_BUILD_DIR"
+        exit 1
+    fi
 fi
 echo "test_solve present at $TEST_SOLVE_SRC"
 
