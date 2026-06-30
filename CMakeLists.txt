@@ -770,12 +770,29 @@ if(NOT SKBUILD)
     install(DIRECTORY ${THRIFT_OUTPUT_DIR}/algopt/ DESTINATION include/algopt
             FILES_MATCHING PATTERN "*.h" PATTERN "*.tcc")
 
+    # Install thrift-generated headers for stub thrift files that live outside
+    # algopt/ (e.g. configerator/structs/thrift_explorer/). The generated C++
+    # headers for our .thrift files include these transitively, so SDK users
+    # need them to compile against the installed headers.
+    install(DIRECTORY ${THRIFT_OUTPUT_DIR}/configerator/ DESTINATION include/configerator
+            FILES_MATCHING PATTERN "*.h" PATTERN "*.tcc")
+
     # Smoke test binary, installed to bin/. INSTALL_RPATH lets it find the
     # shared lib from the install tree (build_linux_sdk.sh patches the same
     # path).
     if(PACKAGING_TEST)
         add_executable(test_solve tools/packages/test_solve.cpp)
-        target_link_libraries(test_solve PRIVATE rebalancer)
+        # test_solve.cpp transitively instantiates folly coro / F14 templates
+        # whose non-inline symbols live in libfolly.so. Add folly and the
+        # fbthrift type-system libs explicitly so the linker resolves them.
+        target_link_libraries(test_solve PRIVATE
+            rebalancer
+            Folly::folly
+            FBThrift::thriftprotocol
+            FBThrift::thriftmetadata
+            FBThrift::thrifttype
+            FBThrift::rpcmetadata
+        )
         if(APPLE)
             set_property(TARGET test_solve PROPERTY INSTALL_RPATH
                 "@loader_path/../lib"

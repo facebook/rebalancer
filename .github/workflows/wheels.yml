@@ -131,6 +131,11 @@ jobs:
 
         CIBW_BEFORE_ALL_MACOS: bash tools/wheels/before_all_macos.sh
 
+        # Repair: cmake fails to embed LC_RPATH in MODULE/SHARED targets for
+        # this cmake/scikit-build-core version on macOS arm64. repair_macos.sh
+        # patches the missing rpaths before handing off to delocate-wheel.
+        CIBW_REPAIR_WHEEL_COMMAND_MACOS: bash tools/wheels/repair_macos.sh {dest_dir} {wheel} {delocate_archs}
+
         # Smoke-test the installed wheel. The wrapper script runs the
         # one-liner test first; on failure it dumps wheel layout, ldd
         # output, LD_DEBUG=files, and a gdb backtrace so we can root-
