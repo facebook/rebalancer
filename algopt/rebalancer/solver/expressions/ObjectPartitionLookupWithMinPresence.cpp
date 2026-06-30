@@ -86,7 +86,10 @@ double ObjectPartitionLookupWithMinPresencePolicy::Data::transformWeight(
       precision,
       roundUpGroupUtilOnScopeItem);
 
-  if (precision.isStrictlyGtZero(weight)) {
+  const auto forcePresentIt = forcePresent.find(scopeItemId);
+  const bool groupIsForcePresent = forcePresentIt != forcePresent.end() &&
+      forcePresentIt->second.contains(groupId);
+  if (precision.isStrictlyGtZero(weight) || groupIsForcePresent) {
     // Apply multipliers which targets to presence weight.
     auto minContributionToUtil =
         groupToPresenceWeight.getLimit(scopeItemId, groupId);

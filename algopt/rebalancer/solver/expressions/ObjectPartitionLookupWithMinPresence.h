@@ -17,8 +17,11 @@
 #include "algopt/rebalancer/entities/Identifiers.h"
 #include "algopt/rebalancer/materializer/utils/LimitWrapper.h"
 
+#include <folly/container/F14Map.h>
+#include <folly/container/F14Set.h>
 #include <folly/small_vector.h>
 
+#include <optional>
 #include <string_view>
 
 namespace facebook::rebalancer {
@@ -38,12 +41,16 @@ struct ObjectPartitionLookupWithMinPresencePolicy {
             folly::small_vector<materializer::LimitWrapper, 2>>
             groupUtilMultiplierMap_,
         bool makeContinuousPenaltyTerm_,
-        bool roundUpGroupUtilOnScopeItem_)
+        bool roundUpGroupUtilOnScopeItem_,
+        folly::F14FastMap<
+            entities::ScopeItemId,
+            folly::F14FastSet<entities::GroupId>> forcePresent_ = {})
         : groupToPresenceWeight(std::move(groupToPresenceWeight_)),
           groupToExtraAdditivePenalty(std::move(groupToExtraAdditivePenalty_)),
           groupUtilMultiplierMap(std::move(groupUtilMultiplierMap_)),
           makeContinuousPenaltyTerm(makeContinuousPenaltyTerm_),
-          roundUpGroupUtilOnScopeItem(roundUpGroupUtilOnScopeItem_) {}
+          roundUpGroupUtilOnScopeItem(roundUpGroupUtilOnScopeItem_),
+          forcePresent(std::move(forcePresent_)) {}
 
     materializer::LimitWrapper groupToPresenceWeight;
     materializer::LimitWrapper groupToExtraAdditivePenalty;
@@ -53,6 +60,9 @@ struct ObjectPartitionLookupWithMinPresencePolicy {
         groupUtilMultiplierMap;
     bool makeContinuousPenaltyTerm = false;
     bool roundUpGroupUtilOnScopeItem = false;
+    folly::
+        F14FastMap<entities::ScopeItemId, folly::F14FastSet<entities::GroupId>>
+            forcePresent;
 
     double applyWeights(
         double value,

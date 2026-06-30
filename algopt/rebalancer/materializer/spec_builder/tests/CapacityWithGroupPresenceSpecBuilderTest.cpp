@@ -515,6 +515,107 @@ CO_TEST_P(CapacityWithGroupPresenceSpecBuilderTest, WithRoundUpAndMaxBound) {
   }
 }
 
+// forcePresent: for (group, scope item) pairs listed in forcePresent, the
+// presence floor is honored even when the group has zero actual utilization in
+// that scope item (step(util) is forced to 1). Verifies the optimal-solver path
+// (getGroupUtilContributionToScopeItemUtil), with a side-by-side against a spec
+// that omits forcePresent. roundUp=false and all limits=0 so each constraint
+// value equals the computed utilization.
+CO_TEST_P(CapacityWithGroupPresenceSpecBuilderTest, ForcePresentHonorsFloor) {
+  auto makeSpec = [&](bool withForcePresent) {
+    interface::CapacityWithGroupPresenceSpec spec;
+    spec.dimension() = "replicaCount";
+    spec.partition() = "tenantTrafficObjects";
+    spec.scope() = "region";
+    spec.roundUpGroupUtilOnScopeItem() = false;
+    spec.intent() = GetParam();
+    spec.scopeItemToLimit()->type() = interface::LimitType::ABSOLUTE;
+    spec.scopeItemToLimit()->globalLimit() = 0;
+    spec.groupToPresenceWeight()->globalLimit() = 2;
+    spec.groupToPresenceWeight()->groupLimits() = {
+        {"tenant1-trafficObjects", 3}};
+    if (withForcePresent) {
+      // Force presence only for (region1, tenant2). The floor magnitude comes
+      // from groupToPresenceWeight (2.0).
+      spec.forcePresent() = {{"region1", {"tenant2-trafficObjects"}}};
+    }
+    return spec;
+  };
+
+  const auto universe = buildUniverse();
+  auto& builder = expressionBuilder();
+
+  // Move tenant2's only region1 object (trafficObject8, host1) out to region2
+  // (host3) so tenant2 has zero actual util in region1.
+  auto postMove = deltaFromInitial({{"trafficObject8", "host3"}});
+
+  // After the move:
+  //   region1: tenant1 util = max(1.85+0.13+1.2, 3.0) = 3.18; tenant2 util = 0
+  //   region2: tenant1 util = max(0.4+0.6+0.5, 3.0) = 3.0;
+  //            tenant2 util = max(0.115+1.88+1.0, 2.0) = 2.995
+  // tenant2's region1 contribution is the only value forcePresent changes:
+  //   without forcePresent -> step(0) gates it to 0
+  //   with forcePresent    -> presence floor 2.0 is honored
+  const CapacityWithGroupPresenceSpecBuilder withoutFp(
+      universe,
+      makeSpec(/*withForcePresent=*/false),
+      /*needsContinuousExpressions=*/false);
+  const CapacityWithGroupPresenceSpecBuilder withFp(
+      universe,
+      makeSpec(/*withForcePresent=*/true),
+      /*needsContinuousExpressions=*/false);
+  auto componentsWithout = co_await withoutFp.constraints(builder);
+  auto componentsWith = co_await withFp.constraints(builder);
+  auto goalWithout = co_await withoutFp.goalCoro(builder);
+  auto goalWith = co_await withFp.goalCoro(builder);
+
+  ExpectedInfo expectedWithout;
+  ExpectedInfo expectedWith;
+  switch (GetParam()) {
+    case interface::CapacityWithGroupPresenceUsageIntent::PER_SCOPE_ITEM: {
+      // 2 components: [region1, region2]. Optimal solver -> penalty is nullptr.
+      expectedWithout.constraintAndPenaltyValues = {
+          {.constraintValue = 3.18,
+           .penaltyValue = std::nullopt}, // tenant2 -> 0
+          {.constraintValue = 5.995, .penaltyValue = std::nullopt},
+      };
+      expectedWithout.goalValue = 3.18 + 5.995;
+      expectedWith.constraintAndPenaltyValues = {
+          {.constraintValue = 5.18, .penaltyValue = std::nullopt}, // +2.0 floor
+          {.constraintValue = 5.995, .penaltyValue = std::nullopt},
+      };
+      expectedWith.goalValue = 5.18 + 5.995;
+      break;
+    }
+    case interface::CapacityWithGroupPresenceUsageIntent::
+        PER_GROUP_AND_SCOPE_ITEM: {
+      // 4 components: (r1,t1),(r1,t2),(r2,t1),(r2,t2).
+      expectedWithout.constraintAndPenaltyValues = {
+          {.constraintValue = 3.18, .penaltyValue = std::nullopt},
+          {.constraintValue = 0.0,
+           .penaltyValue = std::nullopt}, // tenant2 -> 0
+          {.constraintValue = 3.0, .penaltyValue = std::nullopt},
+          {.constraintValue = 2.995, .penaltyValue = std::nullopt},
+      };
+      expectedWithout.goalValue = 3.18 + 0.0 + 3.0 + 2.995;
+      expectedWith.constraintAndPenaltyValues = {
+          {.constraintValue = 3.18, .penaltyValue = std::nullopt},
+          {.constraintValue = 2.0,
+           .penaltyValue = std::nullopt}, // floor honored
+          {.constraintValue = 3.0, .penaltyValue = std::nullopt},
+          {.constraintValue = 2.995, .penaltyValue = std::nullopt},
+      };
+      expectedWith.goalValue = 3.18 + 2.0 + 3.0 + 2.995;
+      break;
+    }
+  }
+
+  VERIFY_CONSTRAINT_COMPONENTS_AND_GOAL_VALUES(
+      expectedWithout, componentsWithout, goalWithout, postMove);
+  VERIFY_CONSTRAINT_COMPONENTS_AND_GOAL_VALUES(
+      expectedWith, componentsWith, goalWith, postMove);
+}
+
 CO_TEST_P(
     CapacityWithGroupPresenceSpecBuilderTest,
     WithRoundUpMaxBoundAndMultipliersBasic) {
