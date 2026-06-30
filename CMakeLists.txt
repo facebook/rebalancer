@@ -94,6 +94,11 @@ option(INSTALL_BENCHMARKS
     "Install benchmark executables (requires BENCHMARKS=ON)" OFF)
 option(TESTS "Build tests" OFF)
 
+# Packaging smoke test (test_solve), shipped in the deb/rpm so the packaging
+# jobs can verify the installed lib links and solves. On only in
+# build_linux_sdk.sh.
+option(PACKAGING_TEST "Build standalone packaging smoke test (test_solve)" OFF)
+
 # Test executables (rebalancer_tests.exe + test_main) are part of the default
 # ALL target but are never installed. Production/packaging builds (e.g. the
 # explorer Docker image) pass -DBUILD_TESTS=OFF to skip compiling them.
@@ -764,6 +769,23 @@ if(NOT SKBUILD)
 
     install(DIRECTORY ${THRIFT_OUTPUT_DIR}/algopt/ DESTINATION include/algopt
             FILES_MATCHING PATTERN "*.h" PATTERN "*.tcc")
+
+    # Smoke test binary, installed to bin/. INSTALL_RPATH lets it find the
+    # shared lib from the install tree (build_linux_sdk.sh patches the same
+    # path).
+    if(PACKAGING_TEST)
+        add_executable(test_solve tools/packages/test_solve.cpp)
+        target_link_libraries(test_solve PRIVATE rebalancer)
+        if(APPLE)
+            set_property(TARGET test_solve PROPERTY INSTALL_RPATH
+                "@loader_path/../lib"
+                "@loader_path/../lib/rebalancer")
+        else()
+            set_property(TARGET test_solve PROPERTY INSTALL_RPATH
+                "$ORIGIN/../lib:$ORIGIN/../lib/rebalancer")
+        endif()
+        install(TARGETS test_solve RUNTIME DESTINATION bin)
+    endif()
 endif()
 
 # When invoked by scikit-build-core (during a `pip install` / wheel build),
@@ -793,6 +815,17 @@ if(SKBUILD)
             ${CMAKE_CURRENT_BINARY_DIR}
             ${THRIFT_OUTPUT_DIR}
     )
+
+    # macOS wheel rpaths so delocate can resolve @rpath/... loads from baked-in
+    # LC_RPATH: USE_LINK_PATH exposes the getdeps dep dirs (libfolly, ...) for
+    # bundling; @loader_path/_lib finds the sibling librebalancer.dylib.
+    if(APPLE)
+        set_property(TARGET rebalancer PROPERTY INSTALL_RPATH_USE_LINK_PATH ON)
+        set_target_properties(_rebalancer PROPERTIES
+            INSTALL_RPATH_USE_LINK_PATH ON
+            INSTALL_RPATH "@loader_path/_lib")
+    endif()
+
     # Install the extension into the wheel package; the wrapper __init__.py
     # already lives in src/rebalancer/ (picked up via wheel.packages in
     # pyproject.toml). Ship the type stub from the in-tree binding source.
