@@ -53,7 +53,7 @@ concurrency:
 jobs:
   build:
     name: build-and-smoke-test-images
-    runs-on: 16-core-ubuntu
+    runs-on: 32-core-ubuntu
     # The build-base image builds folly/fbthrift/boost and the rest of the getdeps
     # tree from source with no sccache, so the first (uncached) run is slow.
     timeout-minutes: 120
@@ -79,6 +79,12 @@ jobs:
       # One build graph: the shared rebalancer-build base (deps + project compile)
       # is built once and reused by explorer, bundles, and proxy. The CI overlay
       # persists that heavy layer in the GitHub Actions cache across runs.
+      env:
+        # Skip provenance/SBOM attestations (slow, not needed here). Set via env,
+        # not compose build keys, for older Docker Compose on the runner.
+        BUILDX_NO_DEFAULT_ATTESTATIONS: 1
+        # Drop the streamed per-line build output; errors still print on failure.
+        BUILDKIT_PROGRESS: quiet
       run: docker compose -f docker-compose.yml -f docker-compose.ci.yml build
 
     - name: Smoke test - full stack via docker compose

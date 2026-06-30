@@ -36,10 +36,6 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.base
-      # Local dev images: skip provenance/SBOM attestations (slow export, can hang
-      # resolving base-image provenance, and not needed here).
-      provenance: false
-      sbom: false
     command: ["true"]
     restart: "no"
 
@@ -52,8 +48,6 @@ services:
       # Resolves the bundles' `FROM rebalancer-build` to the shared build image.
       additional_contexts:
         rebalancer-build: "service:build-base"
-      provenance: false
-      sbom: false
     volumes:
       - bundles:/out
 
@@ -65,8 +59,6 @@ services:
       # Resolves the explorer's `COPY --from=rebalancer-build` to the build image.
       additional_contexts:
         rebalancer-build: "service:build-base"
-      provenance: false
-      sbom: false
     # No published ports: only the proxy talks to it, over the compose network.
     expose:
       - "8080"
@@ -86,8 +78,6 @@ services:
       # Resolves the proxy's `FROM rebalancer-explorer` to the explorer build.
       additional_contexts:
         rebalancer-explorer: "service:explorer"
-      provenance: false
-      sbom: false
     depends_on:
       - explorer
     ports:
