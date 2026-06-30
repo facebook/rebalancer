@@ -44,11 +44,12 @@ $PY build/fbcode_builder/getdeps.py --allow-system-packages \
 #   lib/librebalancer.so
 #   lib/libfolly.so libfmt.so libglog.so libgflags.so libfbthrift*.so ...
 #   include/algopt/**/*.h  (source + thrift-generated headers)
+# PACKAGING_TEST=ON is now in the getdeps manifest [cmake.defines] so it is
+# part of the cache key; --extra-cmake-defines was excluded from the key and
+# caused getdeps to reuse a stale cached build that omitted test_solve.
 $PY build/fbcode_builder/getdeps.py --allow-system-packages \
     build --build-type RelWithDebInfo --src-dir=. --no-tests rebalancer \
-    --project-install-prefix rebalancer:/usr/local \
-    --extra-cmake-defines \
-    '{"PACKAGING_TEST":"ON"}'
+    --project-install-prefix rebalancer:/usr/local
 
 # Copy the installed tree (lib/, bin/) to the output directory.
 # fixup-dyn-deps copies all shared libs, strips debug symbols, and rewrites
@@ -61,10 +62,51 @@ $PY build/fbcode_builder/getdeps.py --allow-system-packages \
 # the pristine getdeps-built binary afterwards and patch it ourselves.
 REBALANCER_PREFIX=$(ls -d /tmp/fbcode_builder_getdeps-*/installed/rebalancer 2>/dev/null | head -1)
 TEST_SOLVE_SRC="$REBALANCER_PREFIX/usr/local/bin/test_solve"
-if [[ -f "$TEST_SOLVE_SRC" ]]; then
-    cp "$TEST_SOLVE_SRC" /tmp/test_solve_pristine
-    echo "Stashed pristine test_solve from $TEST_SOLVE_SRC"
+
+# PACKAGING_TEST=ON in the manifest causes cmake to build and install
+# test_solve. If getdeps hits a stale cache that predates PACKAGING_TEST,
+# test_solve will be absent. In that case, force cmake to re-run configure
+# by patching the cmake cache and deleting build.ninja (which forces cmake
+# to regenerate), then build just the test_solve target.
+if [[ ! -f "$TEST_SOLVE_SRC" ]]; then
+    echo "test_solve absent from getdeps install; forcing cmake rebuild"
+    CMAKE_BUILD_DIR=$(ls -d /tmp/fbcode_builder_getdeps-*/build/rebalancer 2>/dev/null | head -1)
+    if [[ -z "$CMAKE_BUILD_DIR" || ! -d "$CMAKE_BUILD_DIR" ]]; then
+        echo "ERROR: cmake build dir not found under /tmp/fbcode_builder_getdeps-*/build/rebalancer"
+        exit 1
+    fi
+    # Ensure PACKAGING_TEST=ON in the cmake cache
+    if grep -q "^PACKAGING_TEST" "$CMAKE_BUILD_DIR/CMakeCache.txt" 2>/dev/null; then
+        sed -i 's/^PACKAGING_TEST:.*/PACKAGING_TEST:BOOL=ON/' "$CMAKE_BUILD_DIR/CMakeCache.txt"
+    else
+        echo "PACKAGING_TEST:BOOL=ON" >> "$CMAKE_BUILD_DIR/CMakeCache.txt"
+    fi
+    # Delete build.ninja then re-run cmake configure (which re-reads
+    # CMakeLists.txt with PACKAGING_TEST=ON from the cache and adds
+    # test_solve), then build the target.
+    rm -f "$CMAKE_BUILD_DIR/build.ninja"
+    cmake -B "$CMAKE_BUILD_DIR"
+    cmake --build "$CMAKE_BUILD_DIR" --target test_solve --parallel "$(nproc)"
+    mkdir -p "$(dirname "$TEST_SOLVE_SRC")"
+    BUILT_BIN=""
+    if [[ -f "$CMAKE_BUILD_DIR/test_solve" ]]; then
+        BUILT_BIN="$CMAKE_BUILD_DIR/test_solve"
+    elif [[ -f "$CMAKE_BUILD_DIR/bin/test_solve" ]]; then
+        BUILT_BIN="$CMAKE_BUILD_DIR/bin/test_solve"
+    fi
+    if [[ -n "$BUILT_BIN" ]]; then
+        cp "$BUILT_BIN" "$TEST_SOLVE_SRC"
+        chmod +x "$TEST_SOLVE_SRC"
+        echo "Fallback: built test_solve via cmake → $TEST_SOLVE_SRC"
+    else
+        echo "ERROR: cmake built but test_solve binary not found in $CMAKE_BUILD_DIR"
+        exit 1
+    fi
 fi
+echo "test_solve present at $TEST_SOLVE_SRC"
+
+cp "$TEST_SOLVE_SRC" /tmp/test_solve_pristine
+echo "Stashed pristine test_solve"
 
 $PY build/fbcode_builder/getdeps.py --allow-system-packages \
     fixup-dyn-deps --strip --src-dir=. rebalancer /project/_artifacts/linux \
