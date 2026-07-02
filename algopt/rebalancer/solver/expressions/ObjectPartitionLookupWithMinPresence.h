@@ -45,14 +45,16 @@ struct ObjectPartitionLookupWithMinPresencePolicy {
         folly::F14FastMap<
             entities::ScopeItemId,
             folly::F14FastSet<entities::GroupId>>
-            scopeItemToAlwaysPresentGroups_ = {})
+            scopeItemToAlwaysPresentGroups_ = {},
+        bool gateContinuousPenaltyByFloor_ = false)
         : groupToPresenceWeight(std::move(groupToPresenceWeight_)),
           groupToExtraAdditivePenalty(std::move(groupToExtraAdditivePenalty_)),
           groupUtilMultiplierMap(std::move(groupUtilMultiplierMap_)),
           makeContinuousPenaltyTerm(makeContinuousPenaltyTerm_),
           roundUpGroupUtilOnScopeItem(roundUpGroupUtilOnScopeItem_),
           scopeItemToAlwaysPresentGroups(
-              std::move(scopeItemToAlwaysPresentGroups_)) {}
+              std::move(scopeItemToAlwaysPresentGroups_)),
+          gateContinuousPenaltyByFloor(gateContinuousPenaltyByFloor_) {}
 
     materializer::LimitWrapper groupToPresenceWeight;
     materializer::LimitWrapper groupToExtraAdditivePenalty;
@@ -65,6 +67,10 @@ struct ObjectPartitionLookupWithMinPresencePolicy {
     folly::
         F14FastMap<entities::ScopeItemId, folly::F14FastSet<entities::GroupId>>
             scopeItemToAlwaysPresentGroups;
+    // When set (MAX bound only), suppress the continuous penalty for a
+    // force-present group at/below its floor, where reducing util cannot lower
+    // the pinned contribution. Off for MIN bounds and non-force-present groups.
+    bool gateContinuousPenaltyByFloor = false;
 
     double applyWeights(
         double value,

@@ -132,7 +132,8 @@ class ObjectPartitionLookupWithMinPresenceTest : public ExpressionTestsBase {
       folly::F14FastMap<
           entities::ScopeItemId,
           folly::F14FastSet<entities::GroupId>> scopeItemToAlwaysPresentGroups =
-          {}) const {
+          {},
+      bool gateContinuousPenaltyByFloor = false) const {
     auto objectPartition = object_partition(
         partition(),
         replicaCountDimId(),
@@ -175,7 +176,8 @@ class ObjectPartitionLookupWithMinPresenceTest : public ExpressionTestsBase {
                       multiplierList}},
                     makeContinuousPenaltyTerm,
                     roundUpGroupUtilOnScopeItem,
-                    std::move(scopeItemToAlwaysPresentGroups))));
+                    std::move(scopeItemToAlwaysPresentGroups),
+                    gateContinuousPenaltyByFloor)));
 
     return objectPartitionLookupWithMinPresence;
   }
@@ -439,6 +441,81 @@ CO_TEST_F(ObjectPartitionLookupWithMinPresenceTest, PenaltyWithNoMultipliers) {
           objectPartitionLookup, changes2, assignment, lpAssertOptions),
       1e-8);
   EXPECT_NEAR(4.825, objectPartitionLookup->value, 1e-8);
+}
+
+// The continuous-penalty floor gate applies ONLY to force-present groups, whose
+// presence floor is a true constant that survives at zero util (reducing util
+// can never lower the contribution there). Non-force-present groups keep the
+// penalty active below their floor, because their floor is step(util)-gated and
+// vanishes once the group empties -- local search needs the gradient to drain
+// them to zero.
+CO_TEST_F(
+    ObjectPartitionLookupWithMinPresenceTest,
+    PenaltyGatedOnlyForAlwaysPresentGroupBelowFloor) {
+  co_await setUpUniverse();
+  const auto& universe = getUniverse();
+  auto assignment = getInitialAssignment(universe);
+
+  auto objectPartitionLookup = makeObjectPartitionLookupWithMinPresence(
+      universe,
+      /*aggregationScopeItemId=*/region(1),
+      /*groupIds=*/{group(1), group(2)},
+      /*multiplierList=*/{},
+      /*makeContinuousPenaltyTerm=*/true,
+      /*roundUpGroupUtilOnScopeItem=*/false,
+      /*scopeItemToAlwaysPresentGroups=*/{{region(1), {group(2)}}},
+      /*gateContinuousPenaltyByFloor=*/true);
+
+  // skip lp expr evaluation since LP does not yet properly transform the values
+  // with ObjectPartitionWithMinPresence
+  const LpAssertOptions lpAssertOptions = {
+      .exceptionForLpExpr =
+          "LP expressions are not yet implemented for ObjectPartitionWithMinPresence"};
+
+  // group1 (NOT always-present) util = 1.85 + 0.13 + 1.2 = 3.18 -> active
+  // = 3.18 group2 (always-present) util = 1.0 <= floor 2.0 -> gated -> 0
+  // (additive 1.5
+  //   unused)
+  // total penalty = 3.18
+  EXPECT_NEAR(
+      3.18, apply(objectPartitionLookup, assignment, lpAssertOptions), 1e-8);
+  EXPECT_NEAR(3.18, objectPartitionLookup->value, 1e-8);
+
+  // Move objects 6 and 7 into group2 in region1.
+  // group1 unchanged -> 3.18
+  // group2 util = 0.115 + 0.88 + 1.0 = 1.995 <= floor 2.0 -> still gated -> 0
+  // total penalty = 3.18
+  const auto changes1 = ObjectToNewContainer{
+      {object(6), container(1)}, {object(7), container(1)}};
+  EXPECT_NEAR(
+      3.18,
+      evaluate(objectPartitionLookup, changes1, assignment, lpAssertOptions),
+      1e-8);
+  EXPECT_NEAR(
+      3.18,
+      applyChanges(
+          objectPartitionLookup, changes1, assignment, lpAssertOptions),
+      1e-8);
+  EXPECT_NEAR(3.18, objectPartitionLookup->value, 1e-8);
+  assignment.moveTo(object(6), container(1));
+  assignment.moveTo(object(7), container(1));
+
+  // Move object1 out of group1 in region1.
+  // group1 util = 0.13 + 1.2 = 1.33 <= floor 3.0, but group1 is NOT
+  //   always-present, so its penalty stays active -> 1.33
+  // group2 still gated -> 0
+  // total penalty = 1.33
+  const auto changes2 = ObjectToNewContainer{{object(1), container(3)}};
+  EXPECT_NEAR(
+      1.33,
+      evaluate(objectPartitionLookup, changes2, assignment, lpAssertOptions),
+      1e-8);
+  EXPECT_NEAR(
+      1.33,
+      applyChanges(
+          objectPartitionLookup, changes2, assignment, lpAssertOptions),
+      1e-8);
+  EXPECT_NEAR(1.33, objectPartitionLookup->value, 1e-8);
 }
 
 CO_TEST_F(ObjectPartitionLookupWithMinPresenceTest, PenaltyWithMultipliers) {

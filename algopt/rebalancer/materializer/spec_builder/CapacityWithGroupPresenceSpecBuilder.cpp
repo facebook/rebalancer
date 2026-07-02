@@ -485,7 +485,9 @@ ExprPtr CapacityWithGroupPresenceSpecBuilder::createGroupUtilExpr(
           groupUtilMultiplierMap_,
           makeContinuousPenaltyTerm,
           *spec_.roundUpGroupUtilOnScopeItem(),
-          scopeItemToAlwaysPresentGroups_));
+          scopeItemToAlwaysPresentGroups_,
+          /*gateContinuousPenaltyByFloor_=*/
+          *spec_.bound() == interface::CapacityWithGroupPresenceBound::MAX));
 }
 
 ExprPtr CapacityWithGroupPresenceSpecBuilder::
@@ -593,13 +595,44 @@ CapacityWithGroupPresenceSpecBuilder::getGroupUtilContributionToScopeItemUtil(
       unweightedPenalty =
           max(unweightedPenalty + extraAdditivePenalty, 0.0, *universe_);
     }
-    co_return getWeightedExpr(
+    auto penalty = getWeightedExpr(
         unweightedPenalty,
         aggregationGroupId,
         aggregationScopeItemId,
         {interface::GroupUtilMultiplierTarget::PRESENCE_WEIGHT,
          interface::GroupUtilMultiplierTarget::UTILIZATION,
          interface::GroupUtilMultiplierTarget::COMMON});
+
+    if (*spec_.bound() != interface::CapacityWithGroupPresenceBound::MAX ||
+        !isGroupAlwaysPresent(aggregationScopeItemId, aggregationGroupId)) {
+      co_return penalty;
+    }
+
+    // When bound type is MAX and the group is always present, we only want to
+    // apply continuous penalty if the actual util is greater than the presence
+    // weight.
+    auto actualUtil = getWeightedExpr(
+        actualGroupUtilInScopeItem,
+        aggregationGroupId,
+        aggregationScopeItemId,
+        {interface::GroupUtilMultiplierTarget::UTILIZATION,
+         interface::GroupUtilMultiplierTarget::COMMON},
+        *spec_.roundUpGroupUtilOnScopeItem());
+    auto presenceWeightUtil = const_expr(
+        groupToPresenceWeight_.getLimit(
+            aggregationScopeItemId, aggregationGroupId),
+        *universe_);
+    presenceWeightUtil = getWeightedExpr(
+        presenceWeightUtil,
+        aggregationGroupId,
+        aggregationScopeItemId,
+        {interface::GroupUtilMultiplierTarget::PRESENCE_WEIGHT,
+         interface::GroupUtilMultiplierTarget::COMMON},
+        *spec_.roundUpGroupUtilOnScopeItem());
+    co_return product(
+        step(actualUtil - presenceWeightUtil, *universe_),
+        std::move(penalty),
+        *universe_);
   }
 
   const auto presenceWeight = groupToPresenceWeight_.getLimit(

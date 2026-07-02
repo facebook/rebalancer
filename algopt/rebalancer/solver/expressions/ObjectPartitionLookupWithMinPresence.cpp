@@ -63,12 +63,13 @@ double ObjectPartitionLookupWithMinPresencePolicy::Data::transformWeight(
     const entities::ScopeItemId& scopeItemId,
     const Precision& precision) const {
   if (makeContinuousPenaltyTerm) {
+    const auto actualUtil = weight;
     const auto extraAdditivePenalty =
         groupToExtraAdditivePenalty.getLimit(scopeItemId, groupId);
     if (!precision.isEqual(extraAdditivePenalty, 0.0)) {
       weight = std::max(weight + extraAdditivePenalty, 0.0);
     }
-    return applyWeights(
+    const auto penalty = applyWeights(
         weight,
         groupId,
         scopeItemId,
@@ -76,6 +77,37 @@ double ObjectPartitionLookupWithMinPresencePolicy::Data::transformWeight(
          interface::GroupUtilMultiplierTarget::UTILIZATION,
          interface::GroupUtilMultiplierTarget::COMMON},
         precision);
+
+    const auto presentGroupsPtr =
+        folly::get_ptr(scopeItemToAlwaysPresentGroups, scopeItemId);
+    const auto groupAlwaysPresent =
+        presentGroupsPtr && presentGroupsPtr->contains(groupId);
+    if (!gateContinuousPenaltyByFloor || !groupAlwaysPresent) {
+      return penalty;
+    }
+
+    // When bound type is MAX and the group is always present, we only want to
+    // apply continuous penalty if the actual util is greater than the presence
+    // weight.
+    const auto weightedUtil = applyWeights(
+        actualUtil,
+        groupId,
+        scopeItemId,
+        {interface::GroupUtilMultiplierTarget::UTILIZATION,
+         interface::GroupUtilMultiplierTarget::COMMON},
+        precision,
+        roundUpGroupUtilOnScopeItem);
+    const auto presenceWeightUtil = applyWeights(
+        groupToPresenceWeight.getLimit(scopeItemId, groupId),
+        groupId,
+        scopeItemId,
+        {interface::GroupUtilMultiplierTarget::PRESENCE_WEIGHT,
+         interface::GroupUtilMultiplierTarget::COMMON},
+        precision,
+        roundUpGroupUtilOnScopeItem);
+    return precision.isstrictlyGreater(weightedUtil, presenceWeightUtil)
+        ? penalty
+        : 0.0;
   }
 
   // Apply multipliers which targets to actual util.
