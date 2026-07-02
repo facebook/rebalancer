@@ -15,6 +15,8 @@
 #include "algopt/rebalancer/solver/expressions/ObjectPartition.h"
 #include "algopt/rebalancer/solver/expressions/ObjectPartitionLookup.h"
 
+#include <folly/MapUtil.h>
+
 namespace facebook::rebalancer {
 
 // Precision-aware ceil function that matches Ceil::perform_transform
@@ -86,7 +88,11 @@ double ObjectPartitionLookupWithMinPresencePolicy::Data::transformWeight(
       precision,
       roundUpGroupUtilOnScopeItem);
 
-  if (precision.isStrictlyGtZero(weight)) {
+  const auto presentGroupsPtr =
+      folly::get_ptr(scopeItemToAlwaysPresentGroups, scopeItemId);
+  const auto groupAlwaysPresent =
+      presentGroupsPtr && presentGroupsPtr->contains(groupId);
+  if (precision.isStrictlyGtZero(weight) || groupAlwaysPresent) {
     // Apply multipliers which targets to presence weight.
     auto minContributionToUtil =
         groupToPresenceWeight.getLimit(scopeItemId, groupId);

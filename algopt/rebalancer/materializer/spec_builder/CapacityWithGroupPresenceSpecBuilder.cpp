@@ -18,6 +18,8 @@
 #include "algopt/rebalancer/solver/expressions/ObjectPartitionLookup.h"
 #include "algopt/rebalancer/solver/expressions/Operators.h"
 
+#include <folly/MapUtil.h>
+
 namespace facebook::rebalancer::materializer {
 namespace {
 std::optional<std::vector<entities::GroupId>> getFilteredGroupIds(
@@ -63,6 +65,29 @@ double computePenaltyBound(
   return 0.5 * std::min(*minPositiveDimValue, 1.0);
 }
 
+folly::F14FastMap<entities::ScopeItemId, folly::F14FastSet<entities::GroupId>>
+buildScopeItemToAlwaysPresentGroups(
+    const entities::Universe& universe,
+    entities::ScopeId aggregationScopeId,
+    entities::PartitionId aggregationPartitionId,
+    const std::map<std::string, std::vector<std::string>>&
+        scopeItemToAlwaysPresentGroups) {
+  folly::F14FastMap<entities::ScopeItemId, folly::F14FastSet<entities::GroupId>>
+      result;
+  result.reserve(scopeItemToAlwaysPresentGroups.size());
+  for (const auto& [scopeItemName, groupNames] :
+       scopeItemToAlwaysPresentGroups) {
+    const auto scopeItemId =
+        universe.getScopeItemId(aggregationScopeId, scopeItemName);
+    auto& groups = result[scopeItemId];
+    groups.reserve(groupNames.size());
+    for (const auto& groupName : groupNames) {
+      groups.insert(universe.getGroupId(aggregationPartitionId, groupName));
+    }
+  }
+  return result;
+}
+
 } // namespace
 
 CapacityWithGroupPresenceSpecBuilder::CapacityWithGroupPresenceSpecBuilder(
@@ -102,6 +127,11 @@ CapacityWithGroupPresenceSpecBuilder::CapacityWithGroupPresenceSpecBuilder(
           *spec_.groupToExtraAdditivePenalty(),
           aggregationScopeId_,
           aggregationPartitionId_)),
+      scopeItemToAlwaysPresentGroups_(buildScopeItemToAlwaysPresentGroups(
+          *universe_,
+          aggregationScopeId_,
+          aggregationPartitionId_,
+          *spec_.scopeItemToAlwaysPresentGroups())),
       filteredMainScopeItemIds_(getFilteredScopeItemIds(ScopeItemFilterWrapper(
           *universe_,
           *spec_.scopeItemFilter(),
@@ -454,7 +484,8 @@ ExprPtr CapacityWithGroupPresenceSpecBuilder::createGroupUtilExpr(
           groupToExtraAdditivePenalty_,
           groupUtilMultiplierMap_,
           makeContinuousPenaltyTerm,
-          *spec_.roundUpGroupUtilOnScopeItem()));
+          *spec_.roundUpGroupUtilOnScopeItem(),
+          scopeItemToAlwaysPresentGroups_));
 }
 
 ExprPtr CapacityWithGroupPresenceSpecBuilder::
@@ -571,9 +602,12 @@ CapacityWithGroupPresenceSpecBuilder::getGroupUtilContributionToScopeItemUtil(
          interface::GroupUtilMultiplierTarget::COMMON});
   }
 
-  auto minContributionToUtil = groupToPresenceWeight_.getLimit(
-                                   aggregationScopeItemId, aggregationGroupId) *
-      step(actualGroupUtilInScopeItem, *universe_);
+  const auto presenceWeight = groupToPresenceWeight_.getLimit(
+      aggregationScopeItemId, aggregationGroupId);
+  auto minContributionToUtil =
+      isGroupAlwaysPresent(aggregationScopeItemId, aggregationGroupId)
+      ? const_expr(presenceWeight, *universe_)
+      : presenceWeight * step(actualGroupUtilInScopeItem, *universe_);
 
   // Apply multipliers which targets to presence weight.
   minContributionToUtil = getWeightedExpr(
@@ -634,6 +668,14 @@ const std::vector<entities::ScopeItemId>&
 CapacityWithGroupPresenceSpecBuilder::getRelevantMainScopeItemIds() const {
   return filteredMainScopeItemIds_.has_value() ? *filteredMainScopeItemIds_
                                                : mainScope_.getScopeItemIds();
+}
+
+bool CapacityWithGroupPresenceSpecBuilder::isGroupAlwaysPresent(
+    entities::ScopeItemId aggregationScopeItemId,
+    entities::GroupId aggregationGroupId) const {
+  const auto* presentGroups =
+      folly::get_ptr(scopeItemToAlwaysPresentGroups_, aggregationScopeItemId);
+  return presentGroups && presentGroups->contains(aggregationGroupId);
 }
 
 std::string CapacityWithGroupPresenceSpecBuilder::description() const {

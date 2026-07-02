@@ -1162,6 +1162,14 @@ void ProblemChecker::addSpec(const CapacityWithGroupPresenceSpec& spec) {
 
   checkGroupFilterSpec(*spec.groupFilter(), mainPartition);
 
+  for (const auto& [scopeItem, groups] :
+       *spec.scopeItemToAlwaysPresentGroups()) {
+    checkScopeItemExists(aggregationScope, scopeItem);
+    for (const auto& group : groups) {
+      checkGroupExists(aggregationPartition, group);
+    }
+  }
+
   addSpecName(*spec.name());
 }
 

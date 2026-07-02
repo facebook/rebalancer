@@ -128,7 +128,11 @@ class ObjectPartitionLookupWithMinPresenceTest : public ExpressionTestsBase {
       const folly::small_vector<materializer::LimitWrapper, 2>& multiplierList =
           {},
       bool makeContinuousPenaltyTerm = false,
-      bool roundUpGroupUtilOnScopeItem = false) const {
+      bool roundUpGroupUtilOnScopeItem = false,
+      folly::F14FastMap<
+          entities::ScopeItemId,
+          folly::F14FastSet<entities::GroupId>> scopeItemToAlwaysPresentGroups =
+          {}) const {
     auto objectPartition = object_partition(
         partition(),
         replicaCountDimId(),
@@ -170,7 +174,8 @@ class ObjectPartitionLookupWithMinPresenceTest : public ExpressionTestsBase {
                     {{interface::GroupUtilMultiplierTarget::COMMON,
                       multiplierList}},
                     makeContinuousPenaltyTerm,
-                    roundUpGroupUtilOnScopeItem)));
+                    roundUpGroupUtilOnScopeItem,
+                    std::move(scopeItemToAlwaysPresentGroups))));
 
     return objectPartitionLookupWithMinPresence;
   }
@@ -799,6 +804,155 @@ CO_TEST_F(
   EXPECT_NEAR(
       13.0, apply(objectPartitionLookup, assignment, lpAssertOptions), 1e-8);
   EXPECT_NEAR(13.0, objectPartitionLookup->value, 1e-8);
+}
+
+// scopeItemToAlwaysPresentGroups: a (group, scope item) listed in
+// scopeItemToAlwaysPresentGroups has its presence floor honored even when the
+// group's actual utilization in the scope item drops to 0 -- as if a frozen
+// object kept step(util) == 1. Groups not listed keep the default step(util)
+// gating.
+CO_TEST_F(
+    ObjectPartitionLookupWithMinPresenceTest,
+    AlwaysPresentHonorsFloorAtZeroUtil) {
+  co_await setUpUniverse();
+  const auto& universe = getUniverse();
+  auto assignment = getInitialAssignment(universe);
+
+  // scopeItemToAlwaysPresentGroups only for group2 in region1. The floor value
+  // comes from groupToPresenceWeight (2.0 for group2).
+  auto withAlwaysPresent = makeObjectPartitionLookupWithMinPresence(
+      universe,
+      /*aggregationScopeItemId=*/region(1),
+      /*groupIds=*/{group(1), group(2)},
+      /*multiplierList=*/{},
+      /*makeContinuousPenaltyTerm=*/false,
+      /*roundUpGroupUtilOnScopeItem=*/false,
+      /*scopeItemToAlwaysPresentGroups=*/{{region(1), {group(2)}}});
+  auto withoutAlwaysPresent = makeObjectPartitionLookupWithMinPresence(
+      universe,
+      /*aggregationScopeItemId=*/region(1),
+      /*groupIds=*/{group(1), group(2)},
+      /*multiplierList=*/{},
+      /*makeContinuousPenaltyTerm=*/false,
+      /*roundUpGroupUtilOnScopeItem=*/false,
+      /*scopeItemToAlwaysPresentGroups=*/{});
+
+  const LpAssertOptions lpAssertOptions = {
+      .exceptionForLpExpr =
+          "LP expressions are not yet implemented for ObjectPartitionWithMinPresence"};
+
+  // At the initial assignment region1 holds object8 (group2), so group2 util >
+  // 0 and the floor applies in BOTH cases (step(util) == 1 regardless of
+  // scopeItemToAlwaysPresentGroups). group1 util = max(3.18, 3.0) = 3.18;
+  // group2 = max(1.0, 2.0) = 2.0; total = 5.18.
+  EXPECT_NEAR(
+      5.18, apply(withAlwaysPresent, assignment, lpAssertOptions), 1e-8);
+  EXPECT_NEAR(
+      5.18, apply(withoutAlwaysPresent, assignment, lpAssertOptions), 1e-8);
+
+  // Move object8 (group2's only object in region1) out to region2 -> group2 has
+  // zero actual util in region1.
+  const auto changes = ObjectToNewContainer{{object(8), container(3)}};
+
+  // Without scopeItemToAlwaysPresentGroups: step(0) == 0 -> group2 floor not
+  // applied -> group2 = 0. total = group1 (3.18) + group2 (0) = 3.18.
+  EXPECT_NEAR(
+      3.18,
+      evaluate(withoutAlwaysPresent, changes, assignment, lpAssertOptions),
+      1e-8);
+
+  // With scopeItemToAlwaysPresentGroups: floor honored even at zero util ->
+  // group2 = max(2.0, 0) = 2.0. total = group1 (3.18) + group2 (2.0) = 5.18.
+  EXPECT_NEAR(
+      5.18,
+      evaluate(withAlwaysPresent, changes, assignment, lpAssertOptions),
+      1e-8);
+}
+
+// scopeItemToAlwaysPresentGroups is per (group, scope item): a group NOT listed
+// keeps step() gating and drops to 0 at zero util, while a listed group keeps
+// its floor.
+CO_TEST_F(
+    ObjectPartitionLookupWithMinPresenceTest,
+    AlwaysPresentIsSelectivePerGroup) {
+  co_await setUpUniverse();
+  const auto& universe = getUniverse();
+  auto assignment = getInitialAssignment(universe);
+
+  // scopeItemToAlwaysPresentGroups only for group2 (group1 is intentionally not
+  // listed).
+  auto objectPartitionLookup = makeObjectPartitionLookupWithMinPresence(
+      universe,
+      /*aggregationScopeItemId=*/region(1),
+      /*groupIds=*/{group(1), group(2)},
+      /*multiplierList=*/{},
+      /*makeContinuousPenaltyTerm=*/false,
+      /*roundUpGroupUtilOnScopeItem=*/false,
+      /*scopeItemToAlwaysPresentGroups=*/{{region(1), {group(2)}}});
+
+  const LpAssertOptions lpAssertOptions = {
+      .exceptionForLpExpr =
+          "LP expressions are not yet implemented for ObjectPartitionWithMinPresence"};
+
+  // Route every region1 object of BOTH groups out to region2:
+  //  - group1 objects in region1: object1, object5, object9 (all in container2)
+  //  - group2 object in region1: object8 (in container1)
+  const auto changes = ObjectToNewContainer{
+      {object(1), container(3)},
+      {object(5), container(3)},
+      {object(9), container(3)},
+      {object(8), container(3)}};
+
+  // group1 is NOT always-present -> step(0) == 0 -> floor not applied -> 0.
+  // group2 IS always-present -> floor honored -> max(2.0, 0) = 2.0.
+  // total = 0 + 2.0 = 2.0.
+  EXPECT_NEAR(
+      2.0,
+      evaluate(objectPartitionLookup, changes, assignment, lpAssertOptions),
+      1e-8);
+}
+
+// scopeItemToAlwaysPresentGroups with roundUp + multipliers: the forced floor
+// flows through the same rounding/multiplier pipeline as a normally-present
+// group.
+CO_TEST_F(
+    ObjectPartitionLookupWithMinPresenceTest,
+    AlwaysPresentWithRoundUpAndMultiplier) {
+  co_await setUpUniverse();
+  const auto& universe = getUniverse();
+  auto assignment = getInitialAssignment(universe);
+
+  folly::small_vector<materializer::LimitWrapper, 2> multiplierList;
+  auto multiplier = makeLimit(1);
+  multiplier.groupLimits() = {{"group1", 4}, {"group2", 8}};
+  multiplierList.emplace_back(makeLimitWrapper(universe, multiplier));
+
+  auto objectPartitionLookup = makeObjectPartitionLookupWithMinPresence(
+      universe,
+      /*aggregationScopeItemId=*/region(1),
+      /*groupIds=*/{group(1), group(2)},
+      /*multiplierList=*/multiplierList,
+      /*makeContinuousPenaltyTerm=*/false,
+      /*roundUpGroupUtilOnScopeItem=*/true,
+      /*scopeItemToAlwaysPresentGroups=*/{{region(1), {group(2)}}});
+
+  const LpAssertOptions lpAssertOptions = {
+      .exceptionForLpExpr =
+          "LP expressions are not yet implemented for ObjectPartitionWithMinPresence"};
+
+  // Move group2's only region1 object (object8) out -> group2 util in region1 =
+  // 0.
+  const auto changes = ObjectToNewContainer{{object(8), container(3)}};
+
+  // group1 util = max(1.85 + 0.13 + 1.2, 3.0) = 3.18
+  //   - ceil(3.18) = 4, * multiplier(group1=4) = 16, ceil(16) = 16
+  // group2 forced floor = presence weight 2.0 (applied despite zero util)
+  //   - ceil(2.0) = 2, * multiplier(group2=8) = 16, ceil(16) = 16
+  // total util = 16 + 16 = 32
+  EXPECT_NEAR(
+      32.0,
+      evaluate(objectPartitionLookup, changes, assignment, lpAssertOptions),
+      1e-8);
 }
 
 } // namespace facebook::rebalancer::packer::tests
