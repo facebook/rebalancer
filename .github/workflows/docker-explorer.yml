@@ -137,10 +137,11 @@ jobs:
         echo "proxy /healthz OK"
 
         # 4) End-to-end: proxy -> explorer -> a seeded bundle. getHandle loads the
-        #    vertex_cover bundle the seeder produced, touching every image.
+        #    vertex_cover bundle the seeder produced, touching every image. The
+        #    bare name resolves under the explorer's --bundle_dir (/bundles).
         resp=$(curl -fsS -X POST http://127.0.0.1:8081/v2/getHandle \
           -H 'Content-Type: application/json' \
-          -d '{"request":{"manifoldId":"/bundles/vertex_cover.bundle"}}')
+          -d '{"request":{"manifoldId":"vertex_cover.bundle"}}')
         echo "getHandle response: $resp"
         # HandleResponse always has a "handle"; curl -f already required HTTP 2xx,
         # so a well-formed response proves proxy -> explorer -> bundle all worked.
