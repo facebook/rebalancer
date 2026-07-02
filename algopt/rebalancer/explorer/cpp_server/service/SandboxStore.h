@@ -10,8 +10,10 @@
 #include <folly/coro/Sleep.h>
 #include <folly/coro/Task.h>
 #include <folly/executors/CPUThreadPoolExecutor.h>
+#include <folly/fibers/Semaphore.h>
 #include <folly/logging/xlog.h>
 #include <folly/MapUtil.h>
+#include <folly/ScopeGuard.h>
 #include <folly/system/HardwareConcurrency.h>
 
 namespace facebook {
@@ -26,8 +28,14 @@ class SandboxStore {
  public:
   explicit SandboxStore(
       std::chrono::steady_clock::duration inactiveSandboxTimeout =
-          kDefaultInactiveSandboxTimeout)
+          kDefaultInactiveSandboxTimeout,
+      int32_t maxConcurrentLoads = 0)
       : inactiveSandboxTimeout_{inactiveSandboxTimeout},
+        // When disabled (maxConcurrentLoads <= 0) the semaphore is never waited
+        // on; capacity 1 is an unused placeholder, not a one-load limit.
+        loadSemaphore_{static_cast<size_t>(
+            maxConcurrentLoads > 0 ? maxConcurrentLoads : 1)},
+        loadSemaphoreEnabled_{maxConcurrentLoads > 0},
         executor_(
             std::make_shared<folly::CPUThreadPoolExecutor>(
                 folly::available_concurrency())) {
@@ -53,23 +61,38 @@ class SandboxStore {
         status_, manifoldId, SandboxStatus::NOT_LOADED);
   }
 
-  // Schedule sandbox loading on the dedicated executor to avoid exhausting
-  // the thread pool serving live requests.
   void startLoadSandbox(std::string manifoldId) {
     folly::coro::co_withExecutor(executor_.get(), loadSandbox(manifoldId))
         .start();
   }
 
   folly::coro::Task<void> loadSandbox(std::string manifoldId) {
-    if (status_.find(manifoldId) != status_.end()) {
+    // Atomically claim the load. If another coroutine already claimed it or the
+    // sandbox is already loaded, bail without taking a semaphore token so
+    // duplicate requests can't starve unrelated loads of slots.
+    if (!status_.insert({manifoldId, SandboxStatus::LOADING}).second) {
       co_return;
     }
 
-    // Mark sandbox as loading
-    status_.insert({manifoldId, SandboxStatus::LOADING});
+    // The guard releases the token on every exit path iff we acquired one
+    // (skipped when the semaphore is disabled).
+    bool semaphoreAcquired = false;
+    SCOPE_EXIT {
+      if (semaphoreAcquired) {
+        loadSemaphore_.signal();
+      }
+    };
 
-    // create a new sandbox with sandbox factory
     try {
+      // Throttle concurrent loads to prevent OOM from dogpile bursts. The wait
+      // is inside the try so a throwing or cancelled acquire rolls back the
+      // claim above instead of orphaning a LOADING entry that would block every
+      // future load of this id.
+      if (loadSemaphoreEnabled_) {
+        co_await loadSemaphore_.co_wait();
+        semaphoreAcquired = true;
+      }
+
       XLOG(INFO) << "loading sandbox " << manifoldId;
 
       const auto start = std::chrono::steady_clock::now();
@@ -84,7 +107,6 @@ class SandboxStore {
           manifoldId,
           elapsed.count());
 
-      // Save access time.
       lastAccess_.insert_or_assign(manifoldId, end);
 
       status_.assign_if_equal(
@@ -104,10 +126,7 @@ class SandboxStore {
   folly::coro::Task<std::shared_ptr<Sandbox>> getSandbox(
       std::string manifoldId) {
     auto sandbox = sandboxes_.at(manifoldId);
-
-    // Save access time.
-    const auto now = std::chrono::steady_clock::now();
-    lastAccess_.insert_or_assign(manifoldId, now);
+    lastAccess_.insert_or_assign(manifoldId, std::chrono::steady_clock::now());
     co_return sandbox;
   }
 
@@ -167,8 +186,10 @@ class SandboxStore {
   }
 
   std::chrono::steady_clock::duration inactiveSandboxTimeout_;
-  // Dedicated thread pool for sandbox loading and background maintenance,
-  // separate from the Thrift serving thread pool.
+  folly::fibers::Semaphore loadSemaphore_;
+  bool loadSemaphoreEnabled_;
+  // Separate executor so heavy sandbox loads don't starve Thrift serving
+  // threads.
   std::shared_ptr<folly::Executor> executor_;
   SandboxFactory factory_;
   facebook::rebalancer::materializer::
