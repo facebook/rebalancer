@@ -21,18 +21,49 @@
 
 #include <fmt/core.h>
 #include <folly/FileUtil.h>
+#include <gflags/gflags.h>
 
 #include <stdexcept>
 #include <utility>
 
+DEFINE_string(
+    bundle_dir,
+    "",
+    "Base directory prepended to relative bundle ids. When set, a manifoldId "
+    "like \"eightqueens.bundle\" is read from <bundle_dir>/eightqueens.bundle. "
+    "Bundle ids that are already absolute (start with '/') are used as-is. "
+    "Empty (the default) means the manifoldId is used verbatim as the path.");
+
 namespace facebook::rebalancer::explorer {
+
+namespace {
+
+// Maps a bundle id (manifoldId) to the file path to read. A relative id is
+// resolved under --bundle_dir so callers can pass a bare name like
+// "eightqueens.bundle"; absolute ids (and the empty-base-dir default) are used
+// verbatim. The id itself stays the SandboxStore cache key — only the on-disk
+// lookup is rewritten here.
+std::string resolveBundlePath(const std::string& manifoldId) {
+  if (FLAGS_bundle_dir.empty() || manifoldId.empty() ||
+      manifoldId.front() == '/') {
+    return manifoldId;
+  }
+  std::string base = FLAGS_bundle_dir;
+  while (base.size() > 1 && base.back() == '/') {
+    base.pop_back();
+  }
+  return fmt::format("{}/{}", base, manifoldId);
+}
+
+} // namespace
 
 folly::coro::Task<std::shared_ptr<ModelServer>> FileSandboxFactory::create(
     std::string manifoldId) {
+  const auto path = resolveBundlePath(manifoldId);
   std::string content;
-  if (!folly::readFile(manifoldId.c_str(), content)) {
+  if (!folly::readFile(path.c_str(), content)) {
     throw std::runtime_error(
-        fmt::format("Unable to read bundle from {}", manifoldId));
+        fmt::format("Unable to read bundle from {}", path));
   }
   // Bundles on disk use the same format as Manifold (zstd-compressed Binary).
   auto bundle =

@@ -22,8 +22,9 @@
 # bases build first.
 #
 # The bundle-seeder runs once, populates the shared "bundles" volume, and exits.
-# The Explorer mounts that volume read-only at /bundles, so a client can load an
-# example with manifoldId "/bundles/vertex_cover.bundle" (and similar).
+# The Explorer mounts that volume read-only at /bundles and is started with
+# --bundle_dir /bundles, so a client can load an example by bare name
+# ("vertex_cover.bundle") or full path ("/bundles/vertex_cover.bundle").
 #
 # Only the proxy port (8081) is published; the backend stays internal.
 services:
@@ -68,7 +69,10 @@ services:
         condition: service_completed_successfully
     volumes:
       - bundles:/bundles:ro
-    command: ["--port", "8080"]
+    # --bundle_dir lets clients load examples by bare name ("eightqueens.bundle")
+    # instead of the full mount path ("/bundles/eightqueens.bundle"); absolute
+    # ids still work. Must match the read-only mount above.
+    command: ["--port", "8080", "--bundle_dir", "/bundles"]
 
   proxy:
     image: rebalancer-explorer-proxy
