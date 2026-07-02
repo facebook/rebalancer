@@ -16,6 +16,9 @@ class ExplorerServerHandler : public RebalancerExplorerHandlerBase {
   folly::coro::Task<std::unique_ptr<SandboxStatusResponse>> co_getSandboxStatus(
       std::unique_ptr<Handle> handle) override;
 
+  folly::coro::Task<std::unique_ptr<ServerStatus>> co_getServerStatus()
+      override;
+
   folly::coro::Task<std::shared_ptr<const ModelServer>> getBackend(
       const Handle& /* handle */) override;
 

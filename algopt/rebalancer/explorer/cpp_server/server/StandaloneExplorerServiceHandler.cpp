@@ -16,6 +16,7 @@
 
 #include "rebalancer/explorer/cpp_server/server/StandaloneExplorerServiceHandler.h"
 
+#include "algopt/rebalancer/algopt_common/MemoryStats.h"
 #include "rebalancer/explorer/if/gen-cpp2/explorer_types.h"
 
 #include <utility>
@@ -52,6 +53,21 @@ StandaloneExplorerServiceHandler::co_getSandboxStatus(
     std::unique_ptr<Handle> handle) {
   auto response = std::make_unique<SandboxStatusResponse>();
   response->status() = co_await store_.getStatus(*handle->manifoldId());
+  co_return response;
+}
+
+folly::coro::Task<std::unique_ptr<ServerStatus>>
+StandaloneExplorerServiceHandler::co_getServerStatus() {
+  auto response = std::make_unique<ServerStatus>();
+
+  const auto counts = store_.getSandboxCounts();
+  response->loadingSandboxCount() = counts.loading;
+  response->loadedSandboxCount() = counts.loaded;
+
+  const auto memoryStats = algopt::MemoryStats::get();
+  response->freeMemoryBytes() = memoryStats.freeMemoryBytes;
+  response->usedMemoryBytes() = memoryStats.usedMemoryBytes;
+
   co_return response;
 }
 

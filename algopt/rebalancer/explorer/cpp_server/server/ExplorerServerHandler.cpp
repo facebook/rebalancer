@@ -28,4 +28,10 @@ ExplorerServerHandler::co_getSandboxStatus(std::unique_ptr<Handle> /*handle*/) {
       "co_getSandboxStatus() is not supported in local server");
 }
 
+folly::coro::Task<std::unique_ptr<ServerStatus>>
+ExplorerServerHandler::co_getServerStatus() {
+  throw std::runtime_error(
+      "co_getServerStatus() is not supported in local server");
+}
+
 } // namespace facebook::rebalancer::explorer

@@ -521,6 +521,17 @@ struct ExportTableRequest {
 }
 
 ////
+// Server Status
+////
+
+struct ServerStatus {
+  1: i64 loadingSandboxCount;
+  2: i64 loadedSandboxCount;
+  3: i64 freeMemoryBytes;
+  4: i64 usedMemoryBytes;
+}
+
+////
 // Service
 ////
 
@@ -531,6 +542,10 @@ service RebalancerExplorerService {
   HandleResponse getHandle(1: HandleRequest request);
 
   SandboxStatusResponse getSandboxStatus(1: Handle handle);
+
+  // Server-level status: sandbox counts and memory usage. Used for server
+  // selection when deciding where to load a new sandbox.
+  ServerStatus getServerStatus();
 
   ProblemMetadataResponse getProblemMetadataV2(1: Handle handle);
 

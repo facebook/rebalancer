@@ -44,6 +44,9 @@ class RebalancerExplorerHandlerBase
   folly::coro::Task<std::unique_ptr<SandboxStatusResponse>> co_getSandboxStatus(
       std::unique_ptr<Handle> handle) override = 0;
 
+  folly::coro::Task<std::unique_ptr<ServerStatus>> co_getServerStatus()
+      override = 0;
+
   folly::coro::Task<std::unique_ptr<ProblemMetadataResponse>>
   co_getProblemMetadataV2(std::unique_ptr<Handle> handle) override;
 
