@@ -1339,6 +1339,11 @@ struct CapacityWithGroupPresenceSpec {
 
   // Controls the continuous penalty formula used by local search.
   18: ContinuousPenaltyType continuousPenaltyType = ContinuousPenaltyType.NORMALIZED_CONTINUOUS_UTILIZATION;
+
+  // For each listed (scope item -> groups), the group's presence-weight floor is
+  // always honored, even when its actual utilization is 0. Empty means no such
+  // groups.
+  19: map<string, list<string>> scopeItemToAlwaysPresentGroups;
 }
 
 struct DiversifyWithinScopeItemSpec {

@@ -17,6 +17,9 @@
 #include "algopt/rebalancer/materializer/spec_builder/SpecBuilder.h"
 #include "algopt/rebalancer/materializer/utils/LimitWrapper.h"
 
+#include <folly/container/F14Map.h>
+#include <folly/container/F14Set.h>
+
 namespace facebook::rebalancer::materializer {
 /**
 Given a scope `S`, dimension `D`, partition `P`, and `groupToPresenceWeight`
@@ -121,6 +124,10 @@ class CapacityWithGroupPresenceSpecBuilder : public SpecBuilder {
   const std::vector<entities::GroupId>& getRelevantMainGroupIds() const;
   const std::vector<entities::ScopeItemId>& getRelevantMainScopeItemIds() const;
 
+  bool isGroupAlwaysPresent(
+      entities::ScopeItemId aggregationScopeItemId,
+      entities::GroupId aggregationGroupId) const;
+
   const interface::CapacityWithGroupPresenceSpec spec_;
   const bool needsContinuousExpressions_;
   const entities::ScopeId mainScopeId_;
@@ -135,6 +142,9 @@ class CapacityWithGroupPresenceSpecBuilder : public SpecBuilder {
   const LimitWrapper capacityLimits_;
   const LimitWrapper groupToPresenceWeight_;
   const LimitWrapper groupToExtraAdditivePenalty_;
+  const folly::
+      F14FastMap<entities::ScopeItemId, folly::F14FastSet<entities::GroupId>>
+          scopeItemToAlwaysPresentGroups_;
   const std::optional<std::vector<entities::ScopeItemId>>
       filteredMainScopeItemIds_;
   const std::optional<std::vector<entities::GroupId>> filteredGroupIds_;
