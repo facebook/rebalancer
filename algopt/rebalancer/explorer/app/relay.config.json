@@ -16,15 +16,6 @@
     ".next/**"
   ],
   "artifactDirectory": "./lib/components/__generated__/",
-  "persistConfig": {
-    "url": "https://interngraph.intern.facebook.com/graphql/persist",
-    "params": {
-      "app": "155160167952447",
-      "schema": "intern",
-      "token": "AeOj5q69ZRZ4IuYc0CU",
-      "validate": "false"
-    }
-  },
   "schemaConfig": {
     "connectionInterface": {
       "cursor": "cursor",

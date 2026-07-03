@@ -14,6 +14,11 @@ Dockerfile*
 docker-compose*.yml
 .dockerignore
 
+# Next.js explorer UI — not part of the C++ build. Carved out of algopt/ (which
+# the build otherwise needs) so edits here don't invalidate `COPY . /src` in
+# Dockerfile.base and trigger a full C++ recompile. node_modules is covered below.
+algopt/rebalancer/explorer/app
+
 # Docs and the docusaurus website — not part of the C++ build.
 docs
 website

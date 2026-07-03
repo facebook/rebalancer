@@ -1,33 +1,40 @@
-# rebalancer_explorer
+# Rebalancer Explorer
 
-A Next.js application built with the Nest platform.
+The Rebalancer Explorer web UI — a Next.js Backend-for-Frontend (BFF) for
+inspecting and analyzing Rebalancer runs. It reaches the C++ backend only
+through the JSON proxy (`POST /v2/<method>`), so it needs nothing beyond the
+backend and the proxy to run.
 
-## Quick Start
+## Run with docker-compose (recommended)
 
-```bash
-# Install dependencies and start development
-nest dev
-```
-
-Open [http://localhost:3000](http://localhost:3000) to see your app.
-
-**Devserver users:** Use SSH port forwarding to access from your Mac:
-```bash
-ssh -L 3000:localhost:3000 <your-devserver>
-```
-
-Start editing `app/page.tsx` - the page auto-updates as you edit.
-
-## Deploy
+From the repository root, this brings up the backend, the proxy, and this app:
 
 ```bash
-nest build --push
+REBALANCER_PROXY_AUTH_TOKEN=secret docker compose up --build
 ```
 
-For deployment options, monitoring, and troubleshooting, see the [Official Wiki](https://www.internalfb.com/wiki/Nest).
+Then open [http://localhost:3000](http://localhost:3000).
 
-## Resources
+## Run locally with Node
 
-- **[Nest Docs](../../docs/README.md)** - CLI reference, workflows, deployment, and guides
-- **[Official Wiki](https://www.internalfb.com/wiki/Nest/)** - Comprehensive documentation
-- **[Nest Community](https://fb.workplace.com/groups/2546929939009577)** - Get help and support
+```bash
+# package.oss.json is this app's dependency manifest — use it as package.json.
+cp package.oss.json package.json
+yarn install
+REBALANCER_PROXY_URL=http://localhost:8081 \
+REBALANCER_PROXY_TOKEN=secret \
+yarn build && yarn start
+# or for development: ... yarn dev
+```
+
+> **Note:** if `yarn install` cannot resolve a package, regenerate `yarn.lock`
+> against the public npm registry. The `Dockerfile` handles this automatically
+> for the container build.
+
+## Configuration
+
+| Env var | Purpose |
+| --- | --- |
+| `REBALANCER_PROXY_URL` | Base URL of the JSON proxy (e.g. `http://localhost:8081`). Required — the app reaches the backend through the proxy. |
+| `REBALANCER_PROXY_TOKEN` | Bearer token for `/v2/*` (omit if the proxy runs with `--disable_auth`). |
+| `NEXT_PUBLIC_OSS_USER` | Display name shown in the UI (build-time; default `Explorer User`). |

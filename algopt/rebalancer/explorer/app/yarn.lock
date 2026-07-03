@@ -1582,9 +1582,9 @@
   integrity sha512-baTzDFsOziXBOX1/NP3ojb8iF2lq4FJkmFo8U6d1fdX2hKj+4m7q24P90TFtWdnauR3+g4Lif7RYyVLwsXgZPQ==
 
 "@nest/graphql-thrift@dev":
-  version "0.1.0-dev.9"
-  resolved "https://registry.facebook.net/@nest/graphql-thrift/-/graphql-thrift-0.1.0-dev.9.tgz#648b91b538a27a1296a29c71ef28a6160262e6fe"
-  integrity sha512-oKmAm402Yx4z/V4HPn1witTtizOAB4+vjsDOF491XkZ42Oa+d+KGfQOLyZqpJSUGCuf7og59kbDUtOs14+wJsQ==
+  version "0.1.0-dev.8"
+  resolved "https://registry.facebook.net/@nest/graphql-thrift/-/graphql-thrift-0.1.0-dev.8.tgz#67c684eda148a919131574608de6061590972ef7"
+  integrity sha512-+FSiULMMIo6SMt4csDRzNiSYrS3BPbJqHF5qMTUSubeQ9oZJ++1cYE3suIVgv+yo6qRrXBEVcp4cSx6NhLvIWg==
   dependencies:
     "@nest/justknobs" dev
     "@nest/thrift-proxy" dev

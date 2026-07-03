@@ -100,5 +100,26 @@ services:
       # Local testing only: bypass bearer-token auth. Remove for any real use.
       - "--disable_auth"
 
+  # The Next.js BFF (Backend-For-Frontend). Reaches the backend only through the
+  # proxy's HTTP/JSON contract, never Thrift directly — so it runs anywhere Node
+  # runs, with no Meta-internal dependencies. Browse to http://localhost:3000.
+  app:
+    image: rebalancer-explorer-app
+    build:
+      # Context is the app directory; its Dockerfile builds and serves the app.
+      context: algopt/rebalancer/explorer/app
+      provenance: false
+      sbom: false
+    depends_on:
+      - proxy
+    ports:
+      - "3000:3000"
+    environment:
+      # Server-side base URL of the JSON proxy (the BFF's only backend door).
+      REBALANCER_PROXY_URL: "http://proxy:8081"
+      # Bearer token forwarded on every /v2/* call. Must match the proxy's token;
+      # harmless when the proxy runs with --disable_auth (as it does above).
+      REBALANCER_PROXY_TOKEN: "${REBALANCER_PROXY_AUTH_TOKEN}"
+
 volumes:
   bundles:
