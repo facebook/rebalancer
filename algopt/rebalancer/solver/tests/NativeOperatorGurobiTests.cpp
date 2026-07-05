@@ -62,12 +62,12 @@ ExprPtr containerLoad(
     const Assignment& assignment,
     int containerIdx,
     int nObjects) {
-  auto load = const_expr(0, uni);
+  auto load = const_expr(0, *uni);
   const auto contId =
       uni->getContainerId(fmt::format("container{}", containerIdx));
   for (const auto i : folly::irange(nObjects)) {
     const auto objId = uni->getObjectId(fmt::format("object{}", i));
-    load += variable(objId, contId, uni, assignment);
+    load += variable(objId, contId, *uni, assignment);
   }
   return load;
 }
@@ -112,9 +112,9 @@ TEST_F(NativeOperatorGurobiTests, NativeQuadratic_Square) {
   auto buildSquareProblem = [&]() {
     auto uni = TestUniverse().build(kN, 2);
     const Assignment assignment(uni->getContainers().getInitialAssignment());
-    auto obj = square(containerLoad(uni, assignment, 0, kN), uni) +
-        square(containerLoad(uni, assignment, 1, kN), uni);
-    return packer::tests::createTestProblem(uni, {obj}, const_expr(0, uni));
+    auto obj = square(containerLoad(uni, assignment, 0, kN)) +
+        square(containerLoad(uni, assignment, 1, kN));
+    return packer::tests::createTestProblem(uni, {obj}, const_expr(0, *uni));
   };
 
   // Baseline: approximation path.
@@ -143,9 +143,9 @@ TEST_F(NativeOperatorGurobiTests, NativeQuadratic_Power) {
   auto buildPowerProblem = [&]() {
     auto uni = TestUniverse().build(kN, 2);
     const Assignment assignment(uni->getContainers().getInitialAssignment());
-    auto obj = power(containerLoad(uni, assignment, 0, kN), 2, uni) +
-        power(containerLoad(uni, assignment, 1, kN), 2, uni);
-    return packer::tests::createTestProblem(uni, {obj}, const_expr(0, uni));
+    auto obj = power(containerLoad(uni, assignment, 0, kN), 2) +
+        power(containerLoad(uni, assignment, 1, kN), 2);
+    return packer::tests::createTestProblem(uni, {obj}, const_expr(0, *uni));
   };
 
   algopt::useGurobiNativeQuadratic() = false;
@@ -183,9 +183,9 @@ TEST_F(NativeOperatorGurobiTests, NativePwl) {
     auto uni = TestUniverse().build(kN, 2);
     const Assignment assignment(uni->getContainers().getInitialAssignment());
     const auto points = makePwlPoints();
-    auto obj = piecewise(points, containerLoad(uni, assignment, 0, kN), uni) +
-        piecewise(points, containerLoad(uni, assignment, 1, kN), uni);
-    return packer::tests::createTestProblem(uni, {obj}, const_expr(0, uni));
+    auto obj = piecewise(points, containerLoad(uni, assignment, 0, kN)) +
+        piecewise(points, containerLoad(uni, assignment, 1, kN));
+    return packer::tests::createTestProblem(uni, {obj}, const_expr(0, *uni));
   };
 
   algopt::useGurobiNativePwl() = false;
@@ -213,11 +213,11 @@ TEST_F(NativeOperatorGurobiTests, NativeMax) {
   auto buildMaxProblem = [&]() {
     auto uni = TestUniverse().build(kN, 2);
     const Assignment assignment(uni->getContainers().getInitialAssignment());
-    auto obj =
-        max(containerLoad(uni, assignment, 0, kN),
-            containerLoad(uni, assignment, 1, kN),
-            uni);
-    return packer::tests::createTestProblem(uni, {obj}, const_expr(0, uni));
+    auto obj = max(
+        {containerLoad(uni, assignment, 0, kN),
+         containerLoad(uni, assignment, 1, kN)},
+        *uni);
+    return packer::tests::createTestProblem(uni, {obj}, const_expr(0, *uni));
   };
 
   algopt::useGurobiNativeMax() = false;
@@ -247,14 +247,14 @@ TEST_F(NativeOperatorGurobiTests, NativeStep) {
   auto buildStepProblem = [&]() {
     auto uni = TestUniverse().build(kStepN, kStepK);
     const Assignment assignment(uni->getContainers().getInitialAssignment());
-    auto obj = const_expr(0, uni);
+    auto obj = const_expr(0, *uni);
     std::vector<ExprPtr> excesses;
     for (const auto k : folly::irange(kStepK)) {
       auto load = containerLoad(uni, assignment, k, kStepN);
-      obj = obj + step(load, uni);
+      obj = obj + step(load);
       excesses.push_back(load - kStepCap);
     }
-    auto constraint = max(excesses, uni);
+    auto constraint = max(excesses, *uni);
     return packer::tests::createTestProblem(uni, {obj}, constraint);
   };
 

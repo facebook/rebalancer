@@ -21,9 +21,9 @@
 # CMakeLists.txt.
 set -euo pipefail
 
-brew install llvm
-export CC=/opt/homebrew/opt/llvm/bin/clang
-export CXX=/opt/homebrew/opt/llvm/bin/clang++
+brew install llvm@20
+export CC=/opt/homebrew/opt/llvm@20/bin/clang
+export CXX=/opt/homebrew/opt/llvm@20/bin/clang++
 $CXX --version
 
 python3 build/fbcode_builder/getdeps.py --allow-system-packages \

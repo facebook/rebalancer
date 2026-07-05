@@ -108,8 +108,6 @@ services:
     build:
       # Context is the app directory; its Dockerfile builds and serves the app.
       context: algopt/rebalancer/explorer/app
-      provenance: false
-      sbom: false
     depends_on:
       - proxy
     ports:
