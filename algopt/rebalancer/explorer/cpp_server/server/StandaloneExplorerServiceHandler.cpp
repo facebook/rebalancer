@@ -40,7 +40,8 @@ StandaloneExplorerServiceHandler::co_getHandle(
   auto response = std::make_unique<HandleResponse>();
   auto& handle = *response->handle();
   // Start loading asynchronously; the client polls getSandboxStatus().
-  store_.startLoadSandbox(*request->manifoldId());
+  store_.startLoadSandbox(
+      *request->manifoldId(), inactiveSandboxTtlFromRequest(*request));
   handle.manifoldId() = *request->manifoldId();
   handle.host() = host_;
   handle.port() = port_;

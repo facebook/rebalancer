@@ -449,6 +449,11 @@ struct Handle {
 
 struct HandleRequest {
   1: string manifoldId;
+  // Idle TTL in seconds. Non-positive values use the 1-hour default; huge
+  // values are clamped. getHandle only raises an existing sandbox's TTL.
+  2: i64 ttlSeconds = 3600;
+  // Caller label for logs; empty when unset.
+  3: string clientId;
 }
 
 struct HandleResponse {

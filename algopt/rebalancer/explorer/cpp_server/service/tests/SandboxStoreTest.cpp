@@ -9,6 +9,8 @@
 
 #include <atomic>
 #include <chrono>
+#include <cstdint>
+#include <limits>
 #include <string>
 #include <thread>
 #include <vector>
@@ -62,8 +64,7 @@ using TestSandboxStore =
 
 constexpr int kMaxConcurrentLoads = 2;
 
-// Polls `done` until it holds or a safety bound elapses; returns whether it
-// held.
+// Polls detached async work with a safety bound.
 template <typename Predicate>
 bool waitUntil(Predicate done) {
   constexpr int kMaxPolls = 500; // 500 * 10ms = 5s safety bound.
@@ -71,12 +72,34 @@ bool waitUntil(Predicate done) {
     if (done()) {
       return true;
     }
-    // Bounded poll for detached async loads to settle; the 5s cap keeps it
-    // non-flaky, and the store exposes no condition variable to wait on.
+    // No condition variable is exposed for detached loads.
     // @lint-ignore CLANGTIDY facebook-hte-BadCall-sleep_for
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
   }
   return done();
+}
+
+bool waitUntilLoaded(TestSandboxStore& store, const std::string& id) {
+  return waitUntil([&]() {
+    return folly::coro::blockingWait(store.getStatus(id)) ==
+        FakeSandboxStatus::LOADED;
+  });
+}
+
+FakeSandboxStatus statusOf(TestSandboxStore& store, const std::string& id) {
+  return folly::coro::blockingWait(store.getStatus(id));
+}
+
+// Short TTL expires within tests; long TTL does not.
+constexpr auto kShortTtl = std::chrono::milliseconds(20);
+constexpr auto kLongTtl = std::chrono::seconds(10);
+constexpr auto kPastShortTtl = std::chrono::milliseconds(100);
+
+// Drive eviction without waiting for the background sweep.
+void sleepThenSweep(TestSandboxStore& store) {
+  // @lint-ignore CLANGTIDY facebook-hte-BadCall-sleep_for
+  std::this_thread::sleep_for(kPastShortTtl);
+  store.dropInactiveSandboxesForTesting();
 }
 
 TEST(SandboxStoreTest, CapsConcurrentLoads) {
@@ -100,8 +123,7 @@ TEST(SandboxStoreTest, CapsConcurrentLoads) {
   });
 
   ASSERT_TRUE(allLoaded);
-  // Exactly the cap: matching it (vs a serialized peak of 1) shows the
-  // semaphore both limits concurrency and still admits the parallelism.
+  // Shows the semaphore limits without serializing.
   EXPECT_EQ(FakeSandboxFactory::peakConcurrentLoads(), kMaxConcurrentLoads);
 }
 
@@ -109,7 +131,7 @@ TEST(SandboxStoreTest, DedupesConcurrentLoadsOfSameId) {
   FakeSandboxFactory::resetCounters();
   TestSandboxStore store(kDefaultInactiveSandboxTimeout, kMaxConcurrentLoads);
 
-  // A dogpile of concurrent requests for the same id must load it exactly once.
+  // Same-id dogpiles must load once.
   constexpr int kDogpile = 8;
   for (int i = 0; i < kDogpile; ++i) {
     store.startLoadSandbox("sandbox_x");
@@ -122,6 +144,76 @@ TEST(SandboxStoreTest, DedupesConcurrentLoadsOfSameId) {
 
   ASSERT_TRUE(loaded);
   EXPECT_EQ(1, FakeSandboxFactory::totalLoads());
+}
+
+TEST(SandboxStoreTest, InactiveSandboxTtlFromRequestParsesRequestTtl) {
+  HandleRequest request;
+
+  EXPECT_EQ(
+      kDefaultInactiveSandboxTimeout, inactiveSandboxTtlFromRequest(request));
+
+  request.ttlSeconds() = 7;
+  EXPECT_EQ(std::chrono::seconds(7), inactiveSandboxTtlFromRequest(request));
+
+  request.ttlSeconds() = 0;
+  EXPECT_EQ(
+      kDefaultInactiveSandboxTimeout, inactiveSandboxTtlFromRequest(request));
+
+  request.ttlSeconds() = -1;
+  EXPECT_EQ(
+      kDefaultInactiveSandboxTimeout, inactiveSandboxTtlFromRequest(request));
+
+  request.ttlSeconds() = std::numeric_limits<int64_t>::max();
+  EXPECT_EQ(kMaxInactiveSandboxTtl, inactiveSandboxTtlFromRequest(request));
+}
+
+TEST(SandboxStoreTest, EvictsUsingPerSandboxTtl) {
+  FakeSandboxFactory::resetCounters();
+  TestSandboxStore store(kDefaultInactiveSandboxTimeout);
+
+  store.startLoadSandbox("short", kShortTtl);
+  store.startLoadSandbox("long", kLongTtl);
+  ASSERT_TRUE(waitUntilLoaded(store, "short"));
+  ASSERT_TRUE(waitUntilLoaded(store, "long"));
+
+  sleepThenSweep(store);
+
+  // Only the short-TTL sandbox expired.
+  EXPECT_EQ(FakeSandboxStatus::NOT_LOADED, statusOf(store, "short"));
+  EXPECT_EQ(FakeSandboxStatus::LOADED, statusOf(store, "long"));
+}
+
+TEST(SandboxStoreTest, TtlIsRaisedNotLowered) {
+  FakeSandboxFactory::resetCounters();
+  TestSandboxStore store(kDefaultInactiveSandboxTimeout);
+
+  // Later longer TTL keeps it alive.
+  store.startLoadSandbox("raised", kShortTtl);
+  ASSERT_TRUE(waitUntilLoaded(store, "raised"));
+  store.startLoadSandbox("raised", kLongTtl);
+
+  // Later shorter TTL must not shorten lifetime.
+  store.startLoadSandbox("kept", kLongTtl);
+  ASSERT_TRUE(waitUntilLoaded(store, "kept"));
+  store.startLoadSandbox("kept", kShortTtl);
+
+  sleepThenSweep(store);
+
+  EXPECT_EQ(FakeSandboxStatus::LOADED, statusOf(store, "raised"));
+  EXPECT_EQ(FakeSandboxStatus::LOADED, statusOf(store, "kept"));
+}
+
+TEST(SandboxStoreTest, FallsBackToDefaultTtlWhenUnset) {
+  FakeSandboxFactory::resetCounters();
+  // Unset TTL uses the store default.
+  TestSandboxStore store(kShortTtl);
+
+  store.startLoadSandbox("no_ttl");
+  ASSERT_TRUE(waitUntilLoaded(store, "no_ttl"));
+
+  sleepThenSweep(store);
+
+  EXPECT_EQ(FakeSandboxStatus::NOT_LOADED, statusOf(store, "no_ttl"));
 }
 
 } // namespace facebook::rebalancer::explorer
