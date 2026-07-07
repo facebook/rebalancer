@@ -125,8 +125,8 @@ jobs:
         #     in transitively by Boost can be resolved.
         CIBW_ENVIRONMENT_MACOS: >-
           MACOSX_DEPLOYMENT_TARGET=14.0
-          CC=/opt/homebrew/opt/llvm@20/bin/clang
-          CXX=/opt/homebrew/opt/llvm@20/bin/clang++
+          CC=/opt/homebrew/opt/llvm/bin/clang
+          CXX=/opt/homebrew/opt/llvm/bin/clang++
           LIBRARY_PATH=/opt/homebrew/opt/icu4c@78/lib
 
         CIBW_BEFORE_ALL_MACOS: bash tools/wheels/before_all_macos.sh
