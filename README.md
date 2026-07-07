@@ -1,6 +1,6 @@
 # Rebalancer
 
-<img src="logo.svg" alt="Rebalancer Logo" width="300">
+<img src="https://raw.githubusercontent.com/facebook/rebalancer/main/logo.svg" alt="Rebalancer Logo" width="300">
 
 Rebalancer is an assignment solver library that provides a generic and intuitive API for defining any assignment problem and the ability to optimize the assignment given a variety of implemented algorithms.
 
