@@ -19,10 +19,6 @@
 #include "algopt/rebalancer/solver/expressions/GroupRoutingRing.h"
 #include "algopt/rebalancer/solver/summary/metrics/MetricCollection.h"
 
-#ifndef REBALANCER_OSS_BUILD
-#include "rebalancer/explorer/cpp_server/lib/Utils.h"
-#endif
-
 namespace facebook::rebalancer {
 
 using GroupRoutingTrafficKey =
@@ -37,10 +33,6 @@ class GroupRoutingTrafficMetrics : public MetricCollectionImpl<
       std::shared_ptr<GroupRoutingRing> expr,
       entities::RoutingConfigId routingConfigId,
       entities::GroupId groupId);
-
-#ifndef REBALANCER_OSS_BUILD
-  virtual explorer::Table tabulate(const TabulateConfig& config) const override;
-#endif
 
   virtual interface::thrift::MetricCollectionType getType() const override;
 

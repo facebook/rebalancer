@@ -12,6 +12,7 @@
 #include "rebalancer/explorer/cpp_server/lib/FilterModel.h"
 #include "rebalancer/explorer/cpp_server/lib/GroupModel.h"
 #include "rebalancer/explorer/cpp_server/lib/LoadModel.h"
+#include "rebalancer/explorer/cpp_server/lib/MetricsTabulator.h"
 #include "rebalancer/explorer/if/gen-cpp2/explorer_types.h"
 
 #include <folly/executors/CPUThreadPoolExecutor.h>
@@ -1070,13 +1071,6 @@ const Table& ModelServer::tablulateMetricCollection(
     interface::thrift::MetricCollectionType metricType,
     const Assignment& assignmentA,
     const Assignment& assignmentB) const {
-#ifdef REBALANCER_OSS_BUILD
-  std::ignore = metricType;
-  std::ignore = assignmentA;
-  std::ignore = assignmentB;
-  throw std::runtime_error(
-      "Tabulating metric collections is not supported in OSS Explorer");
-#else
   // Ensure metrics->fullApply() (and the bundled initObjectiveNameToExpr)
   // have completed before tabulating.
   waitForMetricsAndObjectiveInit();
@@ -1087,14 +1081,14 @@ const Table& ModelServer::tablulateMetricCollection(
         const auto& orchestrator = problem_->getOrchestrator();
         const auto& universe = problem_->getUniverse();
         const auto& metrics = *materialized_->metrics;
-        return std::make_unique<const Table>(metrics.tabulate(
+        return std::make_unique<const Table>(tabulateMetricCollection(
+            metrics,
             metricType,
             {.universe = universe,
              .orchestrator = orchestrator,
              .changeSetA = changeSetA,
              .changeSetB = changeSetB}));
       });
-#endif
 }
 
 Result ModelServer::evaluateMetricCollection(

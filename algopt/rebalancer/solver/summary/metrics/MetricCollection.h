@@ -26,17 +26,7 @@
 #include <folly/Synchronized.h>
 #include <folly/Utility.h>
 
-#ifndef REBALANCER_OSS_BUILD
-#include "rebalancer/explorer/cpp_server/lib/Utils.h"
-#endif
-
 namespace facebook::rebalancer {
-struct TabulateConfig {
-  const entities::Universe& universe;
-  const Orchestrator& orchestrator;
-  const ChangeSet& changeSetA;
-  const ChangeSet& changeSetB;
-};
 
 class MetricCollection {
  public:
@@ -54,10 +44,6 @@ class MetricCollection {
 
   virtual interface::thrift::MetricCollectionType getType() const = 0;
 
-#ifndef REBALANCER_OSS_BUILD
-  virtual explorer::Table tabulate(const TabulateConfig& config) const = 0;
-#endif
-
   virtual void pushRootTo(std::vector<Expression*>& exprs) const = 0;
 
   virtual void buildRootExpr(
@@ -67,12 +53,12 @@ class MetricCollection {
 
   virtual ~MetricCollection() = default;
 
+  static std::string toString(materializer::UtilMetric utilMetric);
+
  protected:
   virtual void addToSummary(
       const entities::Universe& universe,
       interface::thrift::Metrics& metricsSummary) const = 0;
-
-  static std::string toString(materializer::UtilMetric utilMetric);
 
   static void throwOnInsertFailure(
       bool insertSuccess,
@@ -114,6 +100,14 @@ class MetricCollectionImpl : public MetricCollection {
     }
 
     return rootExpr_.get();
+  }
+
+  template <typename Callback>
+  void forEachMetricExpressionForTabulation(Callback&& callback) const {
+    const auto rLockedCollection = innerCollection_.rlock();
+    for (const auto& [key, value] : *rLockedCollection) {
+      callback(key, value);
+    }
   }
 
  protected:

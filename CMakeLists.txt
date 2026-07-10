@@ -475,6 +475,7 @@ if(REBALANCER_BUILD_EXPLORER)
         ${_exp_cpp}/lib/FilterModel.cpp
         ${_exp_cpp}/lib/GroupModel.cpp
         ${_exp_cpp}/lib/LoadModel.cpp
+        ${_exp_cpp}/lib/MetricsTabulator.cpp
         ${_exp_cpp}/lib/Utils.cpp
         ${_exp_cpp}/server/ExplorerServerHandler.cpp
         ${_exp_cpp}/server/ModelServer.cpp
@@ -774,7 +775,8 @@ if(NOT SKBUILD)
     # algopt/ (e.g. configerator/structs/thrift_explorer/). The generated C++
     # headers for our .thrift files include these transitively, so SDK users
     # need them to compile against the installed headers.
-    install(DIRECTORY ${THRIFT_OUTPUT_DIR}/configerator/ DESTINATION include/configerator
+    install(DIRECTORY ${THRIFT_OUTPUT_DIR}/configerator/
+            DESTINATION include/configerator
             FILES_MATCHING PATTERN "*.h" PATTERN "*.tcc")
 
     # Smoke test binary, installed to bin/. INSTALL_RPATH lets it find the

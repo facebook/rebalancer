@@ -19,10 +19,6 @@
 #include "algopt/rebalancer/solver/expressions/Expression.h"
 #include "algopt/rebalancer/solver/summary/metrics/MetricCollection.h"
 
-#ifndef REBALANCER_OSS_BUILD
-#include "rebalancer/explorer/cpp_server/lib/Utils.h"
-#endif
-
 namespace facebook::rebalancer {
 
 using Percentile = std::optional<double>;
@@ -40,10 +36,6 @@ class GroupRoutingLatencyMetrics
       entities::RoutingConfigId routingConfigId,
       const interface::RoutingLatencyMetricInfo& latencyMetric,
       entities::GroupId groupId);
-
-#ifndef REBALANCER_OSS_BUILD
-  virtual explorer::Table tabulate(const TabulateConfig& config) const override;
-#endif
 
   virtual interface::thrift::MetricCollectionType getType() const override;
 

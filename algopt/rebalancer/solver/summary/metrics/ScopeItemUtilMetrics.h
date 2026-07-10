@@ -21,10 +21,6 @@
 #include "algopt/rebalancer/solver/expressions/ObjectPartitionLookup.h"
 #include "algopt/rebalancer/solver/summary/metrics/MetricCollection.h"
 
-#ifndef REBALANCER_OSS_BUILD
-#include "rebalancer/explorer/cpp_server/lib/Utils.h"
-#endif
-
 namespace facebook::rebalancer {
 
 using ScopeItemUtilKey = std::tuple<
@@ -45,10 +41,6 @@ class ScopeItemUtilMetrics : public MetricCollectionImpl<ScopeItemUtilKey> {
   void add(
       std::shared_ptr<ObjectPartitionLookupDefault> lookup,
       materializer::UtilMetric utilMetric);
-
-#ifndef REBALANCER_OSS_BUILD
-  virtual explorer::Table tabulate(const TabulateConfig& config) const override;
-#endif
 
   virtual interface::thrift::MetricCollectionType getType() const override;
 

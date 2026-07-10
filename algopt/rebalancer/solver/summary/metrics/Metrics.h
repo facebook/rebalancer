@@ -24,10 +24,6 @@
 
 #include <folly/Synchronized.h>
 
-#ifndef REBALANCER_OSS_BUILD
-#include "rebalancer/explorer/cpp_server/lib/Utils.h"
-#endif
-
 namespace facebook::rebalancer {
 
 class Metrics {
@@ -46,12 +42,6 @@ class Metrics {
   void fullApply(const Assignment& assignment) const;
 
   void pushAllExprsTo(std::vector<Expression*>& exprs) const;
-
-#ifndef REBALANCER_OSS_BUILD
-  explorer::Table tabulate(
-      interface::thrift::MetricCollectionType type,
-      const TabulateConfig& config) const;
-#endif
 
  private:
   explicit Metrics(
