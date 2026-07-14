@@ -50,12 +50,20 @@ class CapacityWithGroupPresenceSpecBuilder : public SpecBuilder {
   SpecParameters getSpecInfo() const override;
 
  private:
-  folly::coro::Task<std::vector<ConstraintInfo>>
-  unoptimizedScopeItemConstraints(ExpressionBuilder& expressionBuilder) const;
+  // The constraint utilization and its continuous-penalty utilization for a
+  // scope item (or group-in-scope-item).
+  struct UtilExprs {
+    ExprPtr util;
+    ExprPtr penaltyUtil = nullptr;
+  };
 
+  // Builds one constraint per scope item. `aggregationGroupIds` is set for the
+  // optimized path (fused per-scope-item util) and nullopt for the
+  // non-optimized fallback.
   folly::coro::Task<std::vector<ConstraintInfo>> scopeItemConstraints(
       ExpressionBuilder& expressionBuilder,
-      const entities::Set<entities::GroupId>& aggregationGroupIds) const;
+      const std::optional<entities::Set<entities::GroupId>>&
+          aggregationGroupIds) const;
 
   folly::coro::Task<std::vector<ConstraintInfo>> groupAndScopeItemConstraints(
       ExpressionBuilder& expressionBuilder) const;
@@ -65,54 +73,51 @@ class CapacityWithGroupPresenceSpecBuilder : public SpecBuilder {
       std::optional<entities::GroupId> mainGroupIdOpt,
       const ExprPtr& util) const;
 
-  folly::coro::Task<ExprPtr> getAdditionalPenaltyExpr(
+  ExprPtr getAdditionalPenaltyExpr(
       entities::ScopeItemId mainScopeItemId,
       std::optional<entities::GroupId> mainGroupIdOpt,
       ExpressionBuilder& expressionBuilder,
-      const std::optional<entities::Set<entities::GroupId>>&
-          aggregationGroupIds) const;
+      const ExprPtr& penaltyUtil) const;
 
-  folly::coro::Task<ExprPtr> getScopeItemUtil(
+  UtilExprs zeroUtilExprs() const;
+
+  static void addUtilExprs(UtilExprs& acc, UtilExprs contribution);
+
+  folly::coro::Task<UtilExprs> getScopeItemUtil(
       entities::ScopeItemId mainScopeItemId,
       ExpressionBuilder& expressionBuilder,
-      bool makeContinuousPenaltyTerm,
       const std::optional<entities::Set<entities::GroupId>>&
           aggregationGroupIds) const;
 
   bool shouldUseOptimizedPath() const;
 
-  ExprPtr buildOptimizedScopeItemUtilExprForStaticDimension(
+  UtilExprs buildOptimizedScopeItemUtilExprForStaticDimension(
       const entities::ScopeItemId& mainScopeItemId,
       ExpressionBuilder& expressionBuilder,
-      bool makeContinuousPenaltyTerm,
       const entities::Set<entities::GroupId>& aggregationGroupIds) const;
 
-  ExprPtr buildOptimizedScopeItemUtilExprForDynamicDimension(
+  UtilExprs buildOptimizedScopeItemUtilExprForDynamicDimension(
       const entities::ScopeItemId& mainScopeItemId,
       ExpressionBuilder& expressionBuilder,
-      bool makeContinuousPenaltyTerm,
       const entities::Set<entities::GroupId>& aggregationGroupIds) const;
 
   entities::Set<entities::GroupId> buildAggregationGroupIds(
       ExpressionBuilder& expressionBuilder) const;
 
-  ExprPtr createGroupUtilExpr(
+  UtilExprs createGroupUtilExpr(
       ExprPtr objectPartition,
       entities::ScopeItemId aggregationScopeItemId,
-      bool makeContinuousPenaltyTerm,
       const Assignment& initialAssignment) const;
 
-  folly::coro::Task<ExprPtr> getGroupUtilInMainScopeItem(
+  folly::coro::Task<UtilExprs> getGroupUtilInMainScopeItem(
       entities::GroupId mainGroupId,
       entities::ScopeItemId mainScopeItemId,
-      ExpressionBuilder& expressionBuilder,
-      bool makeContinuousPenaltyTerm) const;
+      ExpressionBuilder& expressionBuilder) const;
 
-  folly::coro::Task<ExprPtr> getGroupUtilContributionToScopeItemUtil(
+  folly::coro::Task<UtilExprs> getGroupUtilContributionToScopeItemUtil(
       entities::GroupId aggregationGroupId,
       entities::ScopeItemId aggregationScopeItemId,
-      ExpressionBuilder& expressionBuilder,
-      bool makeContinuousPenaltyTerm = false) const;
+      ExpressionBuilder& expressionBuilder) const;
 
   ExprPtr getWeightedExpr(
       ExprPtr& expr,

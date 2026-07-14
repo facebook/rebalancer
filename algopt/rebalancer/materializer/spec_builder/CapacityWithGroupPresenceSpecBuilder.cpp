@@ -208,11 +208,14 @@ CapacityWithGroupPresenceSpecBuilder::constraints(
     ExpressionBuilder& expressionBuilder) const {
   switch (*spec_.intent()) {
     case interface::CapacityWithGroupPresenceUsageIntent::PER_SCOPE_ITEM: {
+      // Aggregation groups are only needed by (and computed for) the optimized
+      // path.
+      std::optional<entities::Set<entities::GroupId>> aggregationGroupIds;
       if (shouldUseOptimizedPath()) {
-        co_return co_await scopeItemConstraints(
-            expressionBuilder, buildAggregationGroupIds(expressionBuilder));
+        aggregationGroupIds = buildAggregationGroupIds(expressionBuilder);
       }
-      co_return co_await unoptimizedScopeItemConstraints(expressionBuilder);
+      co_return co_await scopeItemConstraints(
+          expressionBuilder, aggregationGroupIds);
     }
     case interface::CapacityWithGroupPresenceUsageIntent::
         PER_GROUP_AND_SCOPE_ITEM:
@@ -221,51 +224,23 @@ CapacityWithGroupPresenceSpecBuilder::constraints(
 }
 
 folly::coro::Task<std::vector<ConstraintInfo>>
-CapacityWithGroupPresenceSpecBuilder::unoptimizedScopeItemConstraints(
-    ExpressionBuilder& expressionBuilder) const {
-  const auto& scopeItemIds = getRelevantMainScopeItemIds();
-  std::vector<ConstraintInfo> constraints;
-  constraints.reserve(scopeItemIds.size());
-  for (auto mainScopeItemId : scopeItemIds) {
-    auto scopeItemUtil = co_await getScopeItemUtil(
-        mainScopeItemId,
-        expressionBuilder,
-        /*makeContinuousPenaltyTerm=*/false,
-        /*aggregationGroupIds=*/std::nullopt);
-    auto constraintExpr = getConstraintExpr(
-        mainScopeItemId, /*mainGroupIdOpt=*/std::nullopt, scopeItemUtil);
-    auto additionalPenaltyExpr = co_await getAdditionalPenaltyExpr(
-        mainScopeItemId,
-        /*mainGroupIdOpt=*/std::nullopt,
-        expressionBuilder,
-        /*aggregationGroupIds=*/std::nullopt);
-    constraints.emplace_back(
-        std::move(constraintExpr), std::move(additionalPenaltyExpr));
-  }
-
-  co_return constraints;
-}
-
-folly::coro::Task<std::vector<ConstraintInfo>>
 CapacityWithGroupPresenceSpecBuilder::scopeItemConstraints(
     ExpressionBuilder& expressionBuilder,
-    const entities::Set<entities::GroupId>& aggregationGroupIds) const {
+    const std::optional<entities::Set<entities::GroupId>>& aggregationGroupIds)
+    const {
   const auto& scopeItemIds = getRelevantMainScopeItemIds();
   std::vector<ConstraintInfo> constraints;
   constraints.reserve(scopeItemIds.size());
   for (auto mainScopeItemId : scopeItemIds) {
     auto scopeItemUtil = co_await getScopeItemUtil(
-        mainScopeItemId,
-        expressionBuilder,
-        /*makeContinuousPenaltyTerm=*/false,
-        aggregationGroupIds);
+        mainScopeItemId, expressionBuilder, aggregationGroupIds);
     auto constraintExpr = getConstraintExpr(
-        mainScopeItemId, /*mainGroupIdOpt=*/std::nullopt, scopeItemUtil);
-    auto additionalPenaltyExpr = co_await getAdditionalPenaltyExpr(
+        mainScopeItemId, /*mainGroupIdOpt=*/std::nullopt, scopeItemUtil.util);
+    auto additionalPenaltyExpr = getAdditionalPenaltyExpr(
         mainScopeItemId,
         /*mainGroupIdOpt=*/std::nullopt,
         expressionBuilder,
-        aggregationGroupIds);
+        scopeItemUtil.penaltyUtil);
     constraints.emplace_back(
         std::move(constraintExpr), std::move(additionalPenaltyExpr));
   }
@@ -294,15 +269,13 @@ ExprPtr CapacityWithGroupPresenceSpecBuilder::getConstraintExpr(
   throw std::runtime_error("Unknown bound type");
 }
 
-folly::coro::Task<ExprPtr>
-CapacityWithGroupPresenceSpecBuilder::getAdditionalPenaltyExpr(
+ExprPtr CapacityWithGroupPresenceSpecBuilder::getAdditionalPenaltyExpr(
     entities::ScopeItemId mainScopeItemId,
     std::optional<entities::GroupId> mainGroupIdOpt,
-    ExpressionBuilder& expressionBuilder,
-    const std::optional<entities::Set<entities::GroupId>>& aggregationGroupIds)
-    const {
-  if (!needsContinuousExpressions_) {
-    co_return nullptr;
+    ExpressionBuilder& /*expressionBuilder*/,
+    const ExprPtr& penaltyUtil) const {
+  if (penaltyUtil == nullptr) {
+    return nullptr;
   }
 
   // if Util(G, S) is the utilization of a group G in a scopeItem S with
@@ -314,18 +287,6 @@ CapacityWithGroupPresenceSpecBuilder::getAdditionalPenaltyExpr(
   // is continuous, it remains positive when the constraint is broken, and
   // also incentivizes moves in the same direction as that is needed to fix
   // the broken constraint.
-
-  auto continuousUtil = mainGroupIdOpt.has_value()
-      ? co_await getGroupUtilInMainScopeItem(
-            *mainGroupIdOpt,
-            mainScopeItemId,
-            expressionBuilder,
-            /*makeContinuousPenaltyTerm=*/true)
-      : co_await getScopeItemUtil(
-            mainScopeItemId,
-            expressionBuilder,
-            /*makeContinuousPenaltyTerm=*/true,
-            aggregationGroupIds);
 
   const auto normFactor = [&]() -> double {
     switch (*spec_.continuousPenaltyType()) {
@@ -347,17 +308,16 @@ CapacityWithGroupPresenceSpecBuilder::getAdditionalPenaltyExpr(
   }();
 
   if (normFactor == 0.0) {
-    co_return nullptr;
+    return nullptr;
   }
 
   switch (*spec_.bound()) {
-    case interface::CapacityWithGroupPresenceBound::MAX: {
-      co_return normFactor == 1.0 ? continuousUtil : continuousUtil* normFactor;
-    }
+    case interface::CapacityWithGroupPresenceBound::MAX:
+      return normFactor == 1.0 ? penaltyUtil : penaltyUtil * normFactor;
     case interface::CapacityWithGroupPresenceBound::MIN: {
       auto expr =
-          getConstraintExpr(mainScopeItemId, mainGroupIdOpt, continuousUtil);
-      co_return normFactor == 1.0 ? expr : expr* normFactor;
+          getConstraintExpr(mainScopeItemId, mainGroupIdOpt, penaltyUtil);
+      return normFactor == 1.0 ? expr : expr * normFactor;
     }
   }
 }
@@ -377,17 +337,14 @@ CapacityWithGroupPresenceSpecBuilder::groupAndScopeItemConstraints(
         const auto mainGroupId = mainGroupIds[pairIdx % numGroups];
 
         auto groupScopeItemUtil = co_await getGroupUtilInMainScopeItem(
-            mainGroupId,
-            mainScopeItemId,
-            expressionBuilder,
-            /*makeContinuousPenaltyTerm=*/false);
-        auto constraintExpr =
-            getConstraintExpr(mainScopeItemId, mainGroupId, groupScopeItemUtil);
-        auto additionalPenaltyExpr = co_await getAdditionalPenaltyExpr(
+            mainGroupId, mainScopeItemId, expressionBuilder);
+        auto constraintExpr = getConstraintExpr(
+            mainScopeItemId, mainGroupId, groupScopeItemUtil.util);
+        auto additionalPenaltyExpr = getAdditionalPenaltyExpr(
             mainScopeItemId,
             mainGroupId,
             expressionBuilder,
-            /*aggregationGroupIds=*/std::nullopt);
+            groupScopeItemUtil.penaltyUtil);
 
         constraints[pairIdx] = ConstraintInfo{
             std::move(constraintExpr), std::move(additionalPenaltyExpr)};
@@ -396,44 +353,52 @@ CapacityWithGroupPresenceSpecBuilder::groupAndScopeItemConstraints(
   co_return constraints;
 }
 
-folly::coro::Task<ExprPtr>
+CapacityWithGroupPresenceSpecBuilder::UtilExprs
+CapacityWithGroupPresenceSpecBuilder::zeroUtilExprs() const {
+  // `penaltyUtil` is not needed if `needsContinuousExpressions_` is false.
+  return UtilExprs{
+      .util = const_expr(0, *universe_),
+      .penaltyUtil =
+          needsContinuousExpressions_ ? const_expr(0, *universe_) : nullptr};
+}
+
+void CapacityWithGroupPresenceSpecBuilder::addUtilExprs(
+    UtilExprs& acc,
+    UtilExprs contribution) {
+  acc.util += std::move(contribution.util);
+  if (acc.penaltyUtil != nullptr && contribution.penaltyUtil != nullptr) {
+    acc.penaltyUtil += std::move(contribution.penaltyUtil);
+  }
+}
+
+folly::coro::Task<CapacityWithGroupPresenceSpecBuilder::UtilExprs>
 CapacityWithGroupPresenceSpecBuilder::getScopeItemUtil(
     entities::ScopeItemId mainScopeItemId,
     ExpressionBuilder& expressionBuilder,
-    bool makeContinuousPenaltyTerm,
     const std::optional<entities::Set<entities::GroupId>>& aggregationGroupIds)
     const {
   if (shouldUseOptimizedPath()) {
     if (!aggregationGroupIds.has_value() || aggregationGroupIds->empty()) {
-      co_return const_expr(0, *universe_);
+      co_return zeroUtilExprs();
     }
     const auto& dimension =
         universe_->getObjects().getDimension(dimensionId_).only();
     co_return dimension.isDynamic()
         ? buildOptimizedScopeItemUtilExprForDynamicDimension(
-              mainScopeItemId,
-              expressionBuilder,
-              makeContinuousPenaltyTerm,
-              *aggregationGroupIds)
+              mainScopeItemId, expressionBuilder, *aggregationGroupIds)
         : buildOptimizedScopeItemUtilExprForStaticDimension(
-              mainScopeItemId,
-              expressionBuilder,
-              makeContinuousPenaltyTerm,
-              *aggregationGroupIds);
+              mainScopeItemId, expressionBuilder, *aggregationGroupIds);
   }
 
-  // Fallback to non-optimized path
-  auto scopeItemUtil = const_expr(0, *universe_);
-  const auto& mainGroupIds = getRelevantMainGroupIds();
-  for (auto mainGroupId : mainGroupIds) {
-    scopeItemUtil += co_await getGroupUtilInMainScopeItem(
-        mainGroupId,
-        mainScopeItemId,
-        expressionBuilder,
-        makeContinuousPenaltyTerm);
+  auto utilExprs = zeroUtilExprs();
+  for (auto mainGroupId : getRelevantMainGroupIds()) {
+    addUtilExprs(
+        utilExprs,
+        co_await getGroupUtilInMainScopeItem(
+            mainGroupId, mainScopeItemId, expressionBuilder));
   }
 
-  co_return scopeItemUtil;
+  co_return utilExprs;
 }
 
 bool CapacityWithGroupPresenceSpecBuilder::shouldUseOptimizedPath() const {
@@ -458,43 +423,54 @@ CapacityWithGroupPresenceSpecBuilder::buildAggregationGroupIds(
   return aggregationGroupIds;
 }
 
-ExprPtr CapacityWithGroupPresenceSpecBuilder::createGroupUtilExpr(
+CapacityWithGroupPresenceSpecBuilder::UtilExprs
+CapacityWithGroupPresenceSpecBuilder::createGroupUtilExpr(
     ExprPtr objectPartition,
     entities::ScopeItemId aggregationScopeItemId,
-    bool makeContinuousPenaltyTerm,
     const Assignment& initialAssignment) const {
-  return std::make_shared<ObjectPartitionLookupWithMinPresence>(
-      std::move(objectPartition),
-      universe_->getScope(aggregationScopeId_)
-          .getContainerIdsPtr(aggregationScopeItemId),
-      aggregationScopeId_,
-      aggregationScopeItemId,
-      *universe_,
-      initialAssignment,
-      /*groupLimitOverrides=*/PackerMap<entities::GroupId, double>{},
-      /*initialDuringObjects=*/PackerSet<entities::ObjectId>{},
-      /*defaultGroupLimitOverride=*/std::nullopt,
-      /*penaltyTransform=*/
-      ObjectPartitionLookupPenaltyTransform::IDENTITY,
-      /*groupsAllowed=*/0,
-      ObjectPartitionLookup<
-          ObjectPartitionLookupWithMinPresencePolicy>::Bound::MAX,
-      ObjectPartitionLookupWithMinPresencePolicy::Data(
-          groupToPresenceWeight_,
-          groupToExtraAdditivePenalty_,
-          groupUtilMultiplierMap_,
-          makeContinuousPenaltyTerm,
-          *spec_.roundUpGroupUtilOnScopeItem(),
-          scopeItemToAlwaysPresentGroups_));
+  // The constraint lookup and its penalty lookup are two reads of the SAME
+  // objectPartition, so it is captured by reference and intentionally not moved
+  // -- both makeLookup() calls must share it. (Don't add std::move here.)
+  const auto makeLookup = [&](bool makeContinuousPenaltyTerm) -> ExprPtr {
+    return std::make_shared<ObjectPartitionLookupWithMinPresence>(
+        objectPartition,
+        universe_->getScope(aggregationScopeId_)
+            .getContainerIdsPtr(aggregationScopeItemId),
+        aggregationScopeId_,
+        aggregationScopeItemId,
+        *universe_,
+        initialAssignment,
+        /*groupLimitOverrides=*/PackerMap<entities::GroupId, double>{},
+        /*initialDuringObjects=*/PackerSet<entities::ObjectId>{},
+        /*defaultGroupLimitOverride=*/std::nullopt,
+        /*penaltyTransform=*/
+        ObjectPartitionLookupPenaltyTransform::IDENTITY,
+        /*groupsAllowed=*/0,
+        ObjectPartitionLookup<
+            ObjectPartitionLookupWithMinPresencePolicy>::Bound::MAX,
+        ObjectPartitionLookupWithMinPresencePolicy::Data(
+            groupToPresenceWeight_,
+            groupToExtraAdditivePenalty_,
+            groupUtilMultiplierMap_,
+            makeContinuousPenaltyTerm,
+            *spec_.roundUpGroupUtilOnScopeItem(),
+            scopeItemToAlwaysPresentGroups_));
+  };
+
+  return UtilExprs{
+      .util = makeLookup(/*makeContinuousPenaltyTerm=*/false),
+      .penaltyUtil = needsContinuousExpressions_
+          ? makeLookup(/*makeContinuousPenaltyTerm=*/true)
+          : nullptr};
 }
 
-ExprPtr CapacityWithGroupPresenceSpecBuilder::
+CapacityWithGroupPresenceSpecBuilder::UtilExprs
+CapacityWithGroupPresenceSpecBuilder::
     buildOptimizedScopeItemUtilExprForStaticDimension(
         const entities::ScopeItemId& mainScopeItemId,
         ExpressionBuilder& expressionBuilder,
-        bool makeContinuousPenaltyTerm,
         const entities::Set<entities::GroupId>& aggregationGroupIds) const {
-  auto scopeItemUtil = const_expr(0, *universe_);
+  auto utilExprs = zeroUtilExprs();
   auto objectPartition = expressionBuilder.getObjectPartition(
       /*groupLimits=*/{},
       dimensionId_,
@@ -505,23 +481,24 @@ ExprPtr CapacityWithGroupPresenceSpecBuilder::
 
   for (const auto& aggregationScopeItemId : expressionBuilder.getNestedImage(
            mainScopeId_, aggregationScopeId_, mainScopeItemId)) {
-    scopeItemUtil += createGroupUtilExpr(
-        objectPartition,
-        aggregationScopeItemId,
-        makeContinuousPenaltyTerm,
-        expressionBuilder.getInitialAssignment());
+    addUtilExprs(
+        utilExprs,
+        createGroupUtilExpr(
+            objectPartition,
+            aggregationScopeItemId,
+            expressionBuilder.getInitialAssignment()));
   }
 
-  return scopeItemUtil;
+  return utilExprs;
 }
 
-ExprPtr CapacityWithGroupPresenceSpecBuilder::
+CapacityWithGroupPresenceSpecBuilder::UtilExprs
+CapacityWithGroupPresenceSpecBuilder::
     buildOptimizedScopeItemUtilExprForDynamicDimension(
         const entities::ScopeItemId& mainScopeItemId,
         ExpressionBuilder& expressionBuilder,
-        bool makeContinuousPenaltyTerm,
         const entities::Set<entities::GroupId>& aggregationGroupIds) const {
-  auto scopeItemUtil = const_expr(0, *universe_);
+  auto utilExprs = zeroUtilExprs();
 
   for (const auto& aggregationScopeItemId : expressionBuilder.getNestedImage(
            mainScopeId_, aggregationScopeId_, mainScopeItemId)) {
@@ -535,48 +512,44 @@ ExprPtr CapacityWithGroupPresenceSpecBuilder::
         std::move(utilScopeParams),
         aggregationGroupIds);
 
-    scopeItemUtil += createGroupUtilExpr(
-        std::move(objectPartition),
-        aggregationScopeItemId,
-        makeContinuousPenaltyTerm,
-        expressionBuilder.getInitialAssignment());
+    addUtilExprs(
+        utilExprs,
+        createGroupUtilExpr(
+            std::move(objectPartition),
+            aggregationScopeItemId,
+            expressionBuilder.getInitialAssignment()));
   }
 
-  return scopeItemUtil;
+  return utilExprs;
 }
 
-folly::coro::Task<ExprPtr>
+folly::coro::Task<CapacityWithGroupPresenceSpecBuilder::UtilExprs>
 CapacityWithGroupPresenceSpecBuilder::getGroupUtilInMainScopeItem(
     entities::GroupId mainGroupId,
     entities::ScopeItemId mainScopeItemId,
-    ExpressionBuilder& expressionBuilder,
-    bool makeContinuousPenaltyTerm) const {
+    ExpressionBuilder& expressionBuilder) const {
   const auto& aggregationScopeItemIds = expressionBuilder.getNestedImage(
       mainScopeId_, aggregationScopeId_, mainScopeItemId);
   const auto& aggregationGroupIds = expressionBuilder.getNestedImage(
       mainPartitionId_, aggregationPartitionId_, mainGroupId);
 
-  auto groupUtil = const_expr(0, *universe_);
+  auto utilExprs = zeroUtilExprs();
   for (auto aggregationScopeItemId : aggregationScopeItemIds) {
     for (auto aggregationGroupId : aggregationGroupIds) {
-      inplace_add(
-          groupUtil,
+      addUtilExprs(
+          utilExprs,
           co_await getGroupUtilContributionToScopeItemUtil(
-              aggregationGroupId,
-              aggregationScopeItemId,
-              expressionBuilder,
-              makeContinuousPenaltyTerm));
+              aggregationGroupId, aggregationScopeItemId, expressionBuilder));
     }
   }
-  co_return groupUtil;
+  co_return utilExprs;
 }
 
-folly::coro::Task<ExprPtr>
+folly::coro::Task<CapacityWithGroupPresenceSpecBuilder::UtilExprs>
 CapacityWithGroupPresenceSpecBuilder::getGroupUtilContributionToScopeItemUtil(
     entities::GroupId aggregationGroupId,
     entities::ScopeItemId aggregationScopeItemId,
-    ExpressionBuilder& expressionBuilder,
-    bool makeContinuousPenaltyTerm) const {
+    ExpressionBuilder& expressionBuilder) const {
   auto actualGroupUtilInScopeItem = co_await expressionBuilder.getAbsoluteUtil(
       UtilMetric::AFTER,
       dimensionId_,
@@ -584,8 +557,10 @@ CapacityWithGroupPresenceSpecBuilder::getGroupUtilContributionToScopeItemUtil(
       aggregationScopeItemId,
       aggregationPartitionId_,
       aggregationGroupId);
-  // Create a copy of the util expression for continuous penalty term.
-  ExprPtr unweightedPenalty = makeContinuousPenaltyTerm
+  // Snapshot the raw util for the continuous penalty term before the weighting
+  // and rounding below mutate the util expression. Null when the penalty term
+  // is not needed (e.g. the optimal solver).
+  ExprPtr unweightedPenalty = needsContinuousExpressions_
       ? folly::copy(actualGroupUtilInScopeItem)
       : nullptr;
 
@@ -614,32 +589,34 @@ CapacityWithGroupPresenceSpecBuilder::getGroupUtilContributionToScopeItemUtil(
       *spec_.roundUpGroupUtilOnScopeItem());
   auto finalUtil = max(minContributionToUtil, actualGroupUtilInScopeItem);
 
-  if (makeContinuousPenaltyTerm) {
-    const auto extraAdditivePenalty = groupToExtraAdditivePenalty_.getLimit(
-        aggregationScopeItemId, aggregationGroupId);
-    if (!universe_->getPrecision().isEqual(extraAdditivePenalty, 0.0)) {
-      unweightedPenalty = max(unweightedPenalty + extraAdditivePenalty, 0.0);
-    }
-    auto penalty = getWeightedExpr(
-        unweightedPenalty,
-        aggregationGroupId,
-        aggregationScopeItemId,
-        {interface::GroupUtilMultiplierTarget::PRESENCE_WEIGHT,
-         interface::GroupUtilMultiplierTarget::UTILIZATION,
-         interface::GroupUtilMultiplierTarget::COMMON});
-    // TODO(@yangsea): add support for min bound
-    if (*spec_.bound() == interface::CapacityWithGroupPresenceBound::MAX) {
-      penalty = product(
-          step(
-              finalUtil -
-              const_expr(
-                  expressionBuilder.getLowerBound(*finalUtil), *universe_)),
-          std::move(penalty));
-    }
-    co_return penalty;
+  if (unweightedPenalty == nullptr) {
+    co_return UtilExprs{.util = std::move(finalUtil), .penaltyUtil = nullptr};
   }
 
-  co_return finalUtil;
+  const auto extraAdditivePenalty = groupToExtraAdditivePenalty_.getLimit(
+      aggregationScopeItemId, aggregationGroupId);
+  if (!universe_->getPrecision().isEqual(extraAdditivePenalty, 0.0)) {
+    unweightedPenalty = max(unweightedPenalty + extraAdditivePenalty, 0.0);
+  }
+  auto penaltyUtil = getWeightedExpr(
+      unweightedPenalty,
+      aggregationGroupId,
+      aggregationScopeItemId,
+      {interface::GroupUtilMultiplierTarget::PRESENCE_WEIGHT,
+       interface::GroupUtilMultiplierTarget::UTILIZATION,
+       interface::GroupUtilMultiplierTarget::COMMON});
+  // TODO(@yangsea): add support for min bound
+  if (*spec_.bound() == interface::CapacityWithGroupPresenceBound::MAX) {
+    penaltyUtil = product(
+        step(
+            finalUtil -
+            const_expr(
+                expressionBuilder.getLowerBound(*finalUtil), *universe_)),
+        std::move(penaltyUtil));
+  }
+
+  co_return UtilExprs{
+      .util = std::move(finalUtil), .penaltyUtil = std::move(penaltyUtil)};
 }
 
 ExprPtr CapacityWithGroupPresenceSpecBuilder::getWeightedExpr(
