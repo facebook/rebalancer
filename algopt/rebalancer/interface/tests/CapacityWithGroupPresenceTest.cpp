@@ -185,28 +185,13 @@ class CapacityWithGroupPresenceTest
     spec.intent() = specParams.intent;
     spec.aggregationPartition().from_optional(specParams.aggregationPartition);
 
-    switch (specParams.bound) {
-      case CapacityWithGroupPresenceBound::MAX: {
-        if (specParams.capacityLimits) {
-          spec.scopeItemToLimit() = *specParams.capacityLimits;
-        } else {
-          auto& capacityLimits = *spec.scopeItemToLimit();
-          capacityLimits.type() = interface::LimitType::ABSOLUTE;
-          capacityLimits.globalLimit() = 5;
-          capacityLimits.scopeItemLimits() = {{"region1", 2}};
-        }
-        break;
-      }
-      case CapacityWithGroupPresenceBound::MIN: {
-        if (specParams.capacityLimits) {
-          spec.scopeItemToLimit() = *specParams.capacityLimits;
-        } else {
-          auto& capacityLimits = *spec.scopeItemToLimit();
-          capacityLimits.type() = interface::LimitType::ABSOLUTE;
-          capacityLimits.globalLimit() = 6.5;
-        }
-        break;
-      }
+    if (specParams.capacityLimits) {
+      spec.scopeItemToLimit() = *specParams.capacityLimits;
+    } else {
+      auto& capacityLimits = *spec.scopeItemToLimit();
+      capacityLimits.type() = interface::LimitType::ABSOLUTE;
+      capacityLimits.globalLimit() = 5;
+      capacityLimits.scopeItemLimits() = {{"region1", 2}};
     }
 
     if (specParams.groupToPresenceWeight) {
@@ -382,49 +367,6 @@ TEST_P(CapacityWithGroupPresenceTest, MaxConstraintLocalSearchWithMultipliers) {
       // + 100*(61) = 30302.4
       EXPECT_NEAR(26100, initialObjectiveValue, 1e-8);
       EXPECT_NEAR(0.0, finalObjectiveValue, 1e-8);
-      break;
-    }
-  }
-}
-
-TEST_P(CapacityWithGroupPresenceTest, BasicGoalMinBound) {
-  setUpProblem();
-
-  addCapacityWithGroupPresenceSpec(
-      SpecParams{
-          .isConstraint = false, .bound = CapacityWithGroupPresenceBound::MIN});
-
-  const auto solution = solver->solve();
-  const auto initialObjectiveValue =
-      *solution.initialGlobalObjective()->goals()->at(0).value();
-  const auto finalObjectiveValue =
-      *solution.finalGlobalObjective()->goals()->at(0).value();
-
-  switch (getSolverAlgoType()) {
-    case LOCALSEARCH: {
-      // goal = (slack sums) + (raw MIN penalty sums) * kNormPerScopeItem
-      // = 3.0 + (3.32 + 3.005) * kNormPerScopeItem
-      EXPECT_NEAR(
-          3.0 + (3.32 + 3.005) * kNormPerScopeItem,
-          initialObjectiveValue,
-          1e-8);
-
-      // The solver should improve the objective. The exact final value depends
-      // on solver iteration order which can vary across platforms.
-      EXPECT_LT(finalObjectiveValue, initialObjectiveValue);
-      break;
-    }
-    case OPTIMAL: {
-      //  goal value =  (6.5 - (3.0 + 2.0)) + (6.5 - (3.0 + 2.0))  = 3
-      EXPECT_NEAR(3.0, initialObjectiveValue, 1e-8);
-      //  optimal assignment:
-      //   {"host1", {"trafficObject3", "trafficObject4", "trafficObject9"}}
-      //   {"host2", {"trafficObject1", "trafficObject6"}},
-      //   {"host3", {"trafficObject7"}}
-      //   {"host4", {"trafficObject8"}}
-      //   {"host5", {"trafficObject2", "trafficObject5", "trafficObject10"}}
-      // goal value =  (6.5 - (4.0 + 2.0)) + (6.5 - (3.0 + 3.0))  = 1
-      EXPECT_NEAR(1.0, finalObjectiveValue, 1e-8);
       break;
     }
   }

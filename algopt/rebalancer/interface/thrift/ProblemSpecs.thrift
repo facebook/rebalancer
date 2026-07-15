@@ -1230,9 +1230,9 @@ struct GroupDiversitySpec {
   7: Filter filter;
 }
 
+// Only MAX is supported.
 enum CapacityWithGroupPresenceBound {
   MAX = 1,
-  MIN = 2,
 }
 
 enum CapacityWithGroupPresenceUsageIntent {

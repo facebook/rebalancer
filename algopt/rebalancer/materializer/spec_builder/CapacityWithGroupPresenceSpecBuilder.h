@@ -31,6 +31,15 @@ that are in I)`.
 
 In other words, just the mere presence of a group `G` adds a minimum utilization
 of `groupToPresenceWeight[G][I]` to the scope item `I`.
+
+Only the MAX bound is supported. The continuous penalty is skipped once a
+group's contribution is already at lower bound. For MAX the penalty is a sum of
+per-group utilizations, so each group's term is checked independently. For MIN
+the penalty should also be skipped if group's contribution is at upper bound,
+but it's hard to represent continuous penalty in a general formula when a
+constraint aggregates more than one group (PER_SCOPE_ITEM or
+PER_GROUP_AND_SCOPE_ITEM with partition != aggregationPartition). This needs to
+be designed carefully if we want to support it someday.
 */
 class CapacityWithGroupPresenceSpecBuilder : public SpecBuilder {
  public:
@@ -74,9 +83,7 @@ class CapacityWithGroupPresenceSpecBuilder : public SpecBuilder {
       const ExprPtr& util) const;
 
   ExprPtr getAdditionalPenaltyExpr(
-      entities::ScopeItemId mainScopeItemId,
       std::optional<entities::GroupId> mainGroupIdOpt,
-      ExpressionBuilder& expressionBuilder,
       const ExprPtr& penaltyUtil) const;
 
   UtilExprs zeroUtilExprs() const;

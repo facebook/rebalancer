@@ -237,10 +237,7 @@ CapacityWithGroupPresenceSpecBuilder::scopeItemConstraints(
     auto constraintExpr = getConstraintExpr(
         mainScopeItemId, /*mainGroupIdOpt=*/std::nullopt, scopeItemUtil.util);
     auto additionalPenaltyExpr = getAdditionalPenaltyExpr(
-        mainScopeItemId,
-        /*mainGroupIdOpt=*/std::nullopt,
-        expressionBuilder,
-        scopeItemUtil.penaltyUtil);
+        /*mainGroupIdOpt=*/std::nullopt, scopeItemUtil.penaltyUtil);
     constraints.emplace_back(
         std::move(constraintExpr), std::move(additionalPenaltyExpr));
   }
@@ -262,17 +259,12 @@ ExprPtr CapacityWithGroupPresenceSpecBuilder::getConstraintExpr(
   switch (*spec_.bound()) {
     case interface::CapacityWithGroupPresenceBound::MAX:
       return (util - limit);
-    case interface::CapacityWithGroupPresenceBound::MIN:
-      return (limit - util);
   }
-
   throw std::runtime_error("Unknown bound type");
 }
 
 ExprPtr CapacityWithGroupPresenceSpecBuilder::getAdditionalPenaltyExpr(
-    entities::ScopeItemId mainScopeItemId,
     std::optional<entities::GroupId> mainGroupIdOpt,
-    ExpressionBuilder& /*expressionBuilder*/,
     const ExprPtr& penaltyUtil) const {
   if (penaltyUtil == nullptr) {
     return nullptr;
@@ -314,11 +306,6 @@ ExprPtr CapacityWithGroupPresenceSpecBuilder::getAdditionalPenaltyExpr(
   switch (*spec_.bound()) {
     case interface::CapacityWithGroupPresenceBound::MAX:
       return normFactor == 1.0 ? penaltyUtil : penaltyUtil * normFactor;
-    case interface::CapacityWithGroupPresenceBound::MIN: {
-      auto expr =
-          getConstraintExpr(mainScopeItemId, mainGroupIdOpt, penaltyUtil);
-      return normFactor == 1.0 ? expr : expr * normFactor;
-    }
   }
 }
 
@@ -341,10 +328,7 @@ CapacityWithGroupPresenceSpecBuilder::groupAndScopeItemConstraints(
         auto constraintExpr = getConstraintExpr(
             mainScopeItemId, mainGroupId, groupScopeItemUtil.util);
         auto additionalPenaltyExpr = getAdditionalPenaltyExpr(
-            mainScopeItemId,
-            mainGroupId,
-            expressionBuilder,
-            groupScopeItemUtil.penaltyUtil);
+            mainGroupId, groupScopeItemUtil.penaltyUtil);
 
         constraints[pairIdx] = ConstraintInfo{
             std::move(constraintExpr), std::move(additionalPenaltyExpr)};
@@ -605,15 +589,11 @@ CapacityWithGroupPresenceSpecBuilder::getGroupUtilContributionToScopeItemUtil(
       {interface::GroupUtilMultiplierTarget::PRESENCE_WEIGHT,
        interface::GroupUtilMultiplierTarget::UTILIZATION,
        interface::GroupUtilMultiplierTarget::COMMON});
-  // TODO(@yangsea): add support for min bound
-  if (*spec_.bound() == interface::CapacityWithGroupPresenceBound::MAX) {
-    penaltyUtil = product(
-        step(
-            finalUtil -
-            const_expr(
-                expressionBuilder.getLowerBound(*finalUtil), *universe_)),
-        std::move(penaltyUtil));
-  }
+  penaltyUtil = product(
+      step(
+          finalUtil -
+          const_expr(expressionBuilder.getLowerBound(*finalUtil), *universe_)),
+      std::move(penaltyUtil));
 
   co_return UtilExprs{
       .util = std::move(finalUtil), .penaltyUtil = std::move(penaltyUtil)};
