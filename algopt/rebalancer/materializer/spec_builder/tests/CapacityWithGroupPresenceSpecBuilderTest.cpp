@@ -678,6 +678,77 @@ CO_TEST_P(
       1e-8);
 }
 
+// Fused-path (optimized PER_SCOPE_ITEM) counterpart of the MAX gate. Here the
+// per-scope-item util is built by ObjectPartitionLookupWithMinPresence, which
+// sums each group's penalty internally, so the gate lives inside that node. An
+// always-present group pinned at its floor must contribute zero continuous
+// penalty. Targets PER_SCOPE_ITEM (the only intent that uses the fused node).
+CO_TEST_P(
+    CapacityWithGroupPresenceSpecBuilderTest,
+    ContinuousPenaltyGatedAtLowerBoundMaxBoundFusedPerScopeItem) {
+  if (GetParam() !=
+      interface::CapacityWithGroupPresenceUsageIntent::PER_SCOPE_ITEM) {
+    co_return;
+  }
+
+  interface::CapacityWithGroupPresenceSpec spec;
+  spec.dimension() = "replicaCount";
+  spec.partition() = "tenantTrafficObjects";
+  spec.scope() = "region";
+  spec.roundUpGroupUtilOnScopeItem() = false;
+  spec.bound() = interface::CapacityWithGroupPresenceBound::MAX;
+  spec.intent() = GetParam();
+  spec.scopeItemToLimit()->type() = interface::LimitType::ABSOLUTE;
+  spec.scopeItemToLimit()->globalLimit() = 0; // MAX limit 0 -> always broken
+  spec.groupToPresenceWeight()->globalLimit() = 1.0; // floor 1.0
+  spec.scopeItemToAlwaysPresentGroups() = {
+      {"region1", {"tenant2-trafficObjects"}}};
+
+  const auto universe = buildUniverse();
+  auto& builder = expressionBuilder();
+  const CapacityWithGroupPresenceSpecBuilder specBuilder(
+      universe, spec, /*needsContinuousExpressions=*/true);
+  auto components = co_await specBuilder.constraints(builder);
+  EXPECT_EQ(2, components.size()); // one per scope item (region1, region2)
+  const auto& region1 = components[0];
+  EXPECT_TRUE(region1.additionalPenaltyExpr != nullptr);
+
+  // ObjectPartitionLookupWithMinPresence has no LP form yet.
+  const packer::tests::LpAssertOptions lpOpts = {
+      .exceptionForLpExpr =
+          "LP expressions are not yet implemented for ObjectPartitionWithMinPresence"};
+
+  // region1 holds only tenant2, pinned below its floor: move tenant1 out of
+  // region1 and leave tenant2 with just trafficObject6 (0.115 < floor 1.0)
+  // there. finalUtil = max(1.0, 0.115) = 1.0 = its lower bound, so tenant2's
+  // fused penalty is gated to 0 -> region1's continuous penalty is 0.
+  auto pinned = deltaFromInitial({
+      {"trafficObject1", "host3"},
+      {"trafficObject5", "host3"},
+      {"trafficObject9", "host3"},
+      {"trafficObject8", "host3"},
+      {"trafficObject6", "host2"},
+  });
+  EXPECT_NEAR(
+      0.0,
+      evaluate(region1, pinned, /*evaluateConstraintExpr=*/false, lpOpts),
+      1e-8);
+
+  // Above the floor: keep trafficObject8 (1.0) in region1 too, so tenant2's
+  // util is 1.0 + 0.115 = 1.115 > floor -> not pinned -> penalty active
+  // (normalized raw util).
+  auto aboveFloor = deltaFromInitial({
+      {"trafficObject1", "host3"},
+      {"trafficObject5", "host3"},
+      {"trafficObject9", "host3"},
+      {"trafficObject6", "host2"},
+  });
+  EXPECT_NEAR(
+      1.115 * kNormPerScopeItemNoRoundUp,
+      evaluate(region1, aboveFloor, /*evaluateConstraintExpr=*/false, lpOpts),
+      1e-8);
+}
+
 CO_TEST_P(
     CapacityWithGroupPresenceSpecBuilderTest,
     WithRoundUpMaxBoundAndMultipliersBasic) {

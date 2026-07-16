@@ -955,4 +955,98 @@ CO_TEST_F(
       1e-8);
 }
 
+// Penalty gate: an always-present group whose contribution is pinned at its
+// presence floor (a static lower bound no move can reduce) contributes 0
+// continuous penalty. A group that is not always-present keeps its full penalty
+// even when pinned, because moving its objects out can still reduce it.
+CO_TEST_F(
+    ObjectPartitionLookupWithMinPresenceTest,
+    PenaltyGatedForAlwaysPresentPinnedGroup) {
+  co_await setUpUniverse();
+  const auto& universe = getUniverse();
+  const auto assignment = getInitialAssignment(universe);
+
+  auto withAlwaysPresent = makeObjectPartitionLookupWithMinPresence(
+      universe,
+      /*aggregationScopeItemId=*/region(1),
+      /*groupIds=*/{group(1), group(2)},
+      /*multiplierList=*/{},
+      /*makeContinuousPenaltyTerm=*/true,
+      /*roundUpGroupUtilOnScopeItem=*/false,
+      /*scopeItemToAlwaysPresentGroups=*/{{region(1), {group(2)}}});
+  auto withoutAlwaysPresent = makeObjectPartitionLookupWithMinPresence(
+      universe,
+      /*aggregationScopeItemId=*/region(1),
+      /*groupIds=*/{group(1), group(2)},
+      /*multiplierList=*/{},
+      /*makeContinuousPenaltyTerm=*/true,
+      /*roundUpGroupUtilOnScopeItem=*/false,
+      /*scopeItemToAlwaysPresentGroups=*/{});
+
+  const LpAssertOptions lpAssertOptions = {
+      .exceptionForLpExpr =
+          "LP expressions are not yet implemented for ObjectPartitionWithMinPresence"};
+
+  // region1: group1 util = 1.85 + 0.13 + 1.2 = 3.18 (floor 3.0, so not pinned);
+  // group2 util = 1.0 with extra additive 1.5 (floor 2.0). group2 is pinned:
+  // finalUtil = max(2.0, 1.0) = 2.0 = floor.
+  //
+  // Without always-present: nothing is gated -> group1 = 3.18, group2 =
+  // 1.0 + 1.5 = 2.5. total = 5.68.
+  EXPECT_NEAR(
+      5.68, apply(withoutAlwaysPresent, assignment, lpAssertOptions), 1e-8);
+  EXPECT_NEAR(5.68, withoutAlwaysPresent->value, 1e-8);
+
+  // With group2 always-present: group2 is pinned at its floor -> penalty gated
+  // to 0. group1 is not always-present so it keeps its penalty. total = 3.18.
+  EXPECT_NEAR(
+      3.18, apply(withAlwaysPresent, assignment, lpAssertOptions), 1e-8);
+  EXPECT_NEAR(3.18, withAlwaysPresent->value, 1e-8);
+}
+
+// The penalty gate follows the incremental paths: an always-present group that
+// starts above its floor keeps its penalty, and drops to 0 once a move pins it
+// at the floor.
+CO_TEST_F(
+    ObjectPartitionLookupWithMinPresenceTest,
+    PenaltyGateTogglesWhenGroupBecomesPinned) {
+  co_await setUpUniverse();
+  const auto& universe = getUniverse();
+  auto assignment = getInitialAssignment(universe);
+
+  // group1 (floor 3.0) is always-present; group2 is not.
+  auto objectPartitionLookup = makeObjectPartitionLookupWithMinPresence(
+      universe,
+      /*aggregationScopeItemId=*/region(1),
+      /*groupIds=*/{group(1), group(2)},
+      /*multiplierList=*/{},
+      /*makeContinuousPenaltyTerm=*/true,
+      /*roundUpGroupUtilOnScopeItem=*/false,
+      /*scopeItemToAlwaysPresentGroups=*/{{region(1), {group(1)}}});
+
+  const LpAssertOptions lpAssertOptions = {
+      .exceptionForLpExpr =
+          "LP expressions are not yet implemented for ObjectPartitionWithMinPresence"};
+
+  // Initial: group1 util 3.18 > floor 3.0 -> not pinned -> penalty 3.18.
+  // group2 util 1.0 + extra 1.5 = 2.5 (not always-present, not gated).
+  // total = 3.18 + 2.5 = 5.68.
+  EXPECT_NEAR(
+      5.68, apply(objectPartitionLookup, assignment, lpAssertOptions), 1e-8);
+
+  // Move object1 (group1, value 1.85) out of region1 -> group1 util =
+  // 0.13 + 1.2 = 1.33 -> finalUtil = max(3.0, 1.33) = 3.0 = floor -> pinned ->
+  // penalty gated to 0. group2 is unchanged (2.5). total = 2.5.
+  const auto changes = ObjectToNewContainer{{object(1), container(3)}};
+  EXPECT_NEAR(
+      2.5,
+      evaluate(objectPartitionLookup, changes, assignment, lpAssertOptions),
+      1e-8);
+  EXPECT_NEAR(
+      2.5,
+      applyChanges(objectPartitionLookup, changes, assignment, lpAssertOptions),
+      1e-8);
+  EXPECT_NEAR(2.5, objectPartitionLookup->value, 1e-8);
+}
+
 } // namespace facebook::rebalancer::packer::tests
