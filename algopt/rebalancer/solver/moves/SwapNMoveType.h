@@ -23,9 +23,10 @@ constexpr folly::StringPiece kSwapNMoveTypeName = "SWAP_N";
 
 class SwapNMoveType : public MoveType {
  public:
-  explicit SwapNMoveType(
+  SwapNMoveType(
       const interface::LocalSearchSolverSpec& solverConfigs,
-      const interface::SwapNMoveTypeSpec& spec);
+      const interface::SwapNMoveTypeSpec& spec,
+      const Problem& problem);
 
   std::string name() const override;
 
@@ -47,6 +48,8 @@ class SwapNMoveType : public MoveType {
  private:
   static PackerSet<int> pickRandom(int n, int k);
   interface::SwapNMoveTypeSpec spec_;
+  // Source objects resolved from spec names at construction
+  const PackerSet<entities::ObjectId> sourceObjectIds_;
 };
 
 } // namespace facebook::rebalancer

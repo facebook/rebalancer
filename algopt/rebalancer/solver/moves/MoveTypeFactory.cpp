@@ -119,7 +119,7 @@ std::unique_ptr<MoveType> MoveTypeFactory::createMoveType(
           configs, spec.get_singleGreedyMoveTypeSpec());
     case interface::MoveTypeSpec::Type::swapNMoveTypeSpec:
       return std::make_unique<SwapNMoveType>(
-          configs, spec.get_swapNMoveTypeSpec());
+          configs, spec.get_swapNMoveTypeSpec(), problem);
     case interface::MoveTypeSpec::Type::singleRandomBatchesMoveTypeSpec:
       return std::make_unique<SingleRandomBatchesMoveType>(
           configs, spec.get_singleRandomBatchesMoveTypeSpec());

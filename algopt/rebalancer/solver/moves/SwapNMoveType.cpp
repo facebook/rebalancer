@@ -20,14 +20,33 @@
 #include "algopt/rebalancer/solver/moves/MoveHelper.h"
 
 #include <folly/container/irange.h>
+#include <folly/Conv.h>
 #include <folly/Random.h>
 
 namespace facebook::rebalancer {
 
+namespace {
+PackerSet<entities::ObjectId> resolveSourceObjectIds(
+    const interface::SwapNMoveTypeSpec& spec,
+    const Problem& problem) {
+  PackerSet<entities::ObjectId> objectIds;
+  objectIds.reserve(
+      folly::to<PackerSet<entities::ObjectId>::size_type>(
+          spec.swapNSourceObjects()->size()));
+  for (const auto& objectName : *spec.swapNSourceObjects()) {
+    objectIds.insert(problem.objectId(objectName));
+  }
+  return objectIds;
+}
+} // namespace
+
 SwapNMoveType::SwapNMoveType(
     const interface::LocalSearchSolverSpec& solverConfigs,
-    const interface::SwapNMoveTypeSpec& spec)
-    : MoveType(solverConfigs), spec_(spec) {}
+    const interface::SwapNMoveTypeSpec& spec,
+    const Problem& problem)
+    : MoveType(solverConfigs),
+      spec_(spec),
+      sourceObjectIds_(resolveSourceObjectIds(spec, problem)) {}
 
 std::string SwapNMoveType::name() const {
   return kSwapNMoveTypeName.str();
@@ -39,12 +58,6 @@ MoveResult SwapNMoveType::findBestMove(
     MoveStatsAggregator& stats,
     const SearchHints& /*hints*/,
     double timeLimit) {
-  // get all objects that are allowed to move
-  PackerSet<entities::ObjectId> sourceObjectIds;
-  for (auto& objectName : *spec_.swapNSourceObjects()) {
-    sourceObjectIds.insert(evaluator.getProblem().objectId(objectName));
-  }
-
   // number of parallel swaps of objects
   const int concurrentObjects = *spec_.swapNConcurrentObjects();
 
@@ -57,7 +70,7 @@ MoveResult SwapNMoveType::findBestMove(
     if (static_cast<int>(objectIdsToMove.size()) >= concurrentObjects) {
       break;
     }
-    if (sourceObjectIds.contains(hotObjectId)) {
+    if (sourceObjectIds_.contains(hotObjectId)) {
       objectIdsToMove.push_back(hotObjectId);
     }
   }
