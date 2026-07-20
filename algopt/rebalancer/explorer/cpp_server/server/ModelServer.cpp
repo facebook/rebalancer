@@ -433,7 +433,7 @@ static Table applyOrder(const Order& order, Table table) {
   /* Sorts the table based on requested column */
 
   auto rowIds = table.getRowIds();
-  const auto& orderColumns = order.columns();
+  auto orderColumns = order.columns();
   if (orderColumns->size() > 1) {
     throw std::runtime_error("Ordering for multiple columns is not supported");
   }
