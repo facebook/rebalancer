@@ -1453,6 +1453,13 @@
     "@emnapi/runtime" "^1.7.1"
     "@tybys/wasm-util" "^0.10.1"
 
+"@nest/bladerunner@>=0.0.4":
+  version "0.0.4"
+  resolved "https://registry.facebook.net/@nest/bladerunner/-/bladerunner-0.0.4.tgz#f908455489c2e6c4eb1eadb58b1d4d5abd82ff16"
+  integrity sha512-t3UBaMY+69safGbI28CiKYeFDqLNBhlShp2fqmGemziZYYQPdKwsHBXpZA97hEPEf7OPu4CL3+aOT1j85R5nrw==
+  dependencies:
+    "@nest/distribgw" ">=0.0.5"
+
 "@nest/bladerunner@dev":
   version "0.0.2-dev.527"
   resolved "https://registry.facebook.net/@nest/bladerunner/-/bladerunner-0.0.2-dev.527.tgz#708141e5f517219a30d032880c3fd3a91a6e8ce3"
@@ -1477,10 +1484,10 @@
     remark-parse "^11.0.0"
     unified "^11.0.5"
 
-"@nest/cpu-profiler@dev":
-  version "0.1.0-dev.518"
-  resolved "https://registry.facebook.net/@nest/cpu-profiler/-/cpu-profiler-0.1.0-dev.518.tgz#7fb2bd3db165e65353d20252d402f81c1081a823"
-  integrity sha512-LAZpNIv6iFprBMfMyWbEgX4howJ0NSMuJMZ6ptc4J0iz9CO/9r3DTHTGqKfncwp4GVZ1iC11NoAFw8GEYofBOg==
+"@nest/cpu-profiler@^0.1.1":
+  version "0.1.1"
+  resolved "https://registry.facebook.net/@nest/cpu-profiler/-/cpu-profiler-0.1.1.tgz#eebed5e64a3b73417da62de79bdcd100905e5006"
+  integrity sha512-z82oTwO/sgfR42cmnvdStqS4OwrsvXsha8Su32W3X1FamtvkiAgWRMczh4BwFVlDwhFyhRu4/wdXlHRgEf67LQ==
   dependencies:
     "@opentelemetry/api" "^1.9.0"
     "@opentelemetry/api-logs" "^0.208.0"
@@ -1490,10 +1497,22 @@
     "@opentelemetry/sdk-trace-base" "^2.2.0"
     "@opentelemetry/semantic-conventions" "^1.30.0"
 
+"@nest/dgw-client@^0.1.2":
+  version "0.1.3"
+  resolved "https://registry.facebook.net/@nest/dgw-client/-/dgw-client-0.1.3.tgz#bffb77c86d7a82e31d10eb501bc7102016fc3a3d"
+  integrity sha512-2qD3ja3XRIN1T4dCFKE8YuHpRk8mjX6RFqVKWfBgs/hRQvS6BrytqUhsmakVduwteK6y9AFrVt/iK1apUuwR8A==
+
 "@nest/dgw-client@dev":
   version "0.1.0-dev.649"
   resolved "https://registry.facebook.net/@nest/dgw-client/-/dgw-client-0.1.0-dev.649.tgz#f5fbeb3242d51084d720388386d1a53a37398b94"
   integrity sha512-bqnz5CmrMRwEnKieyk+vWq2Mc5pamuWSmhFFkSKFtFIVPYRKpV77PGSswPsDzs+whS8ex89zuy6373LnoT1uMg==
+
+"@nest/distribgw@>=0.0.5":
+  version "0.0.5"
+  resolved "https://registry.facebook.net/@nest/distribgw/-/distribgw-0.0.5.tgz#dd3b2552231961aea078ce99b430e4940c20ada6"
+  integrity sha512-Hah/VkLUX/2gGqzyL0Vi59++W5PbszDwaP3qM29bXeN0ZG/P5np8x4JPhUxIoKlYuQkLzupzhlWZgjjaGwTjTA==
+  dependencies:
+    flow-enums-runtime "^0.0.6"
 
 "@nest/distribgw@dev":
   version "0.0.3-dev.354"
@@ -1520,7 +1539,7 @@
     react-dom "^19.2.4"
 
 "@nest/eps@file:../../libs/eps":
-  version "1.0.2"
+  version "1.0.6"
   dependencies:
     "@atlaskit/pragmatic-drag-and-drop" "^1.7.7"
     "@atlaskit/pragmatic-drag-and-drop-flourish" "^2.0.12"
@@ -1576,10 +1595,27 @@
     tailwind-merge "^3.3.0"
     tiny-invariant "^1.3.3"
 
+"@nest/falco-logger@^0.1.3":
+  version "0.1.4"
+  resolved "https://registry.facebook.net/@nest/falco-logger/-/falco-logger-0.1.4.tgz#c7d6501729318d66313534ec643409a9038f34df"
+  integrity sha512-pq1Km096CZD5imgwK8fONOJg/CiNHm7Mj6lEIr5Orb+975GfkjPpw4rBySrtwsubuu3w2/vm6jaOra7W2TkjWA==
+  dependencies:
+    "@nest/web-session" dev
+
 "@nest/falco-logger@dev":
   version "0.1.2-dev.368"
   resolved "https://registry.facebook.net/@nest/falco-logger/-/falco-logger-0.1.2-dev.368.tgz#547b02bf2285877f111c9f7e44829af8315243c6"
   integrity sha512-baTzDFsOziXBOX1/NP3ojb8iF2lq4FJkmFo8U6d1fdX2hKj+4m7q24P90TFtWdnauR3+g4Lif7RYyVLwsXgZPQ==
+
+"@nest/graphql-thrift@^0.1.1":
+  version "0.1.1"
+  resolved "https://registry.facebook.net/@nest/graphql-thrift/-/graphql-thrift-0.1.1.tgz#cd20233eecc2bf564122cbdc6fddf8aa3641fa47"
+  integrity sha512-pjy2h8wbeo2A+iNExek/1TD5oq8vFB/GDzTUbdfwjWPcZ9t7tz/9JH5uyiqdITjTsZ8ynrZnEoaiy3qSZT5KZw==
+  dependencies:
+    "@nest/justknobs" "^0.1.1"
+    "@nest/thrift-proxy" "^0.2.0"
+    "@opentelemetry/api" "^1.9.0"
+    server-only "^0.0.1"
 
 "@nest/graphql-thrift@dev":
   version "0.1.0-dev.8"
@@ -1592,12 +1628,12 @@
     server-only "^0.0.1"
 
 "@nest/intern-auth@file:../../libs/intern-auth":
-  version "0.1.3"
+  version "0.1.6"
   dependencies:
     "@nest/interngraph" "^0.1.4"
-    "@nest/logger" dev
-    "@nest/middleware-chain" dev
-    "@nest/otel" dev
+    "@nest/logger" "^0.1.2"
+    "@nest/middleware-chain" "^0.1.1"
+    "@nest/otel" "^0.1.4"
     "@stylexjs/stylex" "^0.17.4"
     lucide-react "^0.525.0"
 
@@ -1639,16 +1675,24 @@
     server-only "^0.0.1"
 
 "@nest/interngraph@file:../../libs/interngraph":
-  version "0.1.5"
+  version "0.1.10"
   dependencies:
-    "@nest/bladerunner" dev
-    "@nest/dgw-client" dev
-    "@nest/distribgw" dev
-    "@nest/falco-logger" dev
-    "@nest/graphql-thrift" dev
-    "@nest/justknobs" dev
+    "@nest/bladerunner" ">=0.0.4"
+    "@nest/dgw-client" "^0.1.2"
+    "@nest/distribgw" ">=0.0.5"
+    "@nest/falco-logger" "^0.1.3"
+    "@nest/graphql-thrift" "^0.1.1"
+    "@nest/justknobs" "^0.1.1"
     "@nest/thrift-proxy" "^0.2.0"
     "@opentelemetry/api" "^1.9.0"
+    server-only "^0.0.1"
+
+"@nest/justknobs@^0.1.1":
+  version "0.1.2"
+  resolved "https://registry.facebook.net/@nest/justknobs/-/justknobs-0.1.2.tgz#7b8394cc96dff37a9bf204ed7a10b0abe93bf69d"
+  integrity sha512-Nx3LFPYwvJGUur4LpF4jSM8nyXxPH1JO6AEGJpsbrrkUmEEhhirZW/jtxkoVAUgQLlO85mX9vm09YhzSEFFGlw==
+  dependencies:
+    "@nest/thrift-proxy" "^0.2.0"
     server-only "^0.0.1"
 
 "@nest/justknobs@dev":
@@ -1658,10 +1702,10 @@
   dependencies:
     "@nest/thrift-proxy" dev
 
-"@nest/logger@dev":
-  version "0.1.0-dev.647"
-  resolved "https://registry.facebook.net/@nest/logger/-/logger-0.1.0-dev.647.tgz#2d50c35d25b3ecb19e3542931f0ceea18411dbce"
-  integrity sha512-o0hT76baP2nUdj9LJ/B+YeUQUBeOxQeqz4vKizBmMavRDIZb1aH0sk/Qf9qNQRw7J7DgYMJbEoKx0mm8LQWNcQ==
+"@nest/logger@^0.1.2":
+  version "0.1.2"
+  resolved "https://registry.facebook.net/@nest/logger/-/logger-0.1.2.tgz#c4795cea849cdb82c691b1f80cb03d315a0f1f98"
+  integrity sha512-UySlQKRypSXCnwh+tNNSBYoPd2uIrWT+KmdKHer3zYAxE0lwPHywUQIQwO3qWxVMUXskH+/HVYC/C/IYYUjx9Q==
   dependencies:
     "@types/ua-parser-js" "^0.7.39"
     ua-parser-js "^1.0.40"
@@ -1671,13 +1715,13 @@
   resolved "https://registry.facebook.net/@nest/mc-client/-/mc-client-0.1.0-dev.2.tgz#3fba1f19ff45b6b8bad83970eede3c8320e87ae6"
   integrity sha512-pREjjTncPXvdyeoQoygrpK133RMcSnKyLAY2LKB1M0HrlQ0dNWuvmkDsj8JK7RvrRAw4ZVWDYhfAw1YXXue9iQ==
 
-"@nest/memory-profiler@dev":
-  version "0.1.1-dev.1"
-  resolved "https://registry.facebook.net/@nest/memory-profiler/-/memory-profiler-0.1.1-dev.1.tgz#9464c5aaa25c5f13372c3aceff02ce92669cd2d5"
-  integrity sha512-Fugqs5omLj5yw5M4FBbqDBXVDGOKiem9ki4d/RVyDjrXytbi4IxDt/C375EIGdRZM3jBVDVt61W/qcTSpLY/jw==
+"@nest/memory-profiler@^0.1.2":
+  version "0.1.2"
+  resolved "https://registry.facebook.net/@nest/memory-profiler/-/memory-profiler-0.1.2.tgz#46bcab1d101c968a1c3ca795ebadde0edc778ba3"
+  integrity sha512-3JrLmAEEGDkMARcBvVOrq89auGjabZH1tgOh4wGbdxeAYsZ5oc4Tq/kX53sQ17I/3PaNz5OsB+4/4RZlgpTFmQ==
   dependencies:
-    "@nest/justknobs" dev
-    "@nest/thrift-proxy" dev
+    "@nest/justknobs" "^0.1.1"
+    "@nest/thrift-proxy" "^0.2.0"
     "@opentelemetry/api" "^1.9.0"
     "@opentelemetry/api-logs" "^0.208.0"
     "@opentelemetry/exporter-logs-otlp-http" "^0.208.0"
@@ -1690,13 +1734,13 @@
   resolved "https://registry.facebook.net/@nest/meta-brand-icons/-/meta-brand-icons-0.0.1-dev.650.tgz#cd780771d2febc61e245f1863e1aba10b8ae8004"
   integrity sha512-bmIWtMnDF6xFs8MbipTLRaQ0xpFjw70Q/BbfNvURINReE9+rS7y8ivbEFKEDco9N/kRBJvoZ65rBpvPyqk5OXw==
 
-"@nest/middleware-chain@dev":
-  version "0.1.0-dev.646"
-  resolved "https://registry.facebook.net/@nest/middleware-chain/-/middleware-chain-0.1.0-dev.646.tgz#232e24cfb2d5c1ccbef88d4361513c041626c335"
-  integrity sha512-Tn+5S9iwY47CC4qesaXm8FbkV+lXZMIbaxL6keAMgMP5nfjRmxWt/V2KHJWVnlM7zpjfd7zvw8Su4VA1Wy2w2A==
+"@nest/middleware-chain@^0.1.1":
+  version "0.1.1"
+  resolved "https://registry.facebook.net/@nest/middleware-chain/-/middleware-chain-0.1.1.tgz#906ebfedb0f225b75bd3d7fa814e8b7ad741a920"
+  integrity sha512-GLvIBBZZHSB1Bfj39Bp3aXyf5hrzyPALsS9vdHDMrqjxy4I2DTfdGBb/upnncIsgbvUzN6qFF68Q9WFelkkGUQ==
 
 "@nest/nds@file:../../libs/nds":
-  version "0.1.1"
+  version "0.1.3"
   dependencies:
     "@hookform/resolvers" "^5.1.1"
     "@lexical/clipboard" "^0.22.0"
@@ -1778,27 +1822,29 @@
     zod "^3.25.75"
 
 "@nest/next-core@file:../../libs/next-core":
-  version "0.0.1"
+  version "0.0.2"
   dependencies:
     "@next/env" "^16.1.6"
-    webpack "^5.105.2"
+    webpack "5.105.4"
 
-"@nest/otel@dev":
-  version "0.1.3-dev.1"
-  resolved "https://registry.facebook.net/@nest/otel/-/otel-0.1.3-dev.1.tgz#466d119a5de56306947b27c8a8bbf632c34e3812"
-  integrity sha512-2vpQm379veDxbSrX/NrvX50Ku1vNCKgKdRVxhVjoHk59efYBecWLFWAZAGn3IPSZw9/hvg/c4Yi9J/u0aKaKxA==
+"@nest/otel@^0.1.4":
+  version "0.1.6"
+  resolved "https://registry.facebook.net/@nest/otel/-/otel-0.1.6.tgz#48de245d0f7ca44855e9779c259b3d5af23f40a0"
+  integrity sha512-XllmxrtSY4YQ7VYkfvku+Aea5Uzzq6+4n4tEXcRdfXb9trwjkv9CxEo696JzZAIaevXSYAw6EKLybldeWy08rw==
   dependencies:
     "@jridgewell/trace-mapping" "^0.3.31"
-    "@nest/cpu-profiler" dev
-    "@nest/justknobs" dev
-    "@nest/logger" dev
-    "@nest/memory-profiler" dev
-    "@nest/middleware-chain" dev
-    "@nest/request-context" dev
+    "@nest/cpu-profiler" "^0.1.1"
+    "@nest/justknobs" "^0.1.1"
+    "@nest/logger" "^0.1.2"
+    "@nest/memory-profiler" "^0.1.2"
+    "@nest/middleware-chain" "^0.1.1"
+    "@nest/request-context" "^0.1.1"
+    "@nest/web-session" dev
     "@opentelemetry/api" "^1.9.0"
     "@opentelemetry/api-logs" "^0.213.0"
     "@opentelemetry/auto-instrumentations-node" "^0.71.0"
     "@opentelemetry/auto-instrumentations-web" "^0.58.0"
+    "@opentelemetry/context-zone" "^2.6.0"
     "@opentelemetry/core" "^2.6.0"
     "@opentelemetry/exporter-logs-otlp-http" "^0.213.0"
     "@opentelemetry/exporter-metrics-otlp-http" "^0.213.0"
@@ -1814,21 +1860,24 @@
     "@opentelemetry/semantic-conventions" "^1.30.0"
     import-in-the-middle "3.0.0"
     require-in-the-middle "8.0.1"
+    zone.js "^0.15.0"
 
 "@nest/otel@file:../../libs/otel":
-  version "0.1.3"
+  version "0.1.6"
   dependencies:
     "@jridgewell/trace-mapping" "^0.3.31"
-    "@nest/cpu-profiler" dev
-    "@nest/justknobs" dev
-    "@nest/logger" dev
-    "@nest/memory-profiler" dev
-    "@nest/middleware-chain" dev
-    "@nest/request-context" dev
+    "@nest/cpu-profiler" "^0.1.1"
+    "@nest/justknobs" "^0.1.1"
+    "@nest/logger" "^0.1.2"
+    "@nest/memory-profiler" "^0.1.2"
+    "@nest/middleware-chain" "^0.1.1"
+    "@nest/request-context" "^0.1.1"
+    "@nest/web-session" dev
     "@opentelemetry/api" "^1.9.0"
     "@opentelemetry/api-logs" "^0.213.0"
     "@opentelemetry/auto-instrumentations-node" "^0.71.0"
     "@opentelemetry/auto-instrumentations-web" "^0.58.0"
+    "@opentelemetry/context-zone" "^2.6.0"
     "@opentelemetry/core" "^2.6.0"
     "@opentelemetry/exporter-logs-otlp-http" "^0.213.0"
     "@opentelemetry/exporter-metrics-otlp-http" "^0.213.0"
@@ -1844,6 +1893,17 @@
     "@opentelemetry/semantic-conventions" "^1.30.0"
     import-in-the-middle "3.0.0"
     require-in-the-middle "8.0.1"
+    zone.js "^0.15.0"
+
+"@nest/pre@^0.1.5":
+  version "0.1.9"
+  resolved "https://registry.facebook.net/@nest/pre/-/pre-0.1.9.tgz#b98ecb4f114d407371173fa00771edad84ebef23"
+  integrity sha512-ioHD5SRlhI+NMdeNxsi0oLCs4EHbW7hOiXL9c7yChUZa0IdXulCO0CoLsVl1aMIFKt0HpUBA8rLlP4bWVm6NoA==
+  dependencies:
+    "@jridgewell/trace-mapping" "^0.3.31"
+    "@nest/falco-logger" dev
+    "@nest/web-session" dev
+    web-vitals "^4.2.4"
 
 "@nest/pre@dev":
   version "0.1.3-dev.8"
@@ -1855,9 +1915,14 @@
     web-vitals "^4.2.4"
 
 "@nest/relay@file:../../libs/relay":
-  version "0.1.1"
+  version "0.1.7"
   dependencies:
-    "@nest/pre" dev
+    "@nest/pre" "^0.1.5"
+
+"@nest/request-context@^0.1.1":
+  version "0.1.1"
+  resolved "https://registry.facebook.net/@nest/request-context/-/request-context-0.1.1.tgz#2db054e7041f25348243e251014c7cc89969ca2f"
+  integrity sha512-s2zOHNI2OOXlJdPn3sbcI/Vy9VaLNIDMur/Bp7iq91G9XIBbgQJ7ZkdmUaVUZZp5zAKB/6RruCb3cyt2hSI+hA==
 
 "@nest/request-context@dev":
   version "0.1.0-dev.2"
@@ -1890,15 +1955,21 @@
     "@nest/thrift" dev
 
 "@nest/thrift-proxy@file:../../libs/thrift-proxy":
-  version "0.2.0"
+  version "0.2.2"
   dependencies:
     "@nest/request-context" dev
     "@nest/thrift" dev
+    server-only "^0.0.1"
 
 "@nest/thrift@dev":
   version "0.1.0-dev.647"
   resolved "https://registry.facebook.net/@nest/thrift/-/thrift-0.1.0-dev.647.tgz#eeadff5ed36715dd773479baaea024bdf3be6251"
   integrity sha512-XUtTLzMGQaQJIFINjk5A2FWLWDcaa/Y77jhOswX62zT14kk7PPhXc7XjitZbZJCOd08RZp6Jdrf2Xfui23/1Lw==
+
+"@nest/web-session@dev":
+  version "0.1.0-dev.1"
+  resolved "https://registry.facebook.net/@nest/web-session/-/web-session-0.1.0-dev.1.tgz#5ad2566ef7d07d215c948403549dfc04a09f0457"
+  integrity sha512-4eDjcpgyW4YcrTthBdxGLbpusFFkZ96OwPu8Cuqo5IfELvG+alYDfAUjgBODT0cFo5Vobx8Y0jIrd/XtVscRaQ==
 
 "@next/env@16.2.7":
   version "16.2.7"
@@ -2085,6 +2156,19 @@
   version "2.6.1"
   resolved "https://registry.facebook.net/@opentelemetry/context-async-hooks/-/context-async-hooks-2.6.1.tgz#06e60d5b3fba992a832af7f034758574e951bba3"
   integrity sha512-XHzhwRNkBpeP8Fs/qjGrAf9r9PRv67wkJQ/7ZPaBQQ68DYlTBBx5MF9LvPx7mhuXcDessKK2b+DcxqwpgkcivQ==
+
+"@opentelemetry/context-zone-peer-dep@2.9.0":
+  version "2.9.0"
+  resolved "https://registry.facebook.net/@opentelemetry/context-zone-peer-dep/-/context-zone-peer-dep-2.9.0.tgz#1d59ba8f6479f39c7b60e69faec40ecfd906b07c"
+  integrity sha512-xECINyl1UHLNbaF1my3K5AqJGyox1ysLidplInAb/XTfBxc2CLDRuS4rUxiJs8irW/PkEDujdc/IPUqkJFnrzg==
+
+"@opentelemetry/context-zone@^2.6.0":
+  version "2.9.0"
+  resolved "https://registry.facebook.net/@opentelemetry/context-zone/-/context-zone-2.9.0.tgz#1d6277961b06bb5e8f2917e053981fb5003f4635"
+  integrity sha512-dUH2j6/jh5hgsAFvEqx+9MIjdi8OzBK1u8K6qsb2HE2R1AiR+u00GWCxbDts30JggTX4rwA8YNLO2xF5LC6EFg==
+  dependencies:
+    "@opentelemetry/context-zone-peer-dep" "2.9.0"
+    zone.js "^0.11.0 || ^0.12.0 || ^0.13.0 || ^0.14.0 || ^0.15.0 || ^0.16.0"
 
 "@opentelemetry/core@2.2.0":
   version "2.2.0"
@@ -6388,6 +6472,11 @@ flatted@^3.2.9:
   resolved "https://registry.facebook.net/flatted/-/flatted-3.4.2.tgz#f5c23c107f0f37de8dbdf24f13722b3b98d52726"
   integrity sha512-PjDse7RzhcPkIJwy5t7KPWQSZ9cAbzQXcafsetQoD7sOJRQlGikNbx7yZp2OotDnJyrDcbyRq3Ttb18iYOqkxA==
 
+flow-enums-runtime@^0.0.6:
+  version "0.0.6"
+  resolved "https://registry.facebook.net/flow-enums-runtime/-/flow-enums-runtime-0.0.6.tgz#5bb0cd1b0a3e471330f4d109039b7eba5cb3e787"
+  integrity sha512-3PYnM29RFXwvAN6Pc/scUfkI7RwhQ/xqyLUyPNlXUp9S40zI8nup9tUSrTLSVnWGBN38FNiGWbwZOB6uR4OGdw==
+
 for-each@^0.3.3, for-each@^0.3.5:
   version "0.3.5"
   resolved "https://registry.facebook.net/for-each/-/for-each-0.3.5.tgz#d650688027826920feeb0af747ee7b9421a41d47"
@@ -7278,12 +7367,7 @@ lodash.merge@^4.6.2:
   resolved "https://registry.facebook.net/lodash.merge/-/lodash.merge-4.6.2.tgz#558aa53b43b661e1925a0afdfa36a9a1085fe57a"
   integrity sha512-0KpjqXRVvrYyCsX1swR/XTK0va6VQkQM6MNo7PqW77ByjAhoARA8EfrP1N4+KlKj8YS0ZUCtRT/YUuhyYDujIQ==
 
-lodash@^4.17.21:
-  version "4.17.23"
-  resolved "https://registry.facebook.net/lodash/-/lodash-4.17.23.tgz#f113b0378386103be4f6893388c73d0bde7f2c5a"
-  integrity sha512-LgVTMpQtIopCi79SJeDiP0TfWi5CNEc/L/aRdTh3yIvmZXTnheWpKjSZhnvMl8iXbC1tFg9gdHHDMLoV7CnG+w==
-
-lodash@^4.17.23:
+lodash@^4.17.21, lodash@^4.17.23, lodash@^4.18.1:
   version "4.18.1"
   resolved "https://registry.facebook.net/lodash/-/lodash-4.18.1.tgz#ff2b66c1f6326d59513de2407bf881439812771c"
   integrity sha512-dMInicTPVE8d1e5otfwmmjlxkZoUpiVLwyeTdUsi/Caj/gfzzblBcCE5sRHV/AsjuCmxWrte2TNGSYuCeCq+0Q==
@@ -9890,7 +9974,7 @@ webpack-sources@^3.3.4:
   resolved "https://registry.facebook.net/webpack-sources/-/webpack-sources-3.3.4.tgz#a338b95eb484ecc75fbb196cbe8a2890618b4891"
   integrity sha512-7tP1PdV4vF+lYPnkMR0jMY5/la2ub5Fc/8VQrrU+lXkiM6C4TjVfGw7iKfyhnTQOsD+6Q/iKw0eFciziRgD58Q==
 
-webpack@5.105.4, webpack@^5.105.2:
+webpack@5.105.4:
   version "5.105.4"
   resolved "https://registry.facebook.net/webpack/-/webpack-5.105.4.tgz#1b77fcd55a985ac7ca9de80a746caffa38220169"
   integrity sha512-jTywjboN9aHxFlToqb0K0Zs9SbBoW4zRUlGzI2tYNxVYcEi/IPpn+Xi4ye5jTLvX2YeLuic/IvxNot+Q1jMoOw==
@@ -10073,6 +10157,11 @@ zod@^3.25.75:
   version "3.25.76"
   resolved "https://registry.facebook.net/zod/-/zod-3.25.76.tgz#26841c3f6fd22a6a2760e7ccb719179768471e34"
   integrity sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==
+
+"zone.js@^0.11.0 || ^0.12.0 || ^0.13.0 || ^0.14.0 || ^0.15.0 || ^0.16.0":
+  version "0.16.2"
+  resolved "https://registry.facebook.net/zone.js/-/zone.js-0.16.2.tgz#5fc22335bc3e4082ba26985c23ff262a0c4c49a4"
+  integrity sha512-Eky7p2Z1Ig3NnbfodSPoARCjKBSTFMnE/ACsP1L/XJEfY4SdOFce19BsUCWVwL6K5ABZFy5J3bjcMWffX+YM3Q==
 
 zone.js@^0.15.0:
   version "0.15.1"
