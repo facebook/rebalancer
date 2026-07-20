@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "algopt/rebalancer/entities/Universe.h"
 #include "algopt/rebalancer/solver/moves/MoveType.h"
 #include <algopt/rebalancer/algopt_common/Concepts.h>
 
@@ -45,9 +46,10 @@ class GroupMoveWithHintStrategiesMoveType : public MoveType {
  public:
   std::string name() const override;
 
-  explicit GroupMoveWithHintStrategiesMoveType(
+  GroupMoveWithHintStrategiesMoveType(
       const interface::LocalSearchSolverSpec& solverConfigs,
-      const interface::GroupMoveWithHintStrategiesMoveTypeSpec& spec);
+      const interface::GroupMoveWithHintStrategiesMoveTypeSpec& spec,
+      const Problem& problem);
 
   MoveResult findBestMove(
       const MovesEvaluator& evaluator,
@@ -140,6 +142,11 @@ class GroupMoveWithHintStrategiesMoveType : public MoveType {
       const Problem& problem) const;
 
  private:
+  GroupMoveWithHintStrategiesMoveType(
+      const interface::LocalSearchSolverSpec& solverConfigs,
+      const interface::GroupMoveWithHintStrategiesMoveTypeSpec& spec,
+      const entities::Universe& universe);
+
   static bool notEnoughContainersForMoveSet(
       const interface::MoveStrategyType& strategy,
       int numContainers,
@@ -147,6 +154,11 @@ class GroupMoveWithHintStrategiesMoveType : public MoveType {
   // TODO: Remove this once and use IndexedAssignment for the local set
   entities::Set<entities::GroupId> primaryGroupIndicesExplored_;
   interface::GroupMoveWithHintStrategiesMoveTypeSpec spec_;
+  // Partitions and the optional unassigned container, resolved from spec names
+  // at construction
+  const entities::PartitionId primaryPartitionId_;
+  const entities::PartitionId secondaryPartitionId_;
+  const std::optional<entities::ContainerId> unassignedContainerId_;
 };
 
 } // namespace facebook::rebalancer

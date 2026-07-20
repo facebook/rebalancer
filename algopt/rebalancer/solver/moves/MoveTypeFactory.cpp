@@ -113,7 +113,7 @@ std::unique_ptr<MoveType> MoveTypeFactory::createMoveType(
           configs, spec.get_singleFastMoveTypeSpec());
     case interface::MoveTypeSpec::Type::groupMoveWithHintStrategiesMoveTypeSpec:
       return std::make_unique<GroupMoveWithHintStrategiesMoveType>(
-          configs, spec.get_groupMoveWithHintStrategiesMoveTypeSpec());
+          configs, spec.get_groupMoveWithHintStrategiesMoveTypeSpec(), problem);
     case interface::MoveTypeSpec::Type::singleGreedyMoveTypeSpec:
       return std::make_unique<SingleGreedyMoveType>(
           configs, spec.get_singleGreedyMoveTypeSpec());

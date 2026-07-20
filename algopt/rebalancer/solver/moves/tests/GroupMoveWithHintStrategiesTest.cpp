@@ -29,8 +29,9 @@ class MockGroupMoveWithHintStrategiesMoveType
  public:
   explicit MockGroupMoveWithHintStrategiesMoveType(
       const interface::LocalSearchSolverSpec& solverConfigs,
-      const interface::GroupMoveWithHintStrategiesMoveTypeSpec& spec)
-      : GroupMoveWithHintStrategiesMoveType(solverConfigs, spec) {
+      const interface::GroupMoveWithHintStrategiesMoveTypeSpec& spec,
+      const Problem& problem)
+      : GroupMoveWithHintStrategiesMoveType(solverConfigs, spec, problem) {
     rng_.seed(std::random_device()());
   }
 
@@ -310,7 +311,7 @@ CO_TEST_F(GroupMoveWithHintStrategiesTest, TestRandomSamplingWithReplacement) {
 
   const MockGroupMoveWithHintStrategiesMoveType
       mockGroupMoveWithHintStrategiesMoveType(
-          interface::LocalSearchSolverSpec{}, moveTypeSpec);
+          interface::LocalSearchSolverSpec{}, moveTypeSpec, getProblem());
   const std::vector<entities::ContainerId> containerIds = {container("rank1")};
   const std::vector<entities::ObjectId> objectIds = {object(0), object(4)};
 
@@ -387,7 +388,7 @@ CO_TEST_F(
 
   const MockGroupMoveWithHintStrategiesMoveType
       mockGroupMoveWithHintStrategiesMoveType(
-          interface::LocalSearchSolverSpec{}, moveTypeSpec);
+          interface::LocalSearchSolverSpec{}, moveTypeSpec, getProblem());
   const std::vector<entities::ContainerId> containerIds = {
       container("rank7"), container("rank5")};
 
@@ -463,7 +464,7 @@ CO_TEST_F(
 
   const MockGroupMoveWithHintStrategiesMoveType
       mockGroupMoveWithHintStrategiesMoveType(
-          interface::LocalSearchSolverSpec{}, moveTypeSpec);
+          interface::LocalSearchSolverSpec{}, moveTypeSpec, getProblem());
   std::vector<entities::ContainerId> containerIds;
   for (const auto i : folly::irange(2, 6)) {
     containerIds.push_back(container(i));
@@ -527,7 +528,7 @@ CO_TEST_F(GroupMoveWithHintStrategiesTest, TestMove) {
   moveTypeSpec.secondaryGroupReplacementConfig() = config;
 
   GroupMoveWithHintStrategiesMoveType groupMoveWithHintStrategiesMoveType(
-      interface::LocalSearchSolverSpec{}, moveTypeSpec);
+      interface::LocalSearchSolverSpec{}, moveTypeSpec, getProblem());
 
   const auto moveResult = groupMoveWithHintStrategiesMoveType.findBestMove(
       getMovesEvaluator(),
@@ -582,7 +583,7 @@ CO_TEST_F(GroupMoveWithHintStrategiesTest, TestSwapMove) {
   moveTypeSpec.moveStrategies()->groupToMoveStrategy() = hintMap;
 
   GroupMoveWithHintStrategiesMoveType groupMoveWithHintStrategiesMoveType(
-      interface::LocalSearchSolverSpec{}, moveTypeSpec);
+      interface::LocalSearchSolverSpec{}, moveTypeSpec, getProblem());
 
   const auto moveResult = groupMoveWithHintStrategiesMoveType.findBestMove(
       getMovesEvaluator(),
@@ -640,7 +641,7 @@ CO_TEST_F(GroupMoveWithHintStrategiesTest, getPrimaryGroupToExplore) {
 
   MockGroupMoveWithHintStrategiesMoveType
       mockGroupMoveWithHintStrategiesMoveType(
-          interface::LocalSearchSolverSpec{}, moveTypeSpec);
+          interface::LocalSearchSolverSpec{}, moveTypeSpec, getProblem());
   const auto tableToExplore =
       mockGroupMoveWithHintStrategiesMoveType.getPrimaryGroupToExplore(
           tableId, getProblem());
@@ -682,7 +683,7 @@ CO_TEST_F(GroupMoveWithHintStrategiesTest, generateAllMoveSetsNoValidMoveSets) {
 
   MockGroupMoveWithHintStrategiesMoveType
       mockGroupMoveWithHintStrategiesMoveType(
-          interface::LocalSearchSolverSpec{}, moveTypeSpec);
+          interface::LocalSearchSolverSpec{}, moveTypeSpec, getProblem());
 
   const auto tablePartitionId = partitionId("tables");
   const auto tableId = groupId(tablePartitionId, "table0");
@@ -724,7 +725,7 @@ CO_TEST_F(GroupMoveWithHintStrategiesTest, generateAllMoveSetsSingularMoveSet) {
 
   MockGroupMoveWithHintStrategiesMoveType
       mockGroupMoveWithHintStrategiesMoveType(
-          interface::LocalSearchSolverSpec{}, moveTypeSpec);
+          interface::LocalSearchSolverSpec{}, moveTypeSpec, getProblem());
 
   const auto tablePartitionId = partitionId("tables");
   const auto tableId = groupId(tablePartitionId, "table0");
@@ -771,7 +772,7 @@ CO_TEST_F(GroupMoveWithHintStrategiesTest, tertiaryMoveSetsOnly) {
 
   MockGroupMoveWithHintStrategiesMoveType
       mockGroupMoveWithHintStrategiesMoveType(
-          interface::LocalSearchSolverSpec{}, moveTypeSpec);
+          interface::LocalSearchSolverSpec{}, moveTypeSpec, getProblem());
 
   const auto tablePartitionId = partitionId("tables");
   const auto tableId = groupId(tablePartitionId, "table0");
@@ -825,7 +826,7 @@ CO_TEST_F(GroupMoveWithHintStrategiesTest, EnsureAllTablesExplored) {
 
   MockGroupMoveWithHintStrategiesMoveType
       mockGroupMoveWithHintStrategiesMoveType(
-          interface::LocalSearchSolverSpec{}, moveTypeSpec);
+          interface::LocalSearchSolverSpec{}, moveTypeSpec, getProblem());
 
   const auto bestMove = mockGroupMoveWithHintStrategiesMoveType.findBestMove(
       getMovesEvaluator(),
@@ -888,7 +889,7 @@ CO_TEST_F(
 
   MockGroupMoveWithHintStrategiesMoveType
       mockGroupMoveWithHintStrategiesMoveType(
-          interface::LocalSearchSolverSpec{}, moveTypeSpec);
+          interface::LocalSearchSolverSpec{}, moveTypeSpec, getProblem());
 
   const auto bestMove = mockGroupMoveWithHintStrategiesMoveType.findBestMove(
       getMovesEvaluator(),
@@ -950,7 +951,7 @@ CO_TEST_F(GroupMoveWithHintStrategiesTest, GroupToExplore) {
   moveTypeSpec.secondaryGroupReplacementConfig() = config;
 
   GroupMoveWithHintStrategiesMoveType groupMoveWithHintStrategiesMoveType(
-      interface::LocalSearchSolverSpec{}, moveTypeSpec);
+      interface::LocalSearchSolverSpec{}, moveTypeSpec, getProblem());
 
   const auto moveResult = groupMoveWithHintStrategiesMoveType.findBestMove(
       getMovesEvaluator(),
@@ -1010,7 +1011,7 @@ CO_TEST_F(GroupMoveWithHintStrategiesTest, GroupToExploreNoMoves) {
   moveTypeSpec.secondaryGroupReplacementConfig() = config;
 
   GroupMoveWithHintStrategiesMoveType groupMoveWithHintStrategiesMoveType(
-      interface::LocalSearchSolverSpec{}, moveTypeSpec);
+      interface::LocalSearchSolverSpec{}, moveTypeSpec, getProblem());
 
   const auto moveResult = groupMoveWithHintStrategiesMoveType.findBestMove(
       getMovesEvaluator(),
@@ -1037,7 +1038,7 @@ CO_TEST_F(
   moveTypeSpec.secondaryPartition() = "shardTypes";
 
   MockGroupMoveWithHintStrategiesMoveType mock(
-      interface::LocalSearchSolverSpec{}, moveTypeSpec);
+      interface::LocalSearchSolverSpec{}, moveTypeSpec, getProblem());
 
   const auto tablePartId = partitionId("tables");
   const auto tableId = groupId(tablePartId, "table0");
@@ -1063,7 +1064,7 @@ CO_TEST_F(
   moveTypeSpec.secondaryPartition() = "shardTypes";
 
   MockGroupMoveWithHintStrategiesMoveType mock(
-      interface::LocalSearchSolverSpec{}, moveTypeSpec);
+      interface::LocalSearchSolverSpec{}, moveTypeSpec, getProblem());
 
   const auto tablePartId = partitionId("tables");
   const auto tableId = groupId(tablePartId, "table0");
@@ -1092,7 +1093,7 @@ CO_TEST_F(
   moveTypeSpec.secondaryPartition() = "shardTypes";
 
   MockGroupMoveWithHintStrategiesMoveType mock(
-      interface::LocalSearchSolverSpec{}, moveTypeSpec);
+      interface::LocalSearchSolverSpec{}, moveTypeSpec, getProblem());
 
   const auto tablePartId = partitionId("tables");
   const auto tableId = groupId(tablePartId, "table0");
@@ -1130,7 +1131,7 @@ CO_TEST_F(
   moveTypeSpec.secondaryPartition() = "shardTypes";
 
   const MockGroupMoveWithHintStrategiesMoveType mock(
-      interface::LocalSearchSolverSpec{}, moveTypeSpec);
+      interface::LocalSearchSolverSpec{}, moveTypeSpec, getProblem());
 
   // shard0 -> tertiaryPartitonIds0, shard1 -> tertiaryPartitonIds1
   const std::vector<entities::ObjectId> objects = {object(0), object(1)};
@@ -1179,7 +1180,7 @@ CO_TEST_F(
   moveTypeSpec.secondaryPartition() = "shardTypes";
 
   const MockGroupMoveWithHintStrategiesMoveType mock(
-      interface::LocalSearchSolverSpec{}, moveTypeSpec);
+      interface::LocalSearchSolverSpec{}, moveTypeSpec, getProblem());
 
   const std::vector<entities::ObjectId> objects = {object(0), object(1)};
 
@@ -1216,7 +1217,7 @@ CO_TEST_F(
   moveTypeSpec.secondaryPartition() = "shardTypes";
 
   const MockGroupMoveWithHintStrategiesMoveType mock(
-      interface::LocalSearchSolverSpec{}, moveTypeSpec);
+      interface::LocalSearchSolverSpec{}, moveTypeSpec, getProblem());
 
   // shard0 and shard4 are both in tertiaryPartitonIds0 (0%4=0, 4%4=0)
   const std::vector<entities::ObjectId> objects = {object(0), object(4)};
@@ -1260,7 +1261,7 @@ CO_TEST_F(
   moveTypeSpec.secondaryPartition() = "shardTypes";
 
   const MockGroupMoveWithHintStrategiesMoveType mock(
-      interface::LocalSearchSolverSpec{}, moveTypeSpec);
+      interface::LocalSearchSolverSpec{}, moveTypeSpec, getProblem());
 
   // shard0, shard4, shard8 all in tertiaryPartitonIds0 (3 objects, 1 group)
   const std::vector<entities::ObjectId> objects = {
@@ -1301,7 +1302,7 @@ CO_TEST_F(
   moveTypeSpec.secondaryPartition() = "shardTypes";
 
   const MockGroupMoveWithHintStrategiesMoveType mock(
-      interface::LocalSearchSolverSpec{}, moveTypeSpec);
+      interface::LocalSearchSolverSpec{}, moveTypeSpec, getProblem());
 
   // shard0 -> tertiaryPartitonIds0, shard1 -> tertiaryPartitonIds1
   const std::vector<entities::ObjectId> objects = {object(0), object(1)};
@@ -1345,7 +1346,7 @@ CO_TEST_F(
   moveTypeSpec.secondaryPartition() = "shardTypes";
 
   const MockGroupMoveWithHintStrategiesMoveType mock(
-      interface::LocalSearchSolverSpec{}, moveTypeSpec);
+      interface::LocalSearchSolverSpec{}, moveTypeSpec, getProblem());
 
   const std::vector<entities::ObjectId> objects = {object(0), object(1)};
 
@@ -1393,7 +1394,7 @@ CO_TEST_F(
   moveTypeSpec.secondaryPartition() = "shardTypes";
 
   const MockGroupMoveWithHintStrategiesMoveType mock(
-      interface::LocalSearchSolverSpec{}, moveTypeSpec);
+      interface::LocalSearchSolverSpec{}, moveTypeSpec, getProblem());
 
   const std::vector<entities::ObjectId> objects = {object(0), object(1)};
 
@@ -1434,7 +1435,7 @@ CO_TEST_F(
   moveTypeSpec.secondaryPartition() = "shardTypes";
 
   const MockGroupMoveWithHintStrategiesMoveType mock(
-      interface::LocalSearchSolverSpec{}, moveTypeSpec);
+      interface::LocalSearchSolverSpec{}, moveTypeSpec, getProblem());
 
   // 3 objects but each scope item only has 2 containers
   const std::vector<entities::ObjectId> objects = {
@@ -1473,7 +1474,7 @@ CO_TEST_F(
   moveTypeSpec.secondaryPartition() = "shardTypes";
 
   const MockGroupMoveWithHintStrategiesMoveType mock(
-      interface::LocalSearchSolverSpec{}, moveTypeSpec);
+      interface::LocalSearchSolverSpec{}, moveTypeSpec, getProblem());
 
   // 2 objects, scope items with 3+ containers (not a unique sample)
   const std::vector<entities::ObjectId> objects = {object(0), object(1)};
@@ -1516,7 +1517,7 @@ CO_TEST_F(
   moveTypeSpec.secondaryPartition() = "shardTypes";
 
   const MockGroupMoveWithHintStrategiesMoveType mock(
-      interface::LocalSearchSolverSpec{}, moveTypeSpec);
+      interface::LocalSearchSolverSpec{}, moveTypeSpec, getProblem());
 
   // 2 objects, mix of scope items: some with enough, some without
   const std::vector<entities::ObjectId> objects = {object(0), object(1)};
@@ -1629,7 +1630,7 @@ CO_TEST_F(
   moveTypeSpec.secondaryPartition() = "shardTypes";
 
   const MockGroupMoveWithHintStrategiesMoveType mock(
-      interface::LocalSearchSolverSpec{}, moveTypeSpec);
+      interface::LocalSearchSolverSpec{}, moveTypeSpec, getProblem());
 
   const std::vector<entities::ObjectId> objects = {object(0), object(1)};
 
@@ -1658,7 +1659,7 @@ CO_TEST_F(
   moveTypeSpec.secondaryPartition() = "shardTypes";
 
   const MockGroupMoveWithHintStrategiesMoveType mock(
-      interface::LocalSearchSolverSpec{}, moveTypeSpec);
+      interface::LocalSearchSolverSpec{}, moveTypeSpec, getProblem());
 
   const std::vector<entities::ObjectId> objects = {object(0)};
 
@@ -1722,7 +1723,7 @@ CO_TEST_F(
 
   MockGroupMoveWithHintStrategiesMoveType
       mockGroupMoveWithHintStrategiesMoveType(
-          interface::LocalSearchSolverSpec{}, moveTypeSpec);
+          interface::LocalSearchSolverSpec{}, moveTypeSpec, getProblem());
 
   const auto tablePartitionId = partitionId("tables");
   const auto tableId = groupId(tablePartitionId, "table0");

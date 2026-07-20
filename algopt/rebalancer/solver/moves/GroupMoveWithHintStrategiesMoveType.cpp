@@ -17,6 +17,7 @@
 #include "algopt/rebalancer/solver/moves/MoveHelper.h"
 #include "algopt/rebalancer/solver/moves/MoveTypeUtils.h"
 #include "algopt/rebalancer/solver/utils/ObjectDeduper.h"
+#include "algopt/rebalancer/solver/utils/Problem.h"
 
 #include <folly/container/irange.h>
 
@@ -24,8 +25,27 @@ namespace facebook::rebalancer {
 
 GroupMoveWithHintStrategiesMoveType::GroupMoveWithHintStrategiesMoveType(
     const interface::LocalSearchSolverSpec& solverConfigs,
-    const interface::GroupMoveWithHintStrategiesMoveTypeSpec& spec_)
-    : MoveType(solverConfigs), spec_(spec_) {}
+    const interface::GroupMoveWithHintStrategiesMoveTypeSpec& spec,
+    const Problem& problem)
+    : GroupMoveWithHintStrategiesMoveType(
+          solverConfigs,
+          spec,
+          problem.getUniverse()) {}
+
+GroupMoveWithHintStrategiesMoveType::GroupMoveWithHintStrategiesMoveType(
+    const interface::LocalSearchSolverSpec& solverConfigs,
+    const interface::GroupMoveWithHintStrategiesMoveTypeSpec& spec,
+    const entities::Universe& universe)
+    : MoveType(solverConfigs),
+      spec_(spec),
+      primaryPartitionId_(universe.getPartitionId(*spec.primaryPartition())),
+      secondaryPartitionId_(
+          universe.getPartitionId(*spec.secondaryPartition())),
+      unassignedContainerId_(
+          spec.unassignedContainer()
+              ? std::make_optional(
+                    universe.getContainerId(*spec.unassignedContainer()))
+              : std::nullopt) {}
 
 std::string GroupMoveWithHintStrategiesMoveType::name() const {
   return std::string(kGroupMoveWithHintStrategiesMoveTypeName);
@@ -40,8 +60,7 @@ MoveResult GroupMoveWithHintStrategiesMoveType::findBestMove(
   auto& problem = evaluator.getProblem();
   const auto& universe = problem.getUniverse();
   const auto& primaryPartitionName = *spec_.primaryPartition();
-  const auto primaryPartitionId = universe.getPartitionId(primaryPartitionName);
-  const auto& primaryPartition = universe.getPartition(primaryPartitionId);
+  const auto& primaryPartition = universe.getPartition(primaryPartitionId_);
   const auto& objectIdToGroupIds = primaryPartition.getObjectIdToGroupIds();
   const auto& hotContainerObjects = evaluator.getDynamicObjects(hotContainer);
 
@@ -79,7 +98,7 @@ MoveResult GroupMoveWithHintStrategiesMoveType::findBestMove(
     const auto primaryGroupIndicesExploredInserted =
         primaryGroupIndicesExplored_.insert(primaryGroupId);
     if (!primaryGroupIndicesExploredInserted.second &&
-        !spec_.unassignedContainer().has_value()) {
+        !unassignedContainerId_.has_value()) {
       continue;
     }
 
@@ -103,17 +122,13 @@ entities::Map<entities::GroupId, std::vector<entities::ObjectId>>
 GroupMoveWithHintStrategiesMoveType::getPrimaryGroupToExplore(
     entities::GroupId currentGroup,
     const Problem& problem) {
-  const auto& primaryPartitionName = *spec_.primaryPartition();
   const auto& secondaryPartitionName = *spec_.secondaryPartition();
 
   const auto& universe = problem.getUniverse();
-  const auto primaryPartitionId = universe.getPartitionId(primaryPartitionName);
-  const auto& primaryPartition = universe.getPartition(primaryPartitionId);
+  const auto& primaryPartition = universe.getPartition(primaryPartitionId_);
   const auto& objectsInCurrentGroup =
       primaryPartition.getObjectIds(currentGroup);
-  const auto secondaryPartitionId =
-      universe.getPartitionId(secondaryPartitionName);
-  const auto& secondaryPartition = universe.getPartition(secondaryPartitionId);
+  const auto& secondaryPartition = universe.getPartition(secondaryPartitionId_);
   const auto& secondaryObjectIdToGroupIds =
       secondaryPartition.getObjectIdToGroupIds();
 
@@ -246,9 +261,7 @@ MoveSet GroupMoveWithHintStrategiesMoveType::generateMoveSetWithScopeItemTuple(
     const std::vector<entities::ObjectId>& objects,
     const Problem& problem) const {
   const auto containerToExcludeFromSample =
-      (spec_.unassignedContainer().has_value())
-      ? problem.getUniverse().getContainerId(*spec_.unassignedContainer())
-      : hotContainer;
+      unassignedContainerId_.value_or(hotContainer);
   MoveSet candidateMoveSet;
   size_t index = 0;
   for (const auto& [_, tertiaryObjects] : tertiaryGroupToObjects) {
@@ -420,13 +433,8 @@ std::vector<MoveSet> GroupMoveWithHintStrategiesMoveType::generateAllMoveSets(
   auto& moveStrategies = *spec_.moveStrategies();
   auto& groupToMoveStrategy = *moveStrategies.groupToMoveStrategy();
 
-  const auto unassignedContainerId = spec_.unassignedContainer()
-      ? std::make_optional(
-            universe.getContainerId(*spec_.unassignedContainer()))
-      : std::nullopt;
-
   auto [baseMoveSet, allocatedSecondaryGroupId] = findAllocatedSecondaryGroup(
-      secondaryGroupIdToObjects, unassignedContainerId, problem);
+      secondaryGroupIdToObjects, unassignedContainerId_, problem);
 
   const auto& secondaryGroupToAllowedReplacements =
       *spec_.secondaryGroupReplacementConfig()
@@ -438,7 +446,7 @@ std::vector<MoveSet> GroupMoveWithHintStrategiesMoveType::generateAllMoveSets(
             universe.getEntityName(*allocatedSecondaryGroupId))
       : nullptr;
 
-  const auto exclusionContainer = unassignedContainerId.value_or(hotContainer);
+  const auto exclusionContainer = unassignedContainerId_.value_or(hotContainer);
 
   std::vector<MoveSet> possibleMoveSets;
   for (const auto& [secondaryGroupId, objects] : secondaryGroupIdToObjects) {
