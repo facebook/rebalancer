@@ -122,10 +122,19 @@ class ColocateGroupsMoveTypeTest : public MoveTestBase {
   }
 };
 
-TEST_F(ColocateGroupsMoveTypeTest, Name) {
+CO_TEST_F(ColocateGroupsMoveTypeTest, Name) {
+  interface::ColocateGroupsMoveTypeSpec spec;
+  spec.partitionName() = "tenant";
+  spec.colocationScopeName() = "region";
+  interface::ColocateGroupsMoveTypeRelatedGroupsInfo relatedGroupsInfo;
+  relatedGroupsInfo.relatedGroups() = {"tenant1", "tenant2", "tenant3"};
+  spec.relatedGroupsList() = {relatedGroupsInfo};
+
+  co_await setUpUniverse();
+  createProblem({const_expr(0, getUniverse())}, const_expr(0, getUniverse()));
+
   auto colocateMoveType = ColocateGroupsMoveType(
-      interface::LocalSearchSolverSpec{},
-      interface::ColocateGroupsMoveTypeSpec());
+      interface::LocalSearchSolverSpec{}, spec, getProblem());
   EXPECT_EQ("COLOCATE_GROUPS", colocateMoveType.name());
 }
 
@@ -138,9 +147,6 @@ CO_TEST_F(ColocateGroupsMoveTypeTest, VerifyMoveSetsBasic) {
   relatedGroupsInfo.relatedGroups() = {"tenant1", "tenant2", "tenant3"};
   spec.relatedGroupsList() = {relatedGroupsInfo};
 
-  auto colocateMoveType =
-      ColocateGroupsMoveType(interface::LocalSearchSolverSpec{}, spec);
-
   co_await setUpUniverse();
 
   // add an objective to minimize the utilization of region1 containers and
@@ -151,6 +157,9 @@ CO_TEST_F(ColocateGroupsMoveTypeTest, VerifyMoveSetsBasic) {
           getContainerSet(),
           Assignment(getUniverse().getContainers().getInitialAssignment()))},
       const_expr(0, getUniverse()));
+
+  auto colocateMoveType = ColocateGroupsMoveType(
+      interface::LocalSearchSolverSpec{}, spec, getProblem());
 
   auto bestResult = colocateMoveType.findBestMove(
       getMovesEvaluator(),
@@ -188,9 +197,6 @@ CO_TEST_F(ColocateGroupsMoveTypeTest, VerifyMoveSetsWithSampling) {
 
   spec.defaultSampleSize() = 2;
 
-  auto colocateMoveType =
-      ColocateGroupsMoveType(interface::LocalSearchSolverSpec{}, spec);
-
   co_await setUpUniverse();
 
   // add an objective to minimize the utilization of region1 containers and
@@ -201,6 +207,9 @@ CO_TEST_F(ColocateGroupsMoveTypeTest, VerifyMoveSetsWithSampling) {
           getContainerSet(),
           Assignment(getUniverse().getContainers().getInitialAssignment()))},
       const_expr(0, getUniverse()));
+
+  auto colocateMoveType = ColocateGroupsMoveType(
+      interface::LocalSearchSolverSpec{}, spec, getProblem());
 
   auto bestResult = colocateMoveType.findBestMove(
       getMovesEvaluator(),
@@ -234,9 +243,6 @@ CO_TEST_F(ColocateGroupsMoveTypeTest, VerifyMoveSetsWithGroupToContainers) {
       },
   }};
 
-  auto colocateMoveType =
-      ColocateGroupsMoveType(interface::LocalSearchSolverSpec{}, spec);
-
   co_await setUpUniverse();
 
   // add an objective to minimize the utilization of region1 containers and
@@ -247,6 +253,9 @@ CO_TEST_F(ColocateGroupsMoveTypeTest, VerifyMoveSetsWithGroupToContainers) {
           getContainerSet(),
           Assignment(getUniverse().getContainers().getInitialAssignment()))},
       const_expr(0, getUniverse()));
+
+  auto colocateMoveType = ColocateGroupsMoveType(
+      interface::LocalSearchSolverSpec{}, spec, getProblem());
 
   auto bestResult = colocateMoveType.findBestMove(
       getMovesEvaluator(),
@@ -290,9 +299,6 @@ CO_TEST_F(
       },
   }};
 
-  auto colocateMoveType =
-      ColocateGroupsMoveType(interface::LocalSearchSolverSpec{}, spec);
-
   co_await setUpUniverse();
 
   // add an objective to minimize the utilization of region1 containers and
@@ -303,6 +309,9 @@ CO_TEST_F(
           getContainerSet(),
           Assignment(getUniverse().getContainers().getInitialAssignment()))},
       const_expr(0, getUniverse()));
+
+  auto colocateMoveType = ColocateGroupsMoveType(
+      interface::LocalSearchSolverSpec{}, spec, getProblem());
 
   auto bestResult = colocateMoveType.findBestMove(
       getMovesEvaluator(),
@@ -338,9 +347,6 @@ CO_TEST_F(
 
   spec.relatedGroupsList() = {relatedGroupsInfo};
 
-  auto colocateMoveType =
-      ColocateGroupsMoveType(interface::LocalSearchSolverSpec{}, spec);
-
   co_await setUpUniverse(
       entities::Map<std::string, std::vector<std::string>>{
           {"container11", {"object2"}},
@@ -362,6 +368,9 @@ CO_TEST_F(
           getContainerSet(),
           Assignment(getUniverse().getContainers().getInitialAssignment()))},
       const_expr(0, getUniverse()));
+
+  auto colocateMoveType = ColocateGroupsMoveType(
+      interface::LocalSearchSolverSpec{}, spec, getProblem());
 
   auto bestResult = colocateMoveType.findBestMove(
       getMovesEvaluator(),
@@ -396,9 +405,6 @@ CO_TEST_F(
 
   spec.relatedGroupsList() = {relatedGroupsInfo};
 
-  auto colocateMoveType =
-      ColocateGroupsMoveType(interface::LocalSearchSolverSpec{}, spec);
-
   co_await setUpUniverse(
       entities::Map<std::string, std::vector<std::string>>{
           {"container11", {"object2", "object4"}},
@@ -420,6 +426,9 @@ CO_TEST_F(
           getContainerSet(),
           Assignment(getUniverse().getContainers().getInitialAssignment()))},
       const_expr(0, getUniverse()));
+
+  auto colocateMoveType = ColocateGroupsMoveType(
+      interface::LocalSearchSolverSpec{}, spec, getProblem());
 
   auto bestResult = colocateMoveType.findBestMove(
       getMovesEvaluator(),
@@ -444,9 +453,6 @@ CO_TEST_F(ColocateGroupsMoveTypeTest, VerifyMoveSetsBasicNoBetterMove) {
   relatedGroupsInfo2.relatedGroups() = {"tenant3", "tenant4"};
   spec.relatedGroupsList() = {relatedGroupsInfo1, relatedGroupsInfo2};
 
-  auto colocateMoveType =
-      ColocateGroupsMoveType(interface::LocalSearchSolverSpec{}, spec);
-
   co_await setUpUniverse();
 
   auto allContainers = std::make_shared<PackerSet<entities::ContainerId>>(
@@ -468,6 +474,9 @@ CO_TEST_F(ColocateGroupsMoveTypeTest, VerifyMoveSetsBasicNoBetterMove) {
       allContainers,
       Assignment(getUniverse().getContainers().getInitialAssignment()));
   createProblem({objective}, const_expr(0, getUniverse()));
+
+  auto colocateMoveType = ColocateGroupsMoveType(
+      interface::LocalSearchSolverSpec{}, spec, getProblem());
 
   const auto& precision = getUniverse().getPrecision();
 
@@ -499,9 +508,6 @@ CO_TEST_F(ColocateGroupsMoveTypeTest, InvalidMoveFilterPrunesDestinations) {
   relatedGroupsInfo.relatedGroups() = {"tenant1", "tenant2", "tenant3"};
   spec.relatedGroupsList() = {relatedGroupsInfo};
 
-  auto colocateMoveType =
-      ColocateGroupsMoveType(interface::LocalSearchSolverSpec{}, spec);
-
   co_await setUpUniverse();
 
   // Forbid tenant1's representative (object1) from every region2 container, so
@@ -523,6 +529,9 @@ CO_TEST_F(ColocateGroupsMoveTypeTest, InvalidMoveFilterPrunesDestinations) {
       /*higherPriorityObjConfig=*/std::nullopt,
       /*nonAcceptingContainers=*/{},
       std::move(invalidMoveFilter));
+
+  auto colocateMoveType = ColocateGroupsMoveType(
+      interface::LocalSearchSolverSpec{}, spec, getProblem());
 
   colocateMoveType.findBestMove(
       getMovesEvaluator(),
@@ -546,9 +555,6 @@ CO_TEST_F(ColocateGroupsMoveTypeTest, NonAcceptingContainersPrunedFromProduct) {
   relatedGroupsInfo.relatedGroups() = {"tenant1", "tenant2", "tenant3"};
   spec.relatedGroupsList() = {relatedGroupsInfo};
 
-  auto colocateMoveType =
-      ColocateGroupsMoveType(interface::LocalSearchSolverSpec{}, spec);
-
   co_await setUpUniverse();
 
   // Mark two of region2's four containers non-accepting. Each group's region2
@@ -565,6 +571,9 @@ CO_TEST_F(ColocateGroupsMoveTypeTest, NonAcceptingContainersPrunedFromProduct) {
       const_expr(0, getUniverse()),
       /*higherPriorityObjConfig=*/std::nullopt,
       nonAcceptingContainers);
+
+  auto colocateMoveType = ColocateGroupsMoveType(
+      interface::LocalSearchSolverSpec{}, spec, getProblem());
 
   colocateMoveType.findBestMove(
       getMovesEvaluator(),
@@ -636,8 +645,8 @@ CO_TEST_F(ColocateGroupsMoveTypeTest, FindBestMoveStopsAtTimeLimit) {
   relatedGroupsInfo.relatedGroups() = {
       "tenant1", "tenant2", "tenant3", "tenant4"};
   spec.relatedGroupsList() = {relatedGroupsInfo};
-  auto colocateMoveType =
-      ColocateGroupsMoveType(interface::LocalSearchSolverSpec{}, spec);
+  auto colocateMoveType = ColocateGroupsMoveType(
+      interface::LocalSearchSolverSpec{}, spec, getProblem());
 
   constexpr double kTimeLimitSecs = 0.01;
   const algopt::Timer timer(/*autoStart=*/true);

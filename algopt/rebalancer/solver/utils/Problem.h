@@ -169,6 +169,10 @@ class Problem {
       const std::string& partitionName,
       entities::ObjectId objectId) const;
 
+  std::optional<entities::GroupId> getOnlyGroupIdIfExists(
+      entities::PartitionId partitionId,
+      entities::ObjectId objectId) const;
+
   // Returns the list of objects given a partition and group.
   const std::vector<entities::ObjectId>& getObjectIdsForGroup(
       const std::string& partitionName,

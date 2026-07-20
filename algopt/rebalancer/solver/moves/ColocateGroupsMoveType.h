@@ -79,9 +79,10 @@ class ColocateGroupsMoveType : public MoveType {
  public:
   std::string name() const override;
 
-  explicit ColocateGroupsMoveType(
+  ColocateGroupsMoveType(
       const interface::LocalSearchSolverSpec& solverConfigs,
-      const interface::ColocateGroupsMoveTypeSpec& spec);
+      const interface::ColocateGroupsMoveTypeSpec& spec,
+      const Problem& problem);
 
   MoveResult findBestMove(
       const MovesEvaluator& evaluator,
@@ -98,10 +99,7 @@ class ColocateGroupsMoveType : public MoveType {
         destinationScopeItemIds = nullptr;
   };
 
-  // stores all the info from spec in terms of ids (as opposed to names). It is
-  // initialized once and remains until the move type is destroyed.
-  // Unfortunately, we cannot initialize it from the constructor since the
-  // constructor currently does not have access to the universe
+  // The spec resolved to ids (instead of names), built once at construction.
   struct SpecInfo {
     entities::PartitionId partitionId;
     entities::ScopeId colocationScopeId;
@@ -114,7 +112,9 @@ class ColocateGroupsMoveType : public MoveType {
     std::optional<int> defaultSampleSize;
   };
 
-  void initializeSpecInfo(const Problem& problem);
+  static SpecInfo buildSpecInfo(
+      const interface::ColocateGroupsMoveTypeSpec& spec,
+      const Problem& problem);
 
   std::vector<MoveSet> getMoveSetsForRelatedGroups(
       const RelatedGroupsInfoId& relatedGroupsInfo,
@@ -148,8 +148,7 @@ class ColocateGroupsMoveType : public MoveType {
       double timeLimit);
 
  private:
-  std::optional<SpecInfo> specInfo_ = std::nullopt;
-  interface::ColocateGroupsMoveTypeSpec spec_;
+  const SpecInfo specInfo_;
 };
 
 } // namespace facebook::rebalancer

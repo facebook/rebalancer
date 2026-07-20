@@ -57,8 +57,9 @@ std::string ColocateGroupsMoveType::name() const {
 
 ColocateGroupsMoveType::ColocateGroupsMoveType(
     const interface::LocalSearchSolverSpec& solverConfigs,
-    const interface::ColocateGroupsMoveTypeSpec& spec)
-    : MoveType(solverConfigs), spec_(spec) {}
+    const interface::ColocateGroupsMoveTypeSpec& spec,
+    const Problem& problem)
+    : MoveType(solverConfigs), specInfo_(buildSpecInfo(spec, problem)) {}
 
 MoveResult ColocateGroupsMoveType::findBestMove(
     const MovesEvaluator& evaluator,
@@ -68,14 +69,13 @@ MoveResult ColocateGroupsMoveType::findBestMove(
     double timeLimit) {
   const algopt::Timer timer(true);
   auto& problem = evaluator.getProblem();
-  initializeSpecInfo(problem);
 
   const auto& universe = problem.getUniverse();
   const auto& precision = universe.getPrecision();
-  const auto& colocationScope = universe.getScope(specInfo_->colocationScopeId);
+  const auto& colocationScope = universe.getScope(specInfo_.colocationScopeId);
   const auto sourceScopeItemIdOpt =
       colocationScope.getScopeItemId(hotContainer);
-  const auto& partition = universe.getPartition(specInfo_->partitionId);
+  const auto& partition = universe.getPartition(specInfo_.partitionId);
   auto bestResult = MoveResult::makeEmpty();
 
   entities::Set<entities::GroupId> seenGroupIds;
@@ -88,13 +88,13 @@ MoveResult ColocateGroupsMoveType::findBestMove(
     }
 
     auto groupIdOpt =
-        problem.getOnlyGroupIdIfExists(*spec_.partitionName(), hotObjectId);
+        problem.getOnlyGroupIdIfExists(specInfo_.partitionId, hotObjectId);
     if (!groupIdOpt.has_value()) {
       continue;
     }
     auto hotObjectGroupId = groupIdOpt.value();
     auto relatedGroupsInfoPtr =
-        folly::get_ptr(specInfo_->groupIdToRelatedGroups, hotObjectGroupId);
+        folly::get_ptr(specInfo_.groupIdToRelatedGroups, hotObjectGroupId);
     if (!relatedGroupsInfoPtr || seenGroupIds.contains(hotObjectGroupId)) {
       // not a related group for this move type or we have already seen this
       // group
@@ -166,7 +166,7 @@ std::vector<MoveSet> ColocateGroupsMoveType::getMoveSetsForRelatedGroups(
     const algopt::Timer& timer,
     double timeLimit) const {
   const auto& universe = problem.getUniverse();
-  const auto& colocationScope = universe.getScope(specInfo_->colocationScopeId);
+  const auto& colocationScope = universe.getScope(specInfo_.colocationScopeId);
   const auto* const invalidMoveFilter = problem.getInvalidMoveFilter();
   // if the group has a specific set of colocation scope items, then only those
   // are considered as potential destinations; else consider all scope items in
@@ -191,8 +191,7 @@ std::vector<MoveSet> ColocateGroupsMoveType::getMoveSetsForRelatedGroups(
     std::vector<std::vector<entities::ContainerId>>
         destinationContainersPerGroup;
     auto groupToContainersPtr = folly::get_ptr(
-        specInfo_->colocationScopeItemToGroupToContainers,
-        destinationScopeItem);
+        specInfo_.colocationScopeItemToGroupToContainers, destinationScopeItem);
     auto& relatedGroups = *relatedGroupsInfo.relatedGroups;
     destinationContainersPerGroup.reserve(relatedGroups.size());
     for (const auto i : folly::irange(relatedGroups.size())) {
@@ -211,9 +210,9 @@ std::vector<MoveSet> ColocateGroupsMoveType::getMoveSetsForRelatedGroups(
           invalidMoveFilter);
 
       destinationContainersPerGroup.emplace_back(
-          specInfo_->defaultSampleSize
+          specInfo_.defaultSampleSize
               ? getRandomSample<std::vector>(
-                    validContainers, *specInfo_->defaultSampleSize, rng_)
+                    validContainers, *specInfo_.defaultSampleSize, rng_)
               : std::move(validContainers));
     }
 
@@ -312,19 +311,16 @@ std::vector<MoveSet> ColocateGroupsMoveType::getMoveSetsToDestinationScopeItem(
   return moveSets;
 }
 
-void ColocateGroupsMoveType::initializeSpecInfo(const Problem& problem) {
-  if (specInfo_.has_value()) {
-    // previously initialized, nothing to do
-    return;
-  }
-
+ColocateGroupsMoveType::SpecInfo ColocateGroupsMoveType::buildSpecInfo(
+    const interface::ColocateGroupsMoveTypeSpec& spec,
+    const Problem& problem) {
   const auto& universe = problem.getUniverse();
-  auto& partitionName = *spec_.partitionName();
-  auto partitionId = universe.getPartitionId(partitionName);
-  auto& partition = universe.getPartition(partitionId);
-  auto& colocationScopeName = *spec_.colocationScopeName();
+  const auto& partitionName = *spec.partitionName();
+  const auto partitionId = universe.getPartitionId(partitionName);
+  const auto& partition = universe.getPartition(partitionId);
+  const auto& colocationScopeName = *spec.colocationScopeName();
   auto colocationScopeId = universe.getScopeId(colocationScopeName);
-  auto& relatedGroupsList = *spec_.relatedGroupsList();
+  const auto& relatedGroupsList = *spec.relatedGroupsList();
 
   // check that partition is disjoint
   if (!partition.isDisjoint()) {
@@ -370,7 +366,7 @@ void ColocateGroupsMoveType::initializeSpecInfo(const Problem& problem) {
   }
 
   auto& colocationScopeItemToGroupToContainers =
-      *spec_.colocationScopeItemToGroupToContainers();
+      *spec.colocationScopeItemToGroupToContainers();
   entities::Map<
       entities::ScopeItemId,
       entities::Map<entities::GroupId, entities::Set<entities::ContainerId>>>
@@ -393,15 +389,14 @@ void ColocateGroupsMoveType::initializeSpecInfo(const Problem& problem) {
     }
   }
 
-  specInfo_.emplace(
-      SpecInfo{
-          .partitionId = partitionId,
-          .colocationScopeId = colocationScopeId,
-          .groupIdToRelatedGroups = std::move(groupIdToRelatedGroups),
-          .colocationScopeItemToGroupToContainers =
-              std::move(colocationScopeItemIdToGroupIdToContainerIds),
-          .defaultSampleSize = spec_.defaultSampleSize().to_optional(),
-      });
+  return SpecInfo{
+      .partitionId = partitionId,
+      .colocationScopeId = colocationScopeId,
+      .groupIdToRelatedGroups = std::move(groupIdToRelatedGroups),
+      .colocationScopeItemToGroupToContainers =
+          std::move(colocationScopeItemIdToGroupIdToContainerIds),
+      .defaultSampleSize = spec.defaultSampleSize().to_optional(),
+  };
 }
 
 } // namespace facebook::rebalancer

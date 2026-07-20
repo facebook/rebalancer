@@ -405,8 +405,14 @@ const PackerSet<ContainerId>& Problem::getOutOfScopeContainerIds(
 std::optional<GroupId> Problem::getOnlyGroupIdIfExists(
     const std::string& partitionName,
     ObjectId objectId) const {
-  auto& partition =
-      universe_->getPartition(universe_->getPartitionId(partitionName));
+  return getOnlyGroupIdIfExists(
+      universe_->getPartitionId(partitionName), objectId);
+}
+
+std::optional<GroupId> Problem::getOnlyGroupIdIfExists(
+    entities::PartitionId partitionId,
+    entities::ObjectId objectId) const {
+  auto& partition = universe_->getPartition(partitionId);
   auto& objectIdToGroupIds = partition.getObjectIdToGroupIds();
   auto groupIdsPtr = folly::get_ptr(objectIdToGroupIds, objectId);
   if (groupIdsPtr == nullptr) {

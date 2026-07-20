@@ -137,7 +137,7 @@ std::unique_ptr<MoveType> MoveTypeFactory::createMoveType(
           configs, spec.get_replicaDropMoveTypeSpec());
     case interface::MoveTypeSpec::Type::colocateGroupsMoveTypeSpec:
       return std::make_unique<ColocateGroupsMoveType>(
-          configs, spec.get_colocateGroupsMoveTypeSpec());
+          configs, spec.get_colocateGroupsMoveTypeSpec(), problem);
     case interface::MoveTypeSpec::Type::greedyGroupToScopeItemMoveTypeSpec:
       return std::make_unique<GreedyGroupToScopeItemMoveType>(
           configs, spec.get_greedyGroupToScopeItemMoveTypeSpec(), problem);
