@@ -504,16 +504,13 @@ void CapacitySpecBuilder::populateInvalidMoveFilter(
       isRelative ? &scope.getDimension(dimensionId_) : nullptr;
   const auto isAfter = def == CapacitySpecDefinition::AFTER;
 
-  // For AFTER: threshold = initial util L at this scope item. An incoming
-  //   object with v <= L can be matched by moving existing objects out,
-  //   so only block v > L.
-  // For DURING / DURING_AND_AFTER: any positive incoming value worsens
-  //   the constraint during transit, so block all v > 0 (threshold = 0).
-
-  // Collect (container, threshold) pairs for all zero-limit scope items,
-  // then do a single pass over objects to mark invalid pairs.
-  // Each container within the same scope item shares the same threshold.
-  std::vector<std::pair<entities::ContainerId, double>> blockedContainers;
+  // For AFTER: threshold = the scope item's initial util L. An incoming object
+  // with v <= L can be offset by moving existing objects out, so block only
+  // v > L.
+  // For DURING / DURING_AND_AFTER: any positive incoming value worsens the
+  // constraint during transit, so block all v > 0 (threshold = 0). Objects
+  // initially assigned to the scope item are exempt: they can move within the
+  // scope item's containers without changing the DURING util.
   for (const auto& scopeItemId : scopeFilter_.getScopeItemIds()) {
     auto limit = limits_.getLimit(scopeItemId);
     if (isRelative) {
@@ -524,31 +521,22 @@ void CapacitySpecBuilder::populateInvalidMoveFilter(
     }
 
     const auto& containerIds = scope.getContainerIds(scopeItemId);
-    double threshold = 0.0;
-    if (isAfter) {
-      for (const auto& cid : containerIds) {
-        for (const auto& objectId : containers.getInitialObjectIds(cid)) {
-          threshold += scalarDim.getValue(objectId);
-        }
+    double initialUtil = 0.0;
+    entities::Set<entities::ObjectId> initiallyAssigned;
+    for (const auto& cid : containerIds) {
+      for (const auto& objectId : containers.getInitialObjectIds(cid)) {
+        initialUtil += scalarDim.getValue(objectId);
+        initiallyAssigned.insert(objectId);
       }
     }
+    const double threshold = isAfter ? initialUtil : 0.0;
 
-    for (const auto& cid : containerIds) {
-      blockedContainers.emplace_back(cid, threshold);
-    }
-  }
-
-  if (blockedContainers.empty()) {
-    return;
-  }
-
-  for (const auto objectId : universe_->getObjects().getObjectIds()) {
-    const auto& value = scalarDim.getValue(objectId);
-    if (value == 0.0) {
-      continue;
-    }
-    for (const auto& [cid, threshold] : blockedContainers) {
-      if (value > threshold) {
+    for (const auto objectId : universe_->getObjects().getObjectIds()) {
+      if (scalarDim.getValue(objectId) <= threshold ||
+          initiallyAssigned.contains(objectId)) {
+        continue;
+      }
+      for (const auto& cid : containerIds) {
         invalidMoveFilter.markInvalid(objectId, cid);
       }
     }

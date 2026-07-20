@@ -736,13 +736,22 @@ TEST_F(CapacitySpecBuilderTest, FilterWorksForDuringDefinitions) {
   const auto numContainers =
       universe_->getContainers().getContainerIds().size();
 
-  // With ABSOLUTE limit 0 for all hosts, all positive-dim objects (task1-5)
-  // should be blocked from all containers. task0 has cpu=0 and is not blocked.
+  // ABSOLUTE limit 0 means every host is at or above its DURING limit. A
+  // non-zero task is blocked from every host it is NOT initially on (an
+  // object initially assigned there may move within its scope item); task0 (cpu
+  // 0) is never blocked.
   std::set<InvalidPair> expectedInvalidPairs;
-  for (const auto i : folly::irange(1, 6)) {
-    for (const auto& hostName : {"host0", "host1", "host2", "host3"}) {
-      expectedInvalidPairs.emplace(task(i), containerId(hostName));
-    }
+  for (const auto i : {2, 3, 4, 5}) {
+    expectedInvalidPairs.emplace(task(i), containerId("host0"));
+  }
+  for (const auto i : {1, 3, 4, 5}) {
+    expectedInvalidPairs.emplace(task(i), containerId("host1"));
+  }
+  for (const auto i : {1, 2, 3, 4, 5}) {
+    expectedInvalidPairs.emplace(task(i), containerId("host2"));
+  }
+  for (const auto i : {1, 2}) {
+    expectedInvalidPairs.emplace(task(i), containerId("host3"));
   }
 
   for (auto def :
@@ -822,34 +831,50 @@ TEST_F(CapacitySpecBuilderTest, FilterSkipsBrokenContainersForAfterOnly) {
   EXPECT_EQ(expectedInvalidPairs, collectInvalidPairs(filter));
 }
 
-TEST_F(CapacitySpecBuilderTest, FilterKeepsBrokenContainersForDuring) {
-  const auto universe = buildUniverse();
-  const auto numObjects = universe_->getObjects().getObjectIds().size();
-  const auto numContainers =
-      universe_->getContainers().getContainerIds().size();
+CO_TEST_F(
+    CapacitySpecBuilderTest,
+    FilterDuringExemptsInitiallyAssignedInZeroLimitRack) {
+  // rack0 spans host0+host2. With a DURING zero limit, task1 (initially
+  // assigned to rack0 via host0) must NOT be blocked from rack0's containers --
+  // moving it within the rack (host0 <-> host2) does not change DURING util.
+  // Every other non-zero task is blocked from all containers of a rack it is
+  // not in.
+  co_await addScope(
+      "rack",
+      {{"rack0", {"host0", "host2"}},
+       {"rack1", {"host1"}},
+       {"rack2", {"host3"}}});
 
   interface::CapacitySpec spec;
-  spec.scope() = "host";
+  spec.scope() = "rack";
   spec.dimension() = "cpu";
   spec.bound() = interface::CapacitySpecBound::MAX;
-  spec.definition() = interface::CapacitySpecDefinition::DURING_AND_AFTER;
+  spec.definition() = interface::CapacitySpecDefinition::DURING;
   spec.limit()->type() = interface::LimitType::ABSOLUTE;
   spec.limit()->globalLimit() = 0;
 
-  const CapacitySpecBuilder specBuilder(universe, spec);
+  const CapacitySpecBuilder specBuilder(buildUniverse(), spec);
+  const auto numObjects = universe_->getObjects().getObjectIds().size();
+  const auto numContainers =
+      universe_->getContainers().getContainerIds().size();
   InvalidMoveFilter filter(numObjects, numContainers);
-
   specBuilder.populateInvalidMoveFilter(filter);
 
-  // DURING_AND_AFTER with ABSOLUTE limit 0: threshold=0 (DURING always
-  // worsens during transit). All positive-dim objects blocked from all hosts.
-  std::set<InvalidPair> expectedInvalidPairs;
-  for (const auto i : folly::irange(1, 6)) {
-    for (const auto& hostName : {"host0", "host1", "host2", "host3"}) {
-      expectedInvalidPairs.emplace(task(i), containerId(hostName));
-    }
+  // Initially assigned: rack0={task1}, rack1={task2}, rack2={task3,4,5}; task0
+  // has cpu 0. Each non-zero task not initially assigned there is blocked from
+  // all of a rack's containers.
+  std::set<InvalidPair> expected;
+  for (const auto t : {2, 3, 4, 5}) { // not initially assigned to rack0
+    expected.emplace(task(t), containerId("host0"));
+    expected.emplace(task(t), containerId("host2"));
   }
-  EXPECT_EQ(expectedInvalidPairs, collectInvalidPairs(filter));
+  for (const auto t : {1, 3, 4, 5}) { // not initially assigned to rack1
+    expected.emplace(task(t), containerId("host1"));
+  }
+  for (const auto t : {1, 2}) { // not initially assigned to rack2
+    expected.emplace(task(t), containerId("host3"));
+  }
+  EXPECT_EQ(expected, collectInvalidPairs(filter));
 }
 
 TEST_F(CapacitySpecBuilderTest, FilterNoOpForNonZeroAbsoluteNoOverrides) {

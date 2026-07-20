@@ -1412,4 +1412,67 @@ TEST_P(CapacityTest, DynamicDimensionDeadlockTest) {
   EXPECT_FALSE(solution.assignment()->empty());
 }
 
+TEST_P(CapacityTest, DuringInvalidMoveFilterAllowsWithinScopeItemBalance) {
+  // Regression test for the DURING invalid-move filter exempting objects that
+  // are already initially assigned to a scope item. rack0 spans host0 and host1
+  // and has a zero DURING limit, so the invalid-move filter is populated for
+  // it. Both tasks start on host0; a balance goal wants one task per host -- a
+  // move *within* rack0, which does not change rack0's DURING utilization.
+  // Without the exemption the filter blocks the initially-assigned tasks from
+  // every rack0 container, so the balance move is pruned and the tasks stay
+  // stacked on host0.
+  auto solver =
+      initializeTestProblemSolver({.executorThreadCount = GetParam()});
+  solver->setObjectName("task");
+  solver->setContainerName("host");
+
+  solver->setAssignment(
+      std::vector<std::pair<std::string, std::vector<std::string>>>{
+          {"host0", {"task0", "task1"}},
+          {"host1", {}},
+      });
+
+  solver->addObjectDimension(
+      "cpu",
+      folly::F14FastMap<std::string, double>{{"task0", 1}, {"task1", 1}});
+  solver->addContainerDimension(
+      "cpu",
+      folly::F14FastMap<std::string, double>{{"host0", 10}, {"host1", 10}});
+
+  solver->addScope(
+      "rack",
+      std::unordered_map<std::string, std::string>{
+          {"host0", "rack0"}, {"host1", "rack0"}});
+
+  CapacitySpec capacitySpec;
+  capacitySpec.scope() = "rack";
+  capacitySpec.dimension() = "cpu";
+  capacitySpec.definition() = CapacitySpecDefinition::DURING;
+  capacitySpec.limit()->type() = LimitType::ABSOLUTE;
+  capacitySpec.limit()->globalLimit() = 0;
+  solver->addConstraint(capacitySpec);
+
+  BalanceSpec balanceSpec;
+  balanceSpec.scope() = "host";
+  balanceSpec.dimension() = "cpu";
+  balanceSpec.formula() = BalanceSpecFormula::IDEAL;
+  solver->addGoal(balanceSpec);
+
+  solver->enableInvalidMoveFilter(true);
+
+  LocalSearchSolverSpec solverSpec;
+  solverSpec.moveTypeList()->push_back(
+      ProblemSolver::makeMoveTypeSpec(SingleFastMoveTypeSpec()));
+  solver->addSolver(solverSpec);
+
+  const auto solution = solver->solve();
+
+  std::map<std::string, int> tasksInHost;
+  for (const auto& [_task, host] : *solution.assignment()) {
+    ++tasksInHost[host];
+  }
+  EXPECT_EQ(1, tasksInHost["host0"]);
+  EXPECT_EQ(1, tasksInHost["host1"]);
+}
+
 } // namespace facebook::rebalancer::interface::tests
