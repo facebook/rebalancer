@@ -106,7 +106,7 @@ bool LocalSearchStageSolver::solve(Problem& p, Profile /* unused */) {
   for (const auto stageId : folly::irange(configs_.stageSpecs()->size())) {
     auto& stageConfig = configs_.stageSpecs()->at(stageId);
     auto& spec = *stageConfig.solverSpec();
-    auto stageMoveTypes = MoveTypeFactory::createMoveTypes(spec);
+    auto stageMoveTypes = MoveTypeFactory::createMoveTypes(spec, p);
     moveTypesUsedInAllStages.insert(
         moveTypesUsedInAllStages.end(),
         stageMoveTypes.begin(),

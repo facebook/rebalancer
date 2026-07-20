@@ -65,7 +65,8 @@ std::unique_ptr<MoveType> MoveTypeFactory::createMoveType(
 
 std::unique_ptr<MoveType> MoveTypeFactory::createMoveType(
     const interface::MoveTypeSpec& spec,
-    const interface::LocalSearchSolverSpec& configs) {
+    const interface::LocalSearchSolverSpec& configs,
+    const Problem& problem) {
   switch (spec.getType()) {
     case interface::MoveTypeSpec::Type::singleMoveTypeSpec:
       return std::make_unique<SingleMoveType>(
@@ -139,7 +140,7 @@ std::unique_ptr<MoveType> MoveTypeFactory::createMoveType(
           configs, spec.get_colocateGroupsMoveTypeSpec());
     case interface::MoveTypeSpec::Type::greedyGroupToScopeItemMoveTypeSpec:
       return std::make_unique<GreedyGroupToScopeItemMoveType>(
-          configs, spec.get_greedyGroupToScopeItemMoveTypeSpec());
+          configs, spec.get_greedyGroupToScopeItemMoveTypeSpec(), problem);
     case interface::MoveTypeSpec::Type::singleRandomStratifiedMoveTypeSpec:
       return std::make_unique<SingleRandomStratifiedMoveType>(
           configs, spec.get_singleRandomStratifiedMoveTypeSpec());
@@ -152,7 +153,8 @@ std::unique_ptr<MoveType> MoveTypeFactory::createMoveType(
 }
 
 std::vector<std::shared_ptr<MoveType>> MoveTypeFactory::createMoveTypes(
-    const interface::LocalSearchSolverSpec& spec) {
+    const interface::LocalSearchSolverSpec& spec,
+    const Problem& problem) {
   const auto& moveTypes = *spec.moveTypeList();
   std::vector<std::shared_ptr<MoveType>> moves;
   moves.reserve(moveTypes.size());
@@ -161,7 +163,7 @@ std::vector<std::shared_ptr<MoveType>> MoveTypeFactory::createMoveTypes(
       moveTypes.end(),
       std::back_inserter(moves),
       [&](const auto& move) {
-        return MoveTypeFactory::createMoveType(move, spec);
+        return MoveTypeFactory::createMoveType(move, spec, problem);
       });
   return moves;
 }

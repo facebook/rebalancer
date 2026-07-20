@@ -28,7 +28,7 @@ LocalSearchSolver::LocalSearchSolver(interface::LocalSearchSolverSpec configs)
     : configs_(std::move(configs)) {}
 
 bool LocalSearchSolver::solve(Problem& p, Profile /* unused */) {
-  auto moveTypes = MoveTypeFactory::createMoveTypes(configs_);
+  auto moveTypes = MoveTypeFactory::createMoveTypes(configs_, p);
   LocalSearchProfiler profiler(moveTypes, p.objective.getValue().toVector());
 
   int lastObj = p.objective.size();

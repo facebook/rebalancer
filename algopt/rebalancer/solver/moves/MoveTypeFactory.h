@@ -23,7 +23,8 @@ namespace facebook::rebalancer {
 class MoveTypeFactory {
  public:
   static std::vector<std::shared_ptr<MoveType>> createMoveTypes(
-      const interface::LocalSearchSolverSpec& spec);
+      const interface::LocalSearchSolverSpec& spec,
+      const Problem& problem);
 
   // This function is only used in stand alone solver to replay saved scenarios
   // that use moveTypes() list or moveTypeName for MoveTypeSpec.
@@ -37,8 +38,8 @@ class MoveTypeFactory {
           interface::LocalSearchSolverSpec());
   static std::unique_ptr<MoveType> createMoveType(
       const interface::MoveTypeSpec& spec,
-      const interface::LocalSearchSolverSpec& configs =
-          interface::LocalSearchSolverSpec());
+      const interface::LocalSearchSolverSpec& configs,
+      const Problem& problem);
   static void convertMoveTypesToMoveTypeSpecs(
       interface::LocalSearchSolverSpec& spec);
   static void transformMoveTypeSpecs(interface::LocalSearchSolverSpec& spec);

@@ -18,8 +18,6 @@
 #include "algopt/rebalancer/solver/moves/MoveType.h"
 #include "algopt/rebalancer/solver/utils/Problem.h"
 
-#include <optional>
-
 namespace facebook::rebalancer {
 
 constexpr folly::StringPiece kGreedyGroupToScopeItemMoveTypeName =
@@ -37,9 +35,10 @@ class GreedyGroupToScopeItemMoveType : public MoveType {
  public:
   std::string name() const override;
 
-  explicit GreedyGroupToScopeItemMoveType(
+  GreedyGroupToScopeItemMoveType(
       const interface::LocalSearchSolverSpec& solverConfigs,
-      const interface::GreedyGroupToScopeItemMoveTypeSpec& spec);
+      const interface::GreedyGroupToScopeItemMoveTypeSpec& spec,
+      const Problem& problem);
 
   MoveResult findBestMove(
       const MovesEvaluator& evaluator,
@@ -54,17 +53,13 @@ class GreedyGroupToScopeItemMoveType : public MoveType {
       const std::vector<entities::ObjectId>& groupObjectIdsInt,
       const ReferenceList<const std::vector<entities::ContainerId>>&
           destinations,
-      const std::vector<ExprPtr>& pruningConstraints,
       MoveStatsAggregator& stats,
       double timeLimit) const;
-
-  // Resolves the pruning names to hard components once, caching the result.
-  const std::vector<ExprPtr>& resolvePruningConstraints(const Problem& problem);
 
   const std::string partitionName_;
   const int nSampleSetsToExplore_;
   const interface::DestinationsToExploreOptions destinationsToExplore_;
-  const std::vector<std::string> pruningConstraintNames_;
-  std::optional<std::vector<ExprPtr>> pruningConstraints_;
+  // Hard-constraint components used to prune candidate moves before evaluating
+  const std::vector<ExprPtr> pruningConstraints_;
 };
 } // namespace facebook::rebalancer

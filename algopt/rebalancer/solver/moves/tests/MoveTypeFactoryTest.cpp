@@ -14,6 +14,7 @@
 
 #include "algopt/rebalancer/algopt_common/TestUtils.h"
 #include "algopt/rebalancer/interface/ProblemSolver.h"
+#include "algopt/rebalancer/solver/expressions/Operators.h"
 #include "algopt/rebalancer/solver/moves/FixedDestMultiMoveType.h"
 #include "algopt/rebalancer/solver/moves/FixedDestSwapMultiMoveType.h"
 #include "algopt/rebalancer/solver/moves/FixedSourceMoveType.h"
@@ -35,6 +36,7 @@
 #include "algopt/rebalancer/solver/moves/SwapFullWithEmptyContainersMoveType.h"
 #include "algopt/rebalancer/solver/moves/SwapMoveType.h"
 #include "algopt/rebalancer/solver/moves/SwapNMoveType.h"
+#include "algopt/rebalancer/solver/moves/tests/MoveTestBase.h"
 #include "algopt/rebalancer/solver/moves/TripleLoopMoveType.h"
 
 #include <gtest/gtest.h>
@@ -44,7 +46,22 @@ using namespace facebook::rebalancer::interface;
 
 namespace facebook::rebalancer::packer::tests {
 
-TEST(MoveTypeFactoryTest, createLSSSWithEmptyNamesAndSpecs) {
+class MoveTypeFactoryTest : public MoveTestBase {
+ protected:
+  MoveTypeFactoryTest() : MoveTestBase("object", "container") {}
+
+  void SetUp() override {
+    setInitialAssignment(
+        entities::Map<std::string, std::vector<std::string>>{
+            {"container0", {"object0"}}});
+    const auto universe = buildUniverse();
+    createProblem(
+        /*objectiveTuple=*/{const_expr(0, *universe)},
+        /*constraint=*/const_expr(0, *universe));
+  }
+};
+
+TEST_F(MoveTypeFactoryTest, createLSSSWithEmptyNamesAndSpecs) {
   LocalSearchSolverSpec spec;
   EXPECT_EQ(spec.moveTypes()->size(), 0);
   EXPECT_EQ(spec.moveTypeList()->size(), 0);
@@ -54,11 +71,11 @@ TEST(MoveTypeFactoryTest, createLSSSWithEmptyNamesAndSpecs) {
   EXPECT_EQ(spec.moveTypeList()->size(), 0);
 
   // nothing should be created because moveTypeList is empty
-  auto moves = MoveTypeFactory::createMoveTypes(spec);
+  auto moves = MoveTypeFactory::createMoveTypes(spec, getProblem());
   EXPECT_EQ(moves.size(), 0);
 }
 
-TEST(MoveTypeFactoryTest, createLSSSAndSetMoveTypes) {
+TEST_F(MoveTypeFactoryTest, createLSSSAndSetMoveTypes) {
   LocalSearchSolverSpec spec;
 
   auto& moveTypes = *spec.moveTypes();
@@ -76,12 +93,12 @@ TEST(MoveTypeFactoryTest, createLSSSAndSetMoveTypes) {
       MoveTypeSpec::Type::singleMoveTypeSpec, moveTypeList.at(0).getType());
 
   // creation should happen
-  auto moves = MoveTypeFactory::createMoveTypes(spec);
+  auto moves = MoveTypeFactory::createMoveTypes(spec, getProblem());
   EXPECT_EQ(moves.size(), 1);
   EXPECT_EQ(moves.at(0)->name(), "SINGLE");
 }
 
-TEST(MoveTypeFactoryTest, createLSSSAndSetMoveTypeList) {
+TEST_F(MoveTypeFactoryTest, createLSSSAndSetMoveTypeList) {
   LocalSearchSolverSpec spec;
   spec.moveTypeList()->push_back(
       ProblemSolver::makeMoveTypeSpec(SingleMoveTypeSpec()));
@@ -95,11 +112,11 @@ TEST(MoveTypeFactoryTest, createLSSSAndSetMoveTypeList) {
   EXPECT_EQ(spec.moveTypeList()->size(), 2);
 
   // creation should happen
-  auto moves = MoveTypeFactory::createMoveTypes(spec);
+  auto moves = MoveTypeFactory::createMoveTypes(spec, getProblem());
   EXPECT_EQ(moves.size(), 2);
 }
 
-TEST(MoveTypeFactoryTest, createLSSSAndSetMoveTypeListWithMixedTypes) {
+TEST_F(MoveTypeFactoryTest, createLSSSAndSetMoveTypeListWithMixedTypes) {
   LocalSearchSolverSpec spec;
   spec.moveTypeList()->push_back(
       ProblemSolver::makeMoveTypeSpec("GROUP_ROUTING"));
@@ -117,7 +134,7 @@ TEST(MoveTypeFactoryTest, createLSSSAndSetMoveTypeListWithMixedTypes) {
       MoveTypeSpec::Type::groupRoutingMoveTypeSpec);
 
   // creation should happen
-  auto moves = MoveTypeFactory::createMoveTypes(spec);
+  auto moves = MoveTypeFactory::createMoveTypes(spec, getProblem());
   EXPECT_EQ(moves.size(), 2);
 }
 
@@ -128,13 +145,13 @@ static void checkSingleMoveType(std::shared_ptr<MoveType> move) {
   EXPECT_TRUE(!!movePtr);
 }
 
-TEST(MoveTypeFactoryTest, createSingleMoveType) {
+TEST_F(MoveTypeFactoryTest, createSingleMoveType) {
   {
     // setting move type names with helper function
     LocalSearchSolverSpec config;
     config.moveTypeList()->push_back(
         ProblemSolver::makeMoveTypeSpec(SingleMoveTypeSpec()));
-    const auto moves = MoveTypeFactory::createMoveTypes(config);
+    const auto moves = MoveTypeFactory::createMoveTypes(config, getProblem());
     EXPECT_EQ(moves.size(), 1);
     const auto& move = moves.at(0);
     checkSingleMoveType(move);
@@ -147,7 +164,7 @@ TEST(MoveTypeFactoryTest, createSingleMoveType) {
     config.moveTypeList()->push_back(std::move(moveSpec));
 
     REBALANCER_EXPECT_RUNTIME_ERROR(
-        MoveTypeFactory::createMoveTypes(config),
+        MoveTypeFactory::createMoveTypes(config, getProblem()),
         "Move type SINGLE not supported by name; it either does not exist, or you should use its typed move type spec instead");
   }
   {
@@ -157,7 +174,7 @@ TEST(MoveTypeFactoryTest, createSingleMoveType) {
     moveSpec.set_singleMoveTypeSpec(SingleMoveTypeSpec());
     config.moveTypeList()->push_back(std::move(moveSpec));
 
-    const auto moves = MoveTypeFactory::createMoveTypes(config);
+    const auto moves = MoveTypeFactory::createMoveTypes(config, getProblem());
     EXPECT_EQ(moves.size(), 1);
 
     const auto& move = moves.at(0);
@@ -183,14 +200,14 @@ static void checkSwapMoveType(
   }
 }
 
-TEST(MoveTypeFactoryTest, createSwapMoveType) {
+TEST_F(MoveTypeFactoryTest, createSwapMoveType) {
   {
     // setting move type names with helper function
     // no specific config in LSSS
     LocalSearchSolverSpec config;
     config.moveTypeList()->push_back(
         ProblemSolver::makeMoveTypeSpec(SwapMoveTypeSpec()));
-    const auto moves = MoveTypeFactory::createMoveTypes(config);
+    const auto moves = MoveTypeFactory::createMoveTypes(config, getProblem());
     EXPECT_EQ(moves.size(), 1);
     const auto& move = moves.at(0);
     checkSwapMoveType(move);
@@ -204,7 +221,7 @@ TEST(MoveTypeFactoryTest, createSwapMoveType) {
     config.moveTypeList()->push_back(std::move(moveSpec));
 
     REBALANCER_EXPECT_RUNTIME_ERROR(
-        MoveTypeFactory::createMoveTypes(config),
+        MoveTypeFactory::createMoveTypes(config, getProblem()),
         "Move type SWAP not supported by name; it either does not exist, or you should use its typed move type spec instead");
   }
   {
@@ -218,7 +235,7 @@ TEST(MoveTypeFactoryTest, createSwapMoveType) {
     moveSpec.set_swapMoveTypeSpec(std::move(swapSpec));
     config.moveTypeList()->push_back(std::move(moveSpec));
 
-    const auto moves = MoveTypeFactory::createMoveTypes(config);
+    const auto moves = MoveTypeFactory::createMoveTypes(config, getProblem());
     EXPECT_EQ(moves.size(), 1);
 
     const auto& move = moves.at(0);
@@ -233,13 +250,13 @@ static void checkTripleLoopMoveType(std::shared_ptr<MoveType> move) {
   EXPECT_TRUE(!!movePtr);
 }
 
-TEST(MoveTypeFactoryTest, createTripleLoopMoveType) {
+TEST_F(MoveTypeFactoryTest, createTripleLoopMoveType) {
   {
     // setting move type names with helper function
     LocalSearchSolverSpec config;
     config.moveTypeList()->push_back(
         ProblemSolver::makeMoveTypeSpec(TripleLoopMoveTypeSpec()));
-    const auto moves = MoveTypeFactory::createMoveTypes(config);
+    const auto moves = MoveTypeFactory::createMoveTypes(config, getProblem());
     EXPECT_EQ(moves.size(), 1);
     const auto& move = moves.at(0);
     checkTripleLoopMoveType(move);
@@ -252,7 +269,7 @@ TEST(MoveTypeFactoryTest, createTripleLoopMoveType) {
     config.moveTypeList()->push_back(std::move(moveSpec));
 
     REBALANCER_EXPECT_RUNTIME_ERROR(
-        MoveTypeFactory::createMoveTypes(config),
+        MoveTypeFactory::createMoveTypes(config, getProblem()),
         "Move type TRIPLE_LOOP not supported by name; it either does not exist, or you should use its typed move type spec instead");
   }
   {
@@ -262,7 +279,7 @@ TEST(MoveTypeFactoryTest, createTripleLoopMoveType) {
     moveSpec.set_tripleLoopMoveTypeSpec(TripleLoopMoveTypeSpec());
     config.moveTypeList()->push_back(std::move(moveSpec));
 
-    const auto moves = MoveTypeFactory::createMoveTypes(config);
+    const auto moves = MoveTypeFactory::createMoveTypes(config, getProblem());
     EXPECT_EQ(moves.size(), 1);
 
     const auto& move = moves.at(0);
@@ -277,13 +294,13 @@ static void checkKLSearchMoveType(std::shared_ptr<MoveType> move) {
   EXPECT_TRUE(!!movePtr);
 }
 
-TEST(MoveTypeFactoryTest, createKLSearchMoveType) {
+TEST_F(MoveTypeFactoryTest, createKLSearchMoveType) {
   {
     // setting move type names with helper function
     LocalSearchSolverSpec config;
     config.moveTypeList()->push_back(
         ProblemSolver::makeMoveTypeSpec(KLSearchMoveTypeSpec()));
-    const auto moves = MoveTypeFactory::createMoveTypes(config);
+    const auto moves = MoveTypeFactory::createMoveTypes(config, getProblem());
     EXPECT_EQ(moves.size(), 1);
     const auto& move = moves.at(0);
     checkKLSearchMoveType(move);
@@ -296,7 +313,7 @@ TEST(MoveTypeFactoryTest, createKLSearchMoveType) {
     config.moveTypeList()->push_back(std::move(moveSpec));
 
     REBALANCER_EXPECT_RUNTIME_ERROR(
-        MoveTypeFactory::createMoveTypes(config),
+        MoveTypeFactory::createMoveTypes(config, getProblem()),
         "Move type KL_SEARCH not supported by name; it either does not exist, or you should use its typed move type spec instead");
   }
   {
@@ -306,7 +323,7 @@ TEST(MoveTypeFactoryTest, createKLSearchMoveType) {
     moveSpec.set_klSearchMoveTypeSpec(KLSearchMoveTypeSpec());
     config.moveTypeList()->push_back(std::move(moveSpec));
 
-    const auto moves = MoveTypeFactory::createMoveTypes(config);
+    const auto moves = MoveTypeFactory::createMoveTypes(config, getProblem());
     EXPECT_EQ(moves.size(), 1);
 
     const auto& move = moves.at(0);
@@ -321,13 +338,13 @@ static void checkGroupRoutingMoveType(std::shared_ptr<MoveType> move) {
   EXPECT_TRUE(!!movePtr);
 }
 
-TEST(MoveTypeFactoryTest, createGroupRoutingMoveType) {
+TEST_F(MoveTypeFactoryTest, createGroupRoutingMoveType) {
   {
     // setting move type names with helper function
     LocalSearchSolverSpec config;
     config.moveTypeList()->push_back(
         ProblemSolver::makeMoveTypeSpec(GroupRoutingMoveTypeSpec()));
-    const auto moves = MoveTypeFactory::createMoveTypes(config);
+    const auto moves = MoveTypeFactory::createMoveTypes(config, getProblem());
     EXPECT_EQ(moves.size(), 1);
     const auto& move = moves.at(0);
     checkGroupRoutingMoveType(move);
@@ -340,7 +357,7 @@ TEST(MoveTypeFactoryTest, createGroupRoutingMoveType) {
     config.moveTypeList()->push_back(std::move(moveSpec));
 
     REBALANCER_EXPECT_RUNTIME_ERROR(
-        MoveTypeFactory::createMoveTypes(config),
+        MoveTypeFactory::createMoveTypes(config, getProblem()),
         "Move type GROUP_ROUTING not supported by name; it either does not exist, or you should use its typed move type spec instead");
   }
   {
@@ -350,7 +367,7 @@ TEST(MoveTypeFactoryTest, createGroupRoutingMoveType) {
     moveSpec.set_groupRoutingMoveTypeSpec(GroupRoutingMoveTypeSpec());
     config.moveTypeList()->push_back(std::move(moveSpec));
 
-    const auto moves = MoveTypeFactory::createMoveTypes(config);
+    const auto moves = MoveTypeFactory::createMoveTypes(config, getProblem());
     EXPECT_EQ(moves.size(), 1);
 
     const auto& move = moves.at(0);
@@ -365,13 +382,13 @@ static void checkSingleChainMoveType(std::shared_ptr<MoveType> move) {
   EXPECT_TRUE(!!movePtr);
 }
 
-TEST(MoveTypeFactoryTest, createSingleChainMoveType) {
+TEST_F(MoveTypeFactoryTest, createSingleChainMoveType) {
   {
     // setting move type names with helper function
     LocalSearchSolverSpec config;
     config.moveTypeList()->push_back(
         ProblemSolver::makeMoveTypeSpec(SingleChainMoveTypeSpec()));
-    const auto moves = MoveTypeFactory::createMoveTypes(config);
+    const auto moves = MoveTypeFactory::createMoveTypes(config, getProblem());
     EXPECT_EQ(moves.size(), 1);
     const auto& move = moves.at(0);
     checkSingleChainMoveType(move);
@@ -384,7 +401,7 @@ TEST(MoveTypeFactoryTest, createSingleChainMoveType) {
     config.moveTypeList()->push_back(std::move(moveSpec));
 
     REBALANCER_EXPECT_RUNTIME_ERROR(
-        MoveTypeFactory::createMoveTypes(config),
+        MoveTypeFactory::createMoveTypes(config, getProblem()),
         "Move type SINGLE_CHAIN not supported by name; it either does not exist, or you should use its typed move type spec instead");
   }
   {
@@ -395,7 +412,7 @@ TEST(MoveTypeFactoryTest, createSingleChainMoveType) {
     moveSpec.set_moveTypeName("SINGLE_CHAIN");
     config.moveTypeList()->push_back(std::move(moveSpec));
     MoveTypeFactory::transformMoveTypesForReplayingSavedInstances(config);
-    const auto moves = MoveTypeFactory::createMoveTypes(config);
+    const auto moves = MoveTypeFactory::createMoveTypes(config, getProblem());
     EXPECT_EQ(moves.size(), 1);
     const auto& move = moves.at(0);
     checkSingleChainMoveType(move);
@@ -407,7 +424,7 @@ TEST(MoveTypeFactoryTest, createSingleChainMoveType) {
     moveSpec.set_singleChainMoveTypeSpec(SingleChainMoveTypeSpec());
     config.moveTypeList()->push_back(std::move(moveSpec));
 
-    const auto moves = MoveTypeFactory::createMoveTypes(config);
+    const auto moves = MoveTypeFactory::createMoveTypes(config, getProblem());
     EXPECT_EQ(moves.size(), 1);
     const auto& move = moves.at(0);
     checkSingleChainMoveType(move);
@@ -421,13 +438,13 @@ static void checkSingleChainFastMoveType(std::shared_ptr<MoveType> move) {
   EXPECT_TRUE(!!movePtr);
 }
 
-TEST(MoveTypeFactoryTest, createSingleChainFastMoveType) {
+TEST_F(MoveTypeFactoryTest, createSingleChainFastMoveType) {
   {
     // setting move type names with helper function
     LocalSearchSolverSpec config;
     config.moveTypeList()->push_back(
         ProblemSolver::makeMoveTypeSpec(SingleChainFastMoveTypeSpec()));
-    const auto moves = MoveTypeFactory::createMoveTypes(config);
+    const auto moves = MoveTypeFactory::createMoveTypes(config, getProblem());
     EXPECT_EQ(moves.size(), 1);
     const auto& move = moves.at(0);
     checkSingleChainFastMoveType(move);
@@ -440,7 +457,7 @@ TEST(MoveTypeFactoryTest, createSingleChainFastMoveType) {
     config.moveTypeList()->push_back(std::move(moveSpec));
 
     REBALANCER_EXPECT_RUNTIME_ERROR(
-        MoveTypeFactory::createMoveTypes(config),
+        MoveTypeFactory::createMoveTypes(config, getProblem()),
         "Move type SINGLE_CHAIN_FAST not supported by name; it either does not exist, or you should use its typed move type spec instead");
   }
   {
@@ -451,7 +468,7 @@ TEST(MoveTypeFactoryTest, createSingleChainFastMoveType) {
     moveSpec.set_moveTypeName("SINGLE_CHAIN_FAST");
     config.moveTypeList()->push_back(std::move(moveSpec));
     MoveTypeFactory::transformMoveTypesForReplayingSavedInstances(config);
-    const auto moves = MoveTypeFactory::createMoveTypes(config);
+    const auto moves = MoveTypeFactory::createMoveTypes(config, getProblem());
     EXPECT_EQ(moves.size(), 1);
     const auto& move = moves.at(0);
     checkSingleChainFastMoveType(move);
@@ -463,7 +480,7 @@ TEST(MoveTypeFactoryTest, createSingleChainFastMoveType) {
     moveSpec.set_singleChainFastMoveTypeSpec(SingleChainFastMoveTypeSpec());
     config.moveTypeList()->push_back(std::move(moveSpec));
 
-    const auto moves = MoveTypeFactory::createMoveTypes(config);
+    const auto moves = MoveTypeFactory::createMoveTypes(config, getProblem());
     EXPECT_EQ(moves.size(), 1);
 
     const auto& move = moves.at(0);
@@ -478,13 +495,13 @@ static void checkSingleFixedSourceMoveType(std::shared_ptr<MoveType> move) {
   EXPECT_TRUE(!!movePtr);
 }
 
-TEST(MoveTypeFactoryTest, createSingleFixedSourceMoveType) {
+TEST_F(MoveTypeFactoryTest, createSingleFixedSourceMoveType) {
   {
     // setting move type names with helper function
     LocalSearchSolverSpec config;
     config.moveTypeList()->push_back(
         ProblemSolver::makeMoveTypeSpec(SingleFixedSourceMoveTypeSpec()));
-    const auto moves = MoveTypeFactory::createMoveTypes(config);
+    const auto moves = MoveTypeFactory::createMoveTypes(config, getProblem());
     EXPECT_EQ(moves.size(), 1);
     const auto& move = moves.at(0);
     checkSingleFixedSourceMoveType(move);
@@ -496,7 +513,7 @@ TEST(MoveTypeFactoryTest, createSingleFixedSourceMoveType) {
     moveSpec.set_moveTypeName("SINGLE_FIXED_SOURCE");
     config.moveTypeList()->push_back(std::move(moveSpec));
     REBALANCER_EXPECT_RUNTIME_ERROR(
-        MoveTypeFactory::createMoveTypes(config),
+        MoveTypeFactory::createMoveTypes(config, getProblem()),
         "Move type SINGLE_FIXED_SOURCE not supported by name; it either does not exist, or you should use its typed move type spec instead");
   }
   {
@@ -506,7 +523,7 @@ TEST(MoveTypeFactoryTest, createSingleFixedSourceMoveType) {
     moveSpec.set_singleFixedSourceMoveTypeSpec(SingleFixedSourceMoveTypeSpec());
     config.moveTypeList()->push_back(std::move(moveSpec));
 
-    const auto moves = MoveTypeFactory::createMoveTypes(config);
+    const auto moves = MoveTypeFactory::createMoveTypes(config, getProblem());
     EXPECT_EQ(moves.size(), 1);
 
     const auto& move = moves.at(0);
@@ -521,13 +538,13 @@ static void checkSingleFastMoveType(std::shared_ptr<MoveType> move) {
   EXPECT_TRUE(!!movePtr);
 }
 
-TEST(MoveTypeFactoryTest, createSingleFastMoveType) {
+TEST_F(MoveTypeFactoryTest, createSingleFastMoveType) {
   {
     // setting move type names with helper function
     LocalSearchSolverSpec config;
     config.moveTypeList()->push_back(
         ProblemSolver::makeMoveTypeSpec(SingleFastMoveTypeSpec()));
-    const auto moves = MoveTypeFactory::createMoveTypes(config);
+    const auto moves = MoveTypeFactory::createMoveTypes(config, getProblem());
     EXPECT_EQ(moves.size(), 1);
     const auto& move = moves.at(0);
     checkSingleFastMoveType(move);
@@ -539,7 +556,7 @@ TEST(MoveTypeFactoryTest, createSingleFastMoveType) {
     moveSpec.set_singleFastMoveTypeSpec(SingleFastMoveTypeSpec());
     config.moveTypeList()->push_back(std::move(moveSpec));
 
-    const auto moves = MoveTypeFactory::createMoveTypes(config);
+    const auto moves = MoveTypeFactory::createMoveTypes(config, getProblem());
     EXPECT_EQ(moves.size(), 1);
 
     const auto& move = moves.at(0);
@@ -554,13 +571,13 @@ static void checkSingleGreedyMoveType(std::shared_ptr<MoveType> move) {
   EXPECT_TRUE(!!movePtr);
 }
 
-TEST(MoveTypeFactoryTest, createSingleGreedyMoveType) {
+TEST_F(MoveTypeFactoryTest, createSingleGreedyMoveType) {
   {
     // setting move type names with helper function
     LocalSearchSolverSpec config;
     config.moveTypeList()->push_back(
         ProblemSolver::makeMoveTypeSpec(SingleGreedyMoveTypeSpec()));
-    const auto moves = MoveTypeFactory::createMoveTypes(config);
+    const auto moves = MoveTypeFactory::createMoveTypes(config, getProblem());
     EXPECT_EQ(moves.size(), 1);
     const auto& move = moves.at(0);
     checkSingleGreedyMoveType(move);
@@ -573,7 +590,7 @@ TEST(MoveTypeFactoryTest, createSingleGreedyMoveType) {
     moveSpec.set_singleGreedyMoveTypeSpec(singleSpec);
     config.moveTypeList()->push_back(std::move(moveSpec));
 
-    const auto moves = MoveTypeFactory::createMoveTypes(config);
+    const auto moves = MoveTypeFactory::createMoveTypes(config, getProblem());
     EXPECT_EQ(moves.size(), 1);
 
     const auto& move = moves.at(0);
@@ -588,13 +605,13 @@ static void checkFixedSourceMultiMoveType(std::shared_ptr<MoveType> move) {
   EXPECT_TRUE(!!movePtr);
 }
 
-TEST(MoveTypeFactoryTest, createFixedSourceMultiMoveType) {
+TEST_F(MoveTypeFactoryTest, createFixedSourceMultiMoveType) {
   {
     // setting move type names with helper function
     LocalSearchSolverSpec config;
     config.moveTypeList()->push_back(
         ProblemSolver::makeMoveTypeSpec(FixedSrcMultiMoveTypeSpec()));
-    const auto moves = MoveTypeFactory::createMoveTypes(config);
+    const auto moves = MoveTypeFactory::createMoveTypes(config, getProblem());
     EXPECT_EQ(moves.size(), 1);
     const auto& move = moves.at(0);
     checkFixedSourceMultiMoveType(move);
@@ -606,7 +623,7 @@ TEST(MoveTypeFactoryTest, createFixedSourceMultiMoveType) {
     moveSpec.set_fixedSrcMultiMoveTypeSpec(FixedSrcMultiMoveTypeSpec());
     config.moveTypeList()->push_back(std::move(moveSpec));
 
-    const auto moves = MoveTypeFactory::createMoveTypes(config);
+    const auto moves = MoveTypeFactory::createMoveTypes(config, getProblem());
     EXPECT_EQ(moves.size(), 1);
 
     const auto& move = moves.at(0);
@@ -620,7 +637,7 @@ TEST(MoveTypeFactoryTest, createFixedSourceMultiMoveType) {
     config.moveTypeList()->push_back(std::move(moveSpec));
 
     REBALANCER_EXPECT_RUNTIME_ERROR(
-        MoveTypeFactory::createMoveTypes(config),
+        MoveTypeFactory::createMoveTypes(config, getProblem()),
         "Move type FIXED_SOURCE_MULTIPLE not supported by name; it either does not exist, or you should use its typed move type spec instead");
   }
 }
@@ -632,13 +649,13 @@ static void checkFixedDestMultiMoveType(std::shared_ptr<MoveType> move) {
   EXPECT_TRUE(!!movePtr);
 }
 
-TEST(MoveTypeFactoryTest, createFixedDestMultiMoveType) {
+TEST_F(MoveTypeFactoryTest, createFixedDestMultiMoveType) {
   {
     // setting move type names with helper function
     LocalSearchSolverSpec config;
     config.moveTypeList()->push_back(
         ProblemSolver::makeMoveTypeSpec(FixedDestMultiMoveTypeSpec()));
-    const auto moves = MoveTypeFactory::createMoveTypes(config);
+    const auto moves = MoveTypeFactory::createMoveTypes(config, getProblem());
     EXPECT_EQ(moves.size(), 1);
     const auto& move = moves.at(0);
     checkFixedDestMultiMoveType(move);
@@ -650,7 +667,7 @@ TEST(MoveTypeFactoryTest, createFixedDestMultiMoveType) {
     moveSpec.set_fixedDestMultiMoveTypeSpec(FixedDestMultiMoveTypeSpec());
     config.moveTypeList()->push_back(std::move(moveSpec));
 
-    const auto moves = MoveTypeFactory::createMoveTypes(config);
+    const auto moves = MoveTypeFactory::createMoveTypes(config, getProblem());
     EXPECT_EQ(moves.size(), 1);
 
     const auto& move = moves.at(0);
@@ -664,7 +681,7 @@ TEST(MoveTypeFactoryTest, createFixedDestMultiMoveType) {
     config.moveTypeList()->push_back(std::move(moveSpec));
 
     REBALANCER_EXPECT_RUNTIME_ERROR(
-        MoveTypeFactory::createMoveTypes(config),
+        MoveTypeFactory::createMoveTypes(config, getProblem()),
         "Move type FIXED_DEST_MULTIPLE not supported by name; it either does not exist, or you should use its typed move type spec instead");
   }
 }
@@ -676,13 +693,13 @@ static void checkFixedDestSwapMultiMoveType(std::shared_ptr<MoveType> move) {
   EXPECT_TRUE(!!movePtr);
 }
 
-TEST(MoveTypeFactoryTest, createFixedDestSwapMultiMoveType) {
+TEST_F(MoveTypeFactoryTest, createFixedDestSwapMultiMoveType) {
   {
     // setting move type names with helper function
     LocalSearchSolverSpec config;
     config.moveTypeList()->push_back(
         ProblemSolver::makeMoveTypeSpec(FixedDestSwapMultiMoveTypeSpec()));
-    const auto moves = MoveTypeFactory::createMoveTypes(config);
+    const auto moves = MoveTypeFactory::createMoveTypes(config, getProblem());
     EXPECT_EQ(moves.size(), 1);
     const auto& move = moves.at(0);
     checkFixedDestSwapMultiMoveType(move);
@@ -695,7 +712,7 @@ TEST(MoveTypeFactoryTest, createFixedDestSwapMultiMoveType) {
         FixedDestSwapMultiMoveTypeSpec());
     config.moveTypeList()->push_back(std::move(moveSpec));
 
-    const auto moves = MoveTypeFactory::createMoveTypes(config);
+    const auto moves = MoveTypeFactory::createMoveTypes(config, getProblem());
     EXPECT_EQ(moves.size(), 1);
 
     const auto& move = moves.at(0);
@@ -709,7 +726,7 @@ TEST(MoveTypeFactoryTest, createFixedDestSwapMultiMoveType) {
     config.moveTypeList()->push_back(std::move(moveSpec));
 
     REBALANCER_EXPECT_RUNTIME_ERROR(
-        MoveTypeFactory::createMoveTypes(config),
+        MoveTypeFactory::createMoveTypes(config, getProblem()),
         "Move type FIXED_DEST_SWAP_MULTIPLE not supported by name; it either does not exist, or you should use its typed move type spec instead");
   }
 }
@@ -721,13 +738,13 @@ static void checkSwapNMoveType(std::shared_ptr<MoveType> move) {
   EXPECT_TRUE(!!movePtr);
 }
 
-TEST(MoveTypeFactoryTest, createSwapNMoveType) {
+TEST_F(MoveTypeFactoryTest, createSwapNMoveType) {
   {
     // setting move type names with helper function
     LocalSearchSolverSpec config;
     config.moveTypeList()->push_back(
         ProblemSolver::makeMoveTypeSpec(SwapNMoveTypeSpec()));
-    const auto moves = MoveTypeFactory::createMoveTypes(config);
+    const auto moves = MoveTypeFactory::createMoveTypes(config, getProblem());
     EXPECT_EQ(moves.size(), 1);
     const auto& move = moves.at(0);
     checkSwapNMoveType(move);
@@ -740,7 +757,7 @@ TEST(MoveTypeFactoryTest, createSwapNMoveType) {
     config.moveTypeList()->push_back(std::move(moveSpec));
 
     REBALANCER_EXPECT_RUNTIME_ERROR(
-        MoveTypeFactory::createMoveTypes(config),
+        MoveTypeFactory::createMoveTypes(config, getProblem()),
         "Move type SWAP_N not supported by name; it either does not exist, or you should use its typed move type spec instead");
   }
   {
@@ -751,7 +768,7 @@ TEST(MoveTypeFactoryTest, createSwapNMoveType) {
     moveSpec.set_moveTypeName("SWAP_N");
     config.moveTypeList()->push_back(std::move(moveSpec));
     MoveTypeFactory::transformMoveTypesForReplayingSavedInstances(config);
-    const auto moves = MoveTypeFactory::createMoveTypes(config);
+    const auto moves = MoveTypeFactory::createMoveTypes(config, getProblem());
     EXPECT_EQ(moves.size(), 1);
     const auto& move = moves.at(0);
     checkSwapNMoveType(move);
@@ -764,7 +781,7 @@ TEST(MoveTypeFactoryTest, createSwapNMoveType) {
     moveSpec.set_swapNMoveTypeSpec(singleSpec);
     config.moveTypeList()->push_back(std::move(moveSpec));
 
-    const auto moves = MoveTypeFactory::createMoveTypes(config);
+    const auto moves = MoveTypeFactory::createMoveTypes(config, getProblem());
     EXPECT_EQ(moves.size(), 1);
 
     const auto& move = moves.at(0);
@@ -779,13 +796,13 @@ static void checkSingleRandomBatchesMoveType(std::shared_ptr<MoveType> move) {
   EXPECT_TRUE(!!movePtr);
 }
 
-TEST(MoveTypeFactoryTest, createSingleRandomBatchesMoveType) {
+TEST_F(MoveTypeFactoryTest, createSingleRandomBatchesMoveType) {
   {
     // setting move type names with helper function
     LocalSearchSolverSpec config;
     config.moveTypeList()->push_back(
         ProblemSolver::makeMoveTypeSpec(SingleRandomBatchesMoveTypeSpec()));
-    const auto moves = MoveTypeFactory::createMoveTypes(config);
+    const auto moves = MoveTypeFactory::createMoveTypes(config, getProblem());
     EXPECT_EQ(moves.size(), 1);
     const auto& move = moves.at(0);
     checkSingleRandomBatchesMoveType(move);
@@ -798,7 +815,7 @@ TEST(MoveTypeFactoryTest, createSingleRandomBatchesMoveType) {
     moveSpec.set_singleRandomBatchesMoveTypeSpec(singleSpec);
     config.moveTypeList()->push_back(std::move(moveSpec));
 
-    const auto moves = MoveTypeFactory::createMoveTypes(config);
+    const auto moves = MoveTypeFactory::createMoveTypes(config, getProblem());
     EXPECT_EQ(moves.size(), 1);
 
     const auto& move = moves.at(0);
@@ -813,13 +830,13 @@ static void checkSwapFullContainersMoveType(std::shared_ptr<MoveType> move) {
   EXPECT_TRUE(!!movePtr);
 }
 
-TEST(MoveTypeFactoryTest, createSwapFullContainersMoveType) {
+TEST_F(MoveTypeFactoryTest, createSwapFullContainersMoveType) {
   {
     // setting move type names with helper function
     LocalSearchSolverSpec config;
     config.moveTypeList()->push_back(
         ProblemSolver::makeMoveTypeSpec(SwapFullContainersMoveTypeSpec()));
-    const auto moves = MoveTypeFactory::createMoveTypes(config);
+    const auto moves = MoveTypeFactory::createMoveTypes(config, getProblem());
     EXPECT_EQ(moves.size(), 1);
     const auto& move = moves.at(0);
     checkSwapFullContainersMoveType(move);
@@ -832,7 +849,7 @@ TEST(MoveTypeFactoryTest, createSwapFullContainersMoveType) {
         SwapFullContainersMoveTypeSpec());
     config.moveTypeList()->push_back(std::move(moveSpec));
 
-    const auto moves = MoveTypeFactory::createMoveTypes(config);
+    const auto moves = MoveTypeFactory::createMoveTypes(config, getProblem());
     EXPECT_EQ(moves.size(), 1);
 
     const auto& move = moves.at(0);
@@ -849,14 +866,14 @@ static void checkSwapFullWithEmptyContainersMoveType(
   EXPECT_TRUE(!!movePtr);
 }
 
-TEST(MoveTypeFactoryTest, createSwapFullWithEmptyContainersMoveType) {
+TEST_F(MoveTypeFactoryTest, createSwapFullWithEmptyContainersMoveType) {
   {
     // setting move type names with helper function
     LocalSearchSolverSpec config;
     config.moveTypeList()->push_back(
         ProblemSolver::makeMoveTypeSpec(
             SwapFullWithEmptyContainersMoveTypeSpec()));
-    const auto moves = MoveTypeFactory::createMoveTypes(config);
+    const auto moves = MoveTypeFactory::createMoveTypes(config, getProblem());
     EXPECT_EQ(moves.size(), 1);
     const auto& move = moves.at(0);
     checkSwapFullWithEmptyContainersMoveType(move);
@@ -869,7 +886,7 @@ TEST(MoveTypeFactoryTest, createSwapFullWithEmptyContainersMoveType) {
         SwapFullWithEmptyContainersMoveTypeSpec());
     config.moveTypeList()->push_back(std::move(moveSpec));
 
-    const auto moves = MoveTypeFactory::createMoveTypes(config);
+    const auto moves = MoveTypeFactory::createMoveTypes(config, getProblem());
     EXPECT_EQ(moves.size(), 1);
 
     const auto& move = moves.at(0);
@@ -884,13 +901,13 @@ static void checkSingleEndChainMoveType(std::shared_ptr<MoveType> move) {
   EXPECT_TRUE(!!movePtr);
 }
 
-TEST(MoveTypeFactoryTest, createSingleEndChainMoveType) {
+TEST_F(MoveTypeFactoryTest, createSingleEndChainMoveType) {
   {
     // setting move type names with helper function
     LocalSearchSolverSpec config;
     config.moveTypeList()->push_back(
         ProblemSolver::makeMoveTypeSpec(SingleEndChainMoveTypeSpec()));
-    const auto moves = MoveTypeFactory::createMoveTypes(config);
+    const auto moves = MoveTypeFactory::createMoveTypes(config, getProblem());
     EXPECT_EQ(moves.size(), 1);
     const auto& move = moves.at(0);
     checkSingleEndChainMoveType(move);
@@ -902,7 +919,7 @@ TEST(MoveTypeFactoryTest, createSingleEndChainMoveType) {
     moveSpec.set_singleEndChainMoveTypeSpec(SingleEndChainMoveTypeSpec());
     config.moveTypeList()->push_back(std::move(moveSpec));
 
-    const auto moves = MoveTypeFactory::createMoveTypes(config);
+    const auto moves = MoveTypeFactory::createMoveTypes(config, getProblem());
     EXPECT_EQ(moves.size(), 1);
 
     const auto& move = moves.at(0);
@@ -917,7 +934,7 @@ static void checkReplicaDropMoveType(std::shared_ptr<MoveType> move) {
   EXPECT_TRUE(!!movePtr);
 }
 
-TEST(MoveTypeFactoryTest, createReplicaDropMoveType) {
+TEST_F(MoveTypeFactoryTest, createReplicaDropMoveType) {
   {
     // setting move type names with helper function
     LocalSearchSolverSpec config;
@@ -926,7 +943,7 @@ TEST(MoveTypeFactoryTest, createReplicaDropMoveType) {
     replicaDropMoveTypeSpec.replicaDropScope() = "scope";
     config.moveTypeList()->push_back(
         ProblemSolver::makeMoveTypeSpec(replicaDropMoveTypeSpec));
-    const auto moves = MoveTypeFactory::createMoveTypes(config);
+    const auto moves = MoveTypeFactory::createMoveTypes(config, getProblem());
     EXPECT_EQ(moves.size(), 1);
     const auto& move = moves.at(0);
     checkReplicaDropMoveType(move);
@@ -941,7 +958,7 @@ TEST(MoveTypeFactoryTest, createReplicaDropMoveType) {
     moveSpec.set_replicaDropMoveTypeSpec(replicaDropMoveTypeSpec);
     config.moveTypeList()->push_back(std::move(moveSpec));
 
-    const auto moves = MoveTypeFactory::createMoveTypes(config);
+    const auto moves = MoveTypeFactory::createMoveTypes(config, getProblem());
     EXPECT_EQ(moves.size(), 1);
 
     const auto& move = moves.at(0);
@@ -958,7 +975,7 @@ static void checkGreedyGroupToScopeItemMoveType(
   EXPECT_TRUE(!!movePtr);
 }
 
-TEST(MoveTypeFactoryTest, createGreedyGroupToScopeItemMoveType) {
+TEST_F(MoveTypeFactoryTest, createGreedyGroupToScopeItemMoveType) {
   {
     // setting move type names with helper function
     LocalSearchSolverSpec config;
@@ -968,7 +985,7 @@ TEST(MoveTypeFactoryTest, createGreedyGroupToScopeItemMoveType) {
     config.moveTypeList()->push_back(
         ProblemSolver::makeMoveTypeSpec(
             std::move(greedyGroupToScopeItemMoveTypeSpec)));
-    const auto moves = MoveTypeFactory::createMoveTypes(config);
+    const auto moves = MoveTypeFactory::createMoveTypes(config, getProblem());
     EXPECT_EQ(moves.size(), 1);
     const auto& move = moves.at(0);
     checkGreedyGroupToScopeItemMoveType(move);
@@ -984,7 +1001,7 @@ TEST(MoveTypeFactoryTest, createGreedyGroupToScopeItemMoveType) {
         std::move(greedyGroupToScopeItemMoveTypeSpec));
     config.moveTypeList()->push_back(std::move(moveSpec));
 
-    const auto moves = MoveTypeFactory::createMoveTypes(config);
+    const auto moves = MoveTypeFactory::createMoveTypes(config, getProblem());
     EXPECT_EQ(moves.size(), 1);
 
     const auto& move = moves.at(0);
@@ -1001,13 +1018,13 @@ static void checkSingleRandomStratifiedMoveType(
   EXPECT_TRUE(!!movePtr);
 }
 
-TEST(MoveTypeFactoryTest, createSingleRandomStratifiedMoveType) {
+TEST_F(MoveTypeFactoryTest, createSingleRandomStratifiedMoveType) {
   {
     // setting move type names with helper function
     LocalSearchSolverSpec config;
     config.moveTypeList()->push_back(
         ProblemSolver::makeMoveTypeSpec(SingleRandomStratifiedMoveTypeSpec()));
-    const auto moves = MoveTypeFactory::createMoveTypes(config);
+    const auto moves = MoveTypeFactory::createMoveTypes(config, getProblem());
     EXPECT_EQ(moves.size(), 1);
     const auto& move = moves.at(0);
     checkSingleRandomStratifiedMoveType(move);
@@ -1021,7 +1038,7 @@ TEST(MoveTypeFactoryTest, createSingleRandomStratifiedMoveType) {
         std::move(singleRandomStratifiedSpec));
     config.moveTypeList()->push_back(std::move(moveSpec));
 
-    const auto moves = MoveTypeFactory::createMoveTypes(config);
+    const auto moves = MoveTypeFactory::createMoveTypes(config, getProblem());
     EXPECT_EQ(moves.size(), 1);
 
     const auto& move = moves.at(0);
@@ -1029,7 +1046,7 @@ TEST(MoveTypeFactoryTest, createSingleRandomStratifiedMoveType) {
   }
 }
 
-TEST(MoveTypeFactoryTest, ParallelExecutionConfigPropagation) {
+TEST_F(MoveTypeFactoryTest, ParallelExecutionConfigPropagation) {
   LocalSearchSolverSpec config;
   ParallelExecutionConfig execSpec;
   execSpec.strategy() = ParallelExecutionStrategy::BATCHING;
@@ -1039,7 +1056,7 @@ TEST(MoveTypeFactoryTest, ParallelExecutionConfigPropagation) {
   config.moveTypeList()->push_back(
       ProblemSolver::makeMoveTypeSpec(SwapMoveTypeSpec()));
 
-  const auto moves = MoveTypeFactory::createMoveTypes(config);
+  const auto moves = MoveTypeFactory::createMoveTypes(config, getProblem());
   ASSERT_EQ(moves.size(), 1);
 
   const auto& move = moves.at(0);
@@ -1049,13 +1066,13 @@ TEST(MoveTypeFactoryTest, ParallelExecutionConfigPropagation) {
   EXPECT_EQ(*retrievedSpec->batchSize(), 128);
 }
 
-TEST(MoveTypeFactoryTest, NoParallelExecutionConfigReturnsNullopt) {
+TEST_F(MoveTypeFactoryTest, NoParallelExecutionConfigReturnsNullopt) {
   LocalSearchSolverSpec config;
 
   config.moveTypeList()->push_back(
       ProblemSolver::makeMoveTypeSpec(SingleMoveTypeSpec()));
 
-  const auto moves = MoveTypeFactory::createMoveTypes(config);
+  const auto moves = MoveTypeFactory::createMoveTypes(config, getProblem());
   ASSERT_EQ(moves.size(), 1);
 
   const auto& move = moves.at(0);
@@ -1063,7 +1080,7 @@ TEST(MoveTypeFactoryTest, NoParallelExecutionConfigReturnsNullopt) {
   EXPECT_FALSE(retrievedSpec.has_value());
 }
 
-TEST(MoveTypeFactoryTest, AllMoveTypesGetSameParallelExecutionConfig) {
+TEST_F(MoveTypeFactoryTest, AllMoveTypesGetSameParallelExecutionConfig) {
   LocalSearchSolverSpec config;
   ParallelExecutionConfig execSpec;
   execSpec.strategy() = ParallelExecutionStrategy::SLIDING_WINDOW;
@@ -1076,7 +1093,7 @@ TEST(MoveTypeFactoryTest, AllMoveTypesGetSameParallelExecutionConfig) {
   config.moveTypeList()->push_back(
       ProblemSolver::makeMoveTypeSpec(TripleLoopMoveTypeSpec()));
 
-  const auto moves = MoveTypeFactory::createMoveTypes(config);
+  const auto moves = MoveTypeFactory::createMoveTypes(config, getProblem());
   ASSERT_EQ(moves.size(), 3);
 
   for (const auto& move : moves) {

@@ -61,7 +61,7 @@ CO_TEST_F(GreedyGroupToScopeItemMoveTypeTest, SamplingIsDeterministic) {
     spec.scopeItemMovesScope() = "assignable";
     spec.nSampleSetsToExplore() = 1;
     return GreedyGroupToScopeItemMoveType(
-               interface::LocalSearchSolverSpec{}, spec)
+               interface::LocalSearchSolverSpec{}, spec, getProblem())
         .findBestMove(
             getMovesEvaluator(),
             /*hotContainer=*/container(0),
@@ -135,7 +135,7 @@ CO_TEST_F(
   spec.destinationsToExplore() = destinationsToExplore;
 
   GreedyGroupToScopeItemMoveType moveType(
-      interface::LocalSearchSolverSpec{}, spec);
+      interface::LocalSearchSolverSpec{}, spec, getProblem());
   const auto getMoveSet = [&](entities::ContainerId hotContainer) {
     return moveType
         .findBestMove(

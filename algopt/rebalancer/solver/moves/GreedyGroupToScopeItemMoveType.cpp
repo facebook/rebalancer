@@ -56,6 +56,18 @@ const std::string& requireGroupMovesPartition(
   return *spec.groupMovesPartition();
 }
 
+// Resolve the named pruning constraints to hard-constraint components. An empty
+// name list means no pruning
+std::vector<ExprPtr> buildPruningConstraints(
+    const interface::GreedyGroupToScopeItemMoveTypeSpec& spec,
+    const Problem& problem) {
+  const auto& constraintNames = *spec.candidatePruning()->constraintNames();
+  if (constraintNames.empty()) {
+    return {};
+  }
+  return problem.getHardConstraintComponents(constraintNames);
+}
+
 // A local generator seeded from the scope item's containers keeps parallel
 // sampling race-free and deterministic; a shared generator would race. The seed
 // is order-independent, so it does not depend on the container list's order.
@@ -115,18 +127,18 @@ std::string GreedyGroupToScopeItemMoveType::name() const {
 
 GreedyGroupToScopeItemMoveType::GreedyGroupToScopeItemMoveType(
     const interface::LocalSearchSolverSpec& solverConfigs,
-    const interface::GreedyGroupToScopeItemMoveTypeSpec& spec)
+    const interface::GreedyGroupToScopeItemMoveTypeSpec& spec,
+    const Problem& problem)
     : MoveType(solverConfigs),
       partitionName_(requireGroupMovesPartition(spec)),
       nSampleSetsToExplore_(*spec.nSampleSetsToExplore()),
       destinationsToExplore_(buildDestinationsToExplore(spec)),
-      pruningConstraintNames_(*spec.candidatePruning()->constraintNames()) {}
+      pruningConstraints_(buildPruningConstraints(spec, problem)) {}
 
 MoveResult GreedyGroupToScopeItemMoveType::exploreMovingGroup(
     const MovesEvaluator& evaluator,
     const std::vector<entities::ObjectId>& groupObjectIds,
     const ReferenceList<const std::vector<entities::ContainerId>>& destinations,
-    const std::vector<ExprPtr>& pruningConstraints,
     MoveStatsAggregator& stats,
     double timeLimit) const {
   const std::function<MoveResult(
@@ -151,7 +163,7 @@ MoveResult GreedyGroupToScopeItemMoveType::exploreMovingGroup(
                 evaluator,
                 containers,
                 groupObjectIds.front(),
-                pruningConstraints);
+                pruningConstraints_);
             if (containerIds.size() < groupObjectIds.size()) {
               return MoveResult::makeEmpty();
             }
@@ -176,17 +188,6 @@ MoveResult GreedyGroupToScopeItemMoveType::exploreMovingGroup(
       getParallelExecutionConfig());
 }
 
-const std::vector<ExprPtr>&
-GreedyGroupToScopeItemMoveType::resolvePruningConstraints(
-    const Problem& problem) {
-  if (!pruningConstraints_.has_value()) {
-    pruningConstraints_ = pruningConstraintNames_.empty()
-        ? std::vector<ExprPtr>{}
-        : problem.getHardConstraintComponents(pruningConstraintNames_);
-  }
-  return *pruningConstraints_;
-}
-
 MoveResult GreedyGroupToScopeItemMoveType::findBestMove(
     const MovesEvaluator& evaluator,
     entities::ContainerId hotContainer,
@@ -197,7 +198,6 @@ MoveResult GreedyGroupToScopeItemMoveType::findBestMove(
 
   auto& problem = evaluator.getProblem();
   const auto& universe = problem.getUniverse();
-  const auto& pruningConstraints = resolvePruningConstraints(problem);
 
   // Do NOT deduplicate using equivalent sets because this moveType is
   // essentially impossing a constraint that all objects in a group must move
@@ -235,7 +235,6 @@ MoveResult GreedyGroupToScopeItemMoveType::findBestMove(
         groupObjectIds,
         getDestinationsToExplore(
             destinationsToExplore_, hotContainer, hotObjectId, problem),
-        pruningConstraints,
         stats,
         timeLimit - timer.getSeconds());
 
