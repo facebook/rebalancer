@@ -146,14 +146,14 @@ bool MovesEvaluator::isPositive(
       labeledConstraints.begin(),
       labeledConstraints.end(),
       [this, &context](const auto& labeledConstraint) {
-        return isPositive(labeledConstraint->expression, context);
+        return isPositive(labeledConstraint->expression.get(), context);
       });
 }
 
-bool MovesEvaluator::isPositive(const ExprPtr& expression, Context& context)
+bool MovesEvaluator::isPositive(Expression* expression, Context& context)
     const {
   const auto exprValue =
-      problem_.getOrchestrator().evaluate(expression.get(), context);
+      problem_.getOrchestrator().evaluate(expression, context);
   return precision_.isstrictlyGreater(
       exprValue, *precision_.getTolerances().absolute());
 }
@@ -167,7 +167,7 @@ bool MovesEvaluator::satisfiesConstraints(const MoveSet& moves) const {
 }
 
 bool MovesEvaluator::violatesAny(
-    const std::vector<ExprPtr>& constraints,
+    const std::vector<Expression*>& constraints,
     const Move& move) const {
   if (constraints.empty()) {
     return false;
@@ -176,7 +176,7 @@ bool MovesEvaluator::violatesAny(
   context.clear();
   context.changes() = move.getChangeSet();
   return std::any_of(
-      constraints.begin(), constraints.end(), [&](const ExprPtr& expr) {
+      constraints.begin(), constraints.end(), [&](Expression* expr) {
         return isPositive(expr, context);
       });
 }
@@ -325,7 +325,7 @@ std::optional<LabeledExpressionSet> MovesEvaluator::getInvalidConstraints(
   LabeledExpressionSet invalidConstraints;
   for (auto& labeledConstraint : problem_.getLabeledConstraints()) {
     const auto& expression = labeledConstraint->expression;
-    if (isPositive(expression, context)) {
+    if (isPositive(expression.get(), context)) {
       invalidConstraints.push_back(labeledConstraint);
       if (getOnlyFirstInvalidConstraint) {
         break;

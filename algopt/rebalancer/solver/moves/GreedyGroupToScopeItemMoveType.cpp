@@ -58,7 +58,7 @@ const std::string& requireGroupMovesPartition(
 
 // Resolve the named pruning constraints to hard-constraint components. An empty
 // name list means no pruning
-std::vector<ExprPtr> buildPruningConstraints(
+std::vector<Expression*> buildPruningConstraints(
     const interface::GreedyGroupToScopeItemMoveTypeSpec& spec,
     const Problem& problem) {
   const auto& constraintNames = *spec.candidatePruning()->constraintNames();
@@ -83,7 +83,7 @@ std::vector<entities::ContainerId> getFeasibleContainers(
     const MovesEvaluator& evaluator,
     const std::vector<entities::ContainerId>& containers,
     entities::ObjectId object,
-    const std::vector<ExprPtr>& pruningConstraints) {
+    const std::vector<Expression*>& pruningConstraints) {
   if (pruningConstraints.empty()) {
     return containers;
   }

@@ -42,8 +42,9 @@ class MovesEvaluator {
 
   // Whether `move` violates any of `constraints` (a positive value means
   // violated).
-  bool violatesAny(const std::vector<ExprPtr>& constraints, const Move& move)
-      const;
+  bool violatesAny(
+      const std::vector<Expression*>& constraints,
+      const Move& move) const;
 
   // NOTE: apply changes to problem and also update internal state
   // needed since what we evaluate depends on what the intermediate 'applied'
@@ -84,7 +85,7 @@ class MovesEvaluator {
       const LabeledConstraints& labeledConstraints,
       Context& context) const;
 
-  bool isPositive(const ExprPtr& expression, Context& context) const;
+  bool isPositive(Expression* expression, Context& context) const;
 
  protected:
   // By default, all prior goals in [0, objTupleBegin) cannot be worsened by any

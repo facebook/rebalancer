@@ -470,15 +470,15 @@ Problem::getMaterializedProblem() const {
   return materializedProblem_;
 }
 
-std::vector<ExprPtr> Problem::getHardConstraintComponents(
+std::vector<Expression*> Problem::getHardConstraintComponents(
     const std::vector<std::string>& constraintNames) const {
   const auto& constraintIdToHardComponent =
       getMaterializedProblem()->hardConstraints;
-  std::vector<ExprPtr> components;
+  std::vector<Expression*> components;
   components.reserve(constraintNames.size());
   for (const auto& name : constraintNames) {
     components.push_back(
-        constraintIdToHardComponent.at(universe_->getConstraintId(name)));
+        constraintIdToHardComponent.at(universe_->getConstraintId(name)).get());
   }
   return components;
 }
