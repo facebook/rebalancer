@@ -60,6 +60,6 @@ class GreedyGroupToScopeItemMoveType : public MoveType {
   const int nSampleSetsToExplore_;
   const interface::DestinationsToExploreOptions destinationsToExplore_;
   // Hard-constraint components used to prune candidate moves before evaluating
-  const std::vector<Expression*> pruningConstraints_;
+  const std::vector<const Expression*> pruningConstraints_;
 };
 } // namespace facebook::rebalancer

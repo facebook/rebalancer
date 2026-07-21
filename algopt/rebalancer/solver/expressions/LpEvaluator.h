@@ -30,7 +30,7 @@ class LpEvaluator : public Evaluator {
   explicit LpEvaluator(
       LpContext& context,
       Problem& problem,
-      const folly::F14FastMap<Expression*, PriorityInfo>& nodesPriority);
+      const folly::F14FastMap<const Expression*, PriorityInfo>& nodesPriority);
 
   const algopt::lp::Expression& lp(
       Expression* expr,
@@ -89,7 +89,7 @@ class LpEvaluator : public Evaluator {
  private:
   LpContext& context_;
   Problem& problem_;
-  const folly::F14FastMap<Expression*, PriorityInfo>& nodesPriority_;
+  const folly::F14FastMap<const Expression*, PriorityInfo>& nodesPriority_;
 
   // optimizationIntents_ stores the pair (expr, intent) and
   // maintains the order of insertion, which in turn is used to infer the

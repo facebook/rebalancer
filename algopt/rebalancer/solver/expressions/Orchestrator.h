@@ -36,7 +36,7 @@ class Orchestrator {
 
   void apply(Context& context, const Assignment& assignment) const;
 
-  double evaluate(Expression* root, Context& context) const;
+  double evaluate(const Expression* root, Context& context) const;
 
   void updateEquivalenceSets(
       EquivalenceSets& equivalenceSets,
@@ -119,7 +119,7 @@ class Orchestrator {
       LpContext& context,
       const interface::OptimalSolverSpec& configs) const;
 
-  inline const PriorityInfo& priority(Expression* expr) const {
+  inline const PriorityInfo& priority(const Expression* expr) const {
     return nodeToPriority_.at(expr);
   }
 
@@ -164,7 +164,7 @@ class Orchestrator {
 
   folly::F14VectorMap<Expression*, std::vector<Expression*>> nodeToParents_;
 
-  folly::F14FastMap<Expression*, PriorityInfo> nodeToPriority_;
+  folly::F14FastMap<const Expression*, PriorityInfo> nodeToPriority_;
 
   std::vector<Expression*> roots_;
 

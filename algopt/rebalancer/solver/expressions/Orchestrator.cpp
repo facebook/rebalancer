@@ -266,7 +266,7 @@ void Orchestrator::apply(Context& context, const Assignment& assignment) const {
   }
 }
 
-double Orchestrator::evaluate(Expression* node, Context& context) const {
+double Orchestrator::evaluate(const Expression* node, Context& context) const {
   const auto& changes = *context.changes();
   // if no leaf nodes pushed to the readyNodes yet,
   // push the first node's leaf nodes to readyNodes

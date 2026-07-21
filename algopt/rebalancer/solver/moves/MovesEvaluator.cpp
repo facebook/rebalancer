@@ -150,7 +150,7 @@ bool MovesEvaluator::isPositive(
       });
 }
 
-bool MovesEvaluator::isPositive(Expression* expression, Context& context)
+bool MovesEvaluator::isPositive(const Expression* expression, Context& context)
     const {
   const auto exprValue =
       problem_.getOrchestrator().evaluate(expression, context);
@@ -167,7 +167,7 @@ bool MovesEvaluator::satisfiesConstraints(const MoveSet& moves) const {
 }
 
 bool MovesEvaluator::violatesAny(
-    const std::vector<Expression*>& constraints,
+    const std::vector<const Expression*>& constraints,
     const Move& move) const {
   if (constraints.empty()) {
     return false;
@@ -176,7 +176,7 @@ bool MovesEvaluator::violatesAny(
   context.clear();
   context.changes() = move.getChangeSet();
   return std::any_of(
-      constraints.begin(), constraints.end(), [&](Expression* expr) {
+      constraints.begin(), constraints.end(), [&](const Expression* expr) {
         return isPositive(expr, context);
       });
 }

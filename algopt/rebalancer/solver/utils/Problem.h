@@ -195,7 +195,7 @@ class Problem {
   const std::shared_ptr<const MaterializedProblem> getMaterializedProblem()
       const;
 
-  std::vector<Expression*> getHardConstraintComponents(
+  std::vector<const Expression*> getHardConstraintComponents(
       const std::vector<std::string>& constraintNames) const;
 
   const InvalidMoveFilter* getInvalidMoveFilter() const {

@@ -52,7 +52,8 @@ TEST_F(StepTest, Lp) {
   REBALANCER_SKIP_IF_NO_MIP_SOLVER();
   p.lp_store.reset(
       facebook::algopt::getAvailableMIPSolver().value(), false, context);
-  const auto nodesPriority = folly::F14FastMap<Expression*, PriorityInfo>();
+  const auto nodesPriority =
+      folly::F14FastMap<const Expression*, PriorityInfo>();
   const LpEvaluator evaluator(context, p, nodesPriority);
   p.lp_store.setObjective({-1 * stepExpr->lp(evaluator, false, {})});
 

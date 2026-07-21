@@ -22,7 +22,7 @@ namespace facebook::rebalancer {
 LpEvaluator::LpEvaluator(
     LpContext& context,
     Problem& problem,
-    const folly::F14FastMap<Expression*, PriorityInfo>& nodesPriority)
+    const folly::F14FastMap<const Expression*, PriorityInfo>& nodesPriority)
     : context_(context), problem_(problem), nodesPriority_(nodesPriority) {}
 
 const algopt::lp::Expression& LpEvaluator::lp(
