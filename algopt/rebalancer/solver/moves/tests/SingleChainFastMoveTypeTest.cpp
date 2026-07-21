@@ -23,6 +23,8 @@
 #include <folly/coro/BlockingWait.h>
 #include <gtest/gtest.h>
 
+#include <limits>
+
 namespace facebook::rebalancer::packer::tests {
 
 class MockSingleChainFastMoveType : public SingleChainFastMoveType {
@@ -289,6 +291,43 @@ CO_TEST_F(SingleChainFastMoveTypeTest, TestTotalNumberOfEvaluations) {
   // we expect 4 moveSet evaluations, 3 with container(3) as the
   // 'otherContainer' and 1 with container(4) as the 'otherContainer'.
   EXPECT_EQ(8, getTotalMovesEvaluated());
+}
+
+// specialFastColdContainer should send the hot object only to that cold
+// container, so setting it should evaluate fewer moves. The const-0 objective
+// makes all objects equal, so no move improves (nothing is skipped early) and
+// each container counts as one object. A chain is 2 moves: the hot object goes
+// to a cold container, and one object from another container moves into the hot
+// container.
+CO_TEST_F(
+    SingleChainFastMoveTypeTest,
+    FindBestMoveHonorsSpecialFastColdContainer) {
+  const auto universe = co_await setUpUniverse();
+  createProblem({const_expr(0, *universe)}, const_expr(0, *universe));
+
+  const auto movesEvaluated =
+      [&](const interface::SingleChainFastMoveTypeSpec& spec) {
+        MockSingleChainFastMoveType(interface::LocalSearchSolverSpec{}, spec)
+            .findBestMove(
+                getMovesEvaluator(),
+                container(1) /*hotContainer*/,
+                getMoveStatsAggregator(),
+                getEmptySearchHints(),
+                std::numeric_limits<double>::max() /*timeLimit*/);
+        return getTotalMovesEvaluated();
+      };
+
+  interface::SingleChainFastMoveTypeSpec restricted;
+  restricted.specialFastColdContainer() = "region2";
+
+  // Cold containers {region2, region3, region4}; region2 is empty:
+  //   into region2: from region3 and region4 = 2 chains = 4 moves
+  //   into region3: from region4             = 1 chain  = 2 moves
+  //   into region4: from region3             = 1 chain  = 2 moves
+  EXPECT_EQ(8, movesEvaluated(interface::SingleChainFastMoveTypeSpec{}));
+
+  // Restricting to region2 keeps only the first line: 4 moves.
+  EXPECT_EQ(4, movesEvaluated(restricted));
 }
 
 TEST_F(SingleChainFastMoveTypeTest, Name) {

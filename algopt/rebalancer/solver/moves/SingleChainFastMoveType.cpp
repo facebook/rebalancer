@@ -21,6 +21,17 @@
 
 namespace facebook::rebalancer {
 
+namespace {
+interface::SingleChainMoveTypeSpec toSingleChainMoveTypeSpec(
+    const interface::SingleChainFastMoveTypeSpec& spec) {
+  interface::SingleChainMoveTypeSpec baseSpec;
+  baseSpec.partitionNameToExploreChainsWithinObjectGroup().copy_from(
+      spec.partitionNameToExploreFastChainsWithinObjectGroup());
+  baseSpec.specialColdContainer().copy_from(spec.specialFastColdContainer());
+  return baseSpec;
+}
+} // namespace
+
 std::string SingleChainFastMoveType::name() const {
   return kSingleChainFastMoveTypeName.str();
 }
@@ -28,11 +39,7 @@ std::string SingleChainFastMoveType::name() const {
 SingleChainFastMoveType::SingleChainFastMoveType(
     const interface::LocalSearchSolverSpec& solverConfigs,
     const interface::SingleChainFastMoveTypeSpec& spec)
-    : SingleChainMoveType(solverConfigs, interface::SingleChainMoveTypeSpec()) {
-  partitionNameToExploreFastChainsWithinObjectGroup_ =
-      spec.partitionNameToExploreFastChainsWithinObjectGroup().to_optional();
-  specialFastColdContainer_ = spec.specialFastColdContainer().to_optional();
-}
+    : SingleChainMoveType(solverConfigs, toSingleChainMoveTypeSpec(spec)) {}
 
 MoveResult SingleChainFastMoveType::findBestMove(
     const MovesEvaluator& evaluator,
@@ -45,8 +52,10 @@ MoveResult SingleChainFastMoveType::findBestMove(
   const ObjectDeduper dedupedObjs(
       &problem.getEquivalenceSets(), dynamicObjects);
 
+  const auto customColdContainers =
+      getCustomColdContainers(evaluator, hotContainer);
   auto coldContainers = Filter(
-      problem.containers,
+      customColdContainers ? *customColdContainers : problem.containers,
       [&problem, hotContainer](entities::ContainerId container) {
         return container != hotContainer &&
             !problem.not_accepting_containers.contains(container);

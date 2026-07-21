@@ -51,20 +51,6 @@ class SingleChainFastMoveType : public SingleChainMoveType {
       MoveStatsAggregator& stats,
       const SearchHints& hints,
       double timeLimit) override;
-
- protected:
-  std::optional<std::string> getPartitionNameToExploreChainsWithinObjectGroup()
-      const override {
-    return partitionNameToExploreFastChainsWithinObjectGroup_;
-  }
-  std::optional<std::string> getSpecialColdContainer() const override {
-    return specialFastColdContainer_;
-  }
-
- private:
-  std::optional<std::string>
-      partitionNameToExploreFastChainsWithinObjectGroup_ = std::nullopt;
-  std::optional<std::string> specialFastColdContainer_ = std::nullopt;
 };
 
 } // namespace facebook::rebalancer
