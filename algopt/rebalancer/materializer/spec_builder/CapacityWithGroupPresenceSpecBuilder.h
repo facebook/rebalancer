@@ -32,14 +32,16 @@ that are in I)`.
 In other words, just the mere presence of a group `G` adds a minimum utilization
 of `groupToPresenceWeight[G][I]` to the scope item `I`.
 
-Only the MAX bound is supported. The continuous penalty is skipped once a
-group's contribution is already at lower bound. For MAX the penalty is a sum of
-per-group utilizations, so each group's term is checked independently. For MIN
-the penalty should also be skipped if group's contribution is at upper bound,
-but it's hard to represent continuous penalty in a general formula when a
-constraint aggregates more than one group (PER_SCOPE_ITEM or
-PER_GROUP_AND_SCOPE_ITEM with partition != aggregationPartition). This needs to
-be designed carefully if we want to support it someday.
+The continuous penalty (local search only) is a sum of per-group terms, each
+gated to 0 once the group can no longer move in the constraint-fixing direction
+-- so it stays separable even across aggregation groups (partition !=
+aggregationPartition). MAX: per-group utilization, gated at the lower bound.
+MIN: per-group upper-bound complement (upperBound - utilization), gated at the
+upper bound.
+
+MIN is restricted to PER_GROUP_AND_SCOPE_ITEM; the PER_SCOPE_ITEM local-search
+path uses the fused ObjectPartitionLookupWithMinPresence node, which is
+MAX-only.
 */
 class CapacityWithGroupPresenceSpecBuilder : public SpecBuilder {
  public:

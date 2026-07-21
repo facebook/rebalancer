@@ -175,6 +175,13 @@ CapacityWithGroupPresenceSpecBuilder::CapacityWithGroupPresenceSpecBuilder(
             universe_->getEntityName(aggregationPartitionId_)));
   }
 
+  if (spec_.bound() == interface::CapacityWithGroupPresenceBound::MIN &&
+      spec_.intent() !=
+          interface::CapacityWithGroupPresenceUsageIntent::
+              PER_GROUP_AND_SCOPE_ITEM) {
+    throwMsg("MIN bound is only supported for PER_GROUP_AND_SCOPE_ITEM intent");
+  }
+
   if (!spec_.groupUtilMultipliers()->empty()) {
     for (const auto& multiplier : *spec_.groupUtilMultipliers()) {
       auto limitWrapper = LimitWrapper(
@@ -259,6 +266,8 @@ ExprPtr CapacityWithGroupPresenceSpecBuilder::getConstraintExpr(
   switch (*spec_.bound()) {
     case interface::CapacityWithGroupPresenceBound::MAX:
       return (util - limit);
+    case interface::CapacityWithGroupPresenceBound::MIN:
+      return (limit - util);
   }
   throw std::runtime_error("Unknown bound type");
 }
@@ -305,6 +314,7 @@ ExprPtr CapacityWithGroupPresenceSpecBuilder::getAdditionalPenaltyExpr(
 
   switch (*spec_.bound()) {
     case interface::CapacityWithGroupPresenceBound::MAX:
+    case interface::CapacityWithGroupPresenceBound::MIN:
       return normFactor == 1.0 ? penaltyUtil : penaltyUtil * normFactor;
   }
 }
@@ -589,11 +599,29 @@ CapacityWithGroupPresenceSpecBuilder::getGroupUtilContributionToScopeItemUtil(
       {interface::GroupUtilMultiplierTarget::PRESENCE_WEIGHT,
        interface::GroupUtilMultiplierTarget::UTILIZATION,
        interface::GroupUtilMultiplierTarget::COMMON});
-  penaltyUtil = product(
-      step(
-          finalUtil -
-          const_expr(expressionBuilder.getLowerBound(*finalUtil), *universe_)),
-      std::move(penaltyUtil));
+  // Gate the penalty off once the group util is at boundary.
+  switch (*spec_.bound()) {
+    case interface::CapacityWithGroupPresenceBound::MAX:
+      penaltyUtil = product(
+          step(
+              finalUtil -
+              const_expr(
+                  expressionBuilder.getLowerBound(*finalUtil), *universe_)),
+          std::move(penaltyUtil));
+      break;
+    case interface::CapacityWithGroupPresenceBound::MIN: {
+      // Subtract from penaltyUtil's OWN upper bound: keeps the complement
+      // non-negative for any multipliers/extra and normalized like MAX.
+      auto finalUtilUpperBound =
+          const_expr(expressionBuilder.getUpperBound(*finalUtil), *universe_);
+      auto penaltyUpperBound =
+          const_expr(expressionBuilder.getUpperBound(*penaltyUtil), *universe_);
+      penaltyUtil = product(
+          step(finalUtilUpperBound - finalUtil),
+          penaltyUpperBound - std::move(penaltyUtil));
+      break;
+    }
+  }
 
   co_return UtilExprs{
       .util = std::move(finalUtil), .penaltyUtil = std::move(penaltyUtil)};

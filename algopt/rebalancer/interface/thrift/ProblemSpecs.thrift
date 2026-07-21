@@ -1230,9 +1230,10 @@ struct GroupDiversitySpec {
   7: Filter filter;
 }
 
-// Only MAX is supported.
 enum CapacityWithGroupPresenceBound {
   MAX = 1,
+  // MIN is supported only for the PER_GROUP_AND_SCOPE_ITEM intent.
+  MIN = 2,
 }
 
 enum CapacityWithGroupPresenceUsageIntent {

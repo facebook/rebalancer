@@ -19,6 +19,7 @@
 #include <folly/container/irange.h>
 #include <gtest/gtest.h>
 
+#include <cmath>
 #include <map>
 #include <string>
 
@@ -172,13 +173,16 @@ class CapacityWithGroupPresenceTest
     std::optional<Limit> capacityLimits = std::nullopt;
     std::string partition = "tenantTrafficObjects";
     std::optional<std::string> aggregationPartition = std::nullopt;
+    bool roundUp = true;
+    std::string name = "capacityWithGroupPresence";
   };
   void addCapacityWithGroupPresenceSpec(const SpecParams& specParams) {
     CapacityWithGroupPresenceSpec spec;
+    spec.name() = specParams.name;
     spec.dimension() = "replicaCount";
     spec.partition() = specParams.partition;
     spec.scope() = "region";
-    spec.roundUpGroupUtilOnScopeItem() = true;
+    spec.roundUpGroupUtilOnScopeItem() = specParams.roundUp;
     spec.bound() = specParams.bound;
     spec.multiplierList() = specParams.multipliers;
     spec.groupUtilMultipliers() = specParams.groupUtilMultipliers;
@@ -297,6 +301,152 @@ TEST_P(CapacityWithGroupPresenceTest, MaxConstraint) {
       break;
     }
   }
+}
+
+// A MIN bound above the current utilization forces the solver to move more
+// objects into the scope item to reach the floor. tenant2 starts with only
+// trafficObject8 (util 1) in region1 and is given a region1 floor of 2, so the
+// solver must pull more of tenant2 (trafficObject6/7) into region1; for local
+// search the MIN penalty provides the continuous pull. Both solvers satisfy the
+// hard floor.
+TEST_P(CapacityWithGroupPresenceTest, MinBoundEnforcesMovingObjectsIn) {
+  setUpProblem();
+
+  Limit presenceWeight;
+  presenceWeight.type() = interface::LimitType::ABSOLUTE;
+  presenceWeight.globalLimit() = 0;
+
+  // Floor of 2 in region1 for each tenant; no floor elsewhere.
+  Limit capacityLimits;
+  capacityLimits.type() = interface::LimitType::ABSOLUTE;
+  capacityLimits.globalLimit() = 0;
+  capacityLimits.scopeItemLimits() = {{"region1", 2}};
+
+  addCapacityWithGroupPresenceSpec(
+      SpecParams{
+          .isConstraint = true,
+          .bound = CapacityWithGroupPresenceBound::MIN,
+          .groupToPresenceWeight = std::move(presenceWeight),
+          .intent = interface::CapacityWithGroupPresenceUsageIntent::
+              PER_GROUP_AND_SCOPE_ITEM,
+          .capacityLimits = std::move(capacityLimits)});
+
+  const auto solution = solver->solve();
+
+  const folly::F14FastMap<std::string, double> region1Value = {
+      {"trafficObject6", 0.115},
+      {"trafficObject7", 0.88},
+      {"trafficObject8", 1.0}};
+  const auto tenant2Region1Util = [&](const auto& assignment) {
+    double util = 0.0;
+    for (const auto& obj : tenantToTrafficObjects["tenant2-trafficObjects"]) {
+      const auto& host = assignment.at(obj);
+      if (host == "host1" || host == "host2") {
+        util += region1Value.at(obj);
+      }
+    }
+    return util;
+  };
+
+  // tenant2 starts with only trafficObject8 in region1 (ceil 1, below floor 2);
+  // after solving the hard floor is satisfied.
+  EXPECT_LT(std::ceil(tenant2Region1Util(*solution.initialAssignment())), 2.0);
+  EXPECT_GE(std::ceil(tenant2Region1Util(*solution.assignment())), 2.0);
+}
+
+// A MIN bound caps how much utilization can be moved out of a scope item.
+// tenant1 starts at 2.18 in region1; a hard MAX cap of 2.1 forces it down
+// (tenant2 must fully leave), and the MIN floor of 2.0 keeps it from going
+// lower -- so tenant1's region1 utilization must land in [2.0, 2.1].
+// roundUp=false so both solvers see the raw-utilization reduction.
+TEST_P(CapacityWithGroupPresenceTest, MinBoundProtectsObjectsFromMovingOut) {
+  setUpProblem();
+
+  Limit noPresence;
+  noPresence.type() = interface::LimitType::ABSOLUTE;
+  noPresence.globalLimit() = 0;
+
+  // Eviction pressure: a hard MAX cap of 2.1 on region1 utilization.
+  Limit maxLimit;
+  maxLimit.type() = interface::LimitType::ABSOLUTE;
+  maxLimit.globalLimit() = 100; // effectively no cap on region2
+  maxLimit.scopeItemLimits() = {{"region1", 2.1}};
+  addCapacityWithGroupPresenceSpec(
+      SpecParams{
+          .isConstraint = true,
+          .bound = CapacityWithGroupPresenceBound::MAX,
+          .groupToPresenceWeight = noPresence,
+          .capacityLimits = maxLimit,
+          .roundUp = false,
+          .name = "regionMaxCap"});
+
+  // MIN floor of 2.0 for tenant1 in region1.
+  Limit floorLimit;
+  floorLimit.type() = interface::LimitType::ABSOLUTE;
+  floorLimit.globalLimit() = 0;
+  floorLimit.scopeItemToGroupLimits() = {
+      {"region1", {{"tenant1-trafficObjects", 2.0}}}};
+  addCapacityWithGroupPresenceSpec(
+      SpecParams{
+          .isConstraint = true,
+          .bound = CapacityWithGroupPresenceBound::MIN,
+          .groupToPresenceWeight = noPresence,
+          .intent = interface::CapacityWithGroupPresenceUsageIntent::
+              PER_GROUP_AND_SCOPE_ITEM,
+          .capacityLimits = floorLimit,
+          .roundUp = false,
+          .name = "tenant1MinFloor"});
+
+  const auto solution = solver->solve();
+  const auto& finalAssignment = *solution.assignment();
+  const folly::F14FastMap<std::string, double> region1Value = {
+      {"trafficObject1", 0.85},
+      {"trafficObject2", 0.4},
+      {"trafficObject3", 0.6},
+      {"trafficObject4", 0.5},
+      {"trafficObject5", 0.13},
+      {"trafficObject9", 1.2},
+      {"trafficObject10", 0.3}};
+  double tenant1Region1Util = 0.0;
+  for (const auto& obj : tenantToTrafficObjects["tenant1-trafficObjects"]) {
+    const auto& host = finalAssignment.at(obj);
+    if (host == "host1" || host == "host2") {
+      tenant1Region1Util += region1Value.at(obj);
+    }
+  }
+
+  // The MIN floor protects tenant1's region1 utilization level (not specific
+  // objects -- the solver may reshuffle which objects stay). The MAX cap forces
+  // it below its initial 2.18, the MIN floor holds it at >= 2.0, so it lands in
+  // [2.0, 2.1].
+  EXPECT_GE(tenant1Region1Util, 2.0 - 1e-9);
+  EXPECT_LE(tenant1Region1Util, 2.1 + 1e-9);
+}
+
+// Recovered from the pre-cleanup MIN suite (D111305363): MIN used as a GOAL
+// (isConstraint=false) end-to-end. The old test ran PER_SCOPE_ITEM, which the
+// new design rejects, so this uses PER_GROUP_AND_SCOPE_ITEM. Exact objective
+// values depend on the new penalty formula and solver iteration order, so we
+// assert the robust property: the MIN goal is active initially and the solver
+// does not worsen it (it drives utilization up toward the floors).
+TEST_P(CapacityWithGroupPresenceTest, BasicGoalMinBoundRecovered) {
+  setUpProblem();
+
+  addCapacityWithGroupPresenceSpec(
+      SpecParams{
+          .isConstraint = false,
+          .bound = CapacityWithGroupPresenceBound::MIN,
+          .intent = interface::CapacityWithGroupPresenceUsageIntent::
+              PER_GROUP_AND_SCOPE_ITEM});
+
+  const auto solution = solver->solve();
+  const auto initialObjectiveValue =
+      *solution.initialGlobalObjective()->goals()->at(0).value();
+  const auto finalObjectiveValue =
+      *solution.finalGlobalObjective()->goals()->at(0).value();
+
+  EXPECT_GT(initialObjectiveValue, 0.0);
+  EXPECT_LE(finalObjectiveValue, initialObjectiveValue);
 }
 
 TEST_P(CapacityWithGroupPresenceTest, MaxConstraintLocalSearchWithMultipliers) {

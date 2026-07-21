@@ -678,6 +678,338 @@ CO_TEST_P(
       1e-8);
 }
 
+// MIN counterpart of the per-group MAX gate: penalty = upper-bound complement,
+// gated off once the group is pinned at its upper bound. PER_GROUP only.
+CO_TEST_P(
+    CapacityWithGroupPresenceSpecBuilderTest,
+    MinBoundTypeContinuousPenaltyGatedAtUpperBound) {
+  if (GetParam() !=
+      interface::CapacityWithGroupPresenceUsageIntent::
+          PER_GROUP_AND_SCOPE_ITEM) {
+    co_return;
+  }
+
+  interface::CapacityWithGroupPresenceSpec spec;
+  spec.dimension() = "replicaCount";
+  spec.partition() = "tenantTrafficObjects";
+  spec.scope() = "region";
+  // roundUp so finalUtil can round above the smooth util -- the only regime
+  // where the upper-bound gate is non-trivial (otherwise the complement is
+  // already 0 exactly when the gate would fire).
+  spec.roundUpGroupUtilOnScopeItem() = true;
+  spec.bound() = interface::CapacityWithGroupPresenceBound::MIN;
+  spec.intent() = GetParam();
+  spec.scopeItemToLimit()->type() = interface::LimitType::ABSOLUTE;
+  spec.scopeItemToLimit()->globalLimit() = 2.0; // MIN floor
+  // MIN replaces the presence-weight floor, so there is no presence weight.
+  spec.groupToPresenceWeight()->globalLimit() = 0.0;
+
+  const auto universe = buildUniverse();
+  auto& builder = expressionBuilder();
+  const CapacityWithGroupPresenceSpecBuilder specBuilder(
+      universe, spec, /*needsContinuousExpressions=*/true);
+  auto components = co_await specBuilder.constraints(builder);
+
+  EXPECT_EQ(4, components.size());
+  // Component order is (region1,tenant1),(region1,tenant2),(region2,tenant1),
+  // (region2,tenant2); index 1 is (region1, tenant2). tenant2's region1 values
+  // are {trafficObject6: 0.115, trafficObject7: 0.88, trafficObject8: 1.0}, so
+  // its smooth penalty upper bound is 1.995 and its rounded finalUtil upper
+  // bound (the gate threshold) is ceil(1.995) = 2.
+  const auto& r1t2 = components[1];
+  EXPECT_TRUE(r1t2.additionalPenaltyExpr != nullptr);
+
+  // Below the upper bound: the initial assignment has only trafficObject8 (1.0)
+  // in region1 for tenant2, so rawUtil = 1.0, finalUtil = ceil(1.0) = 1 < ub 2.
+  // The penalty is active: (penaltyUpperBound 1.995 - smoothUtil 1.0) * norm.
+  EXPECT_NEAR(
+      (1.995 - 1.0) * kNormTenant2,
+      evaluate(r1t2, deltaFromInitial({}), /*evaluateConstraintExpr=*/false),
+      1e-8);
+
+  // Rounded-pinned with a NONZERO smooth residual: add only trafficObject6, so
+  // rawUtil = 1.115 and finalUtil = ceil(1.115) = 2 = the rounded upper bound
+  // -- no move can raise the rounded utilization further. The penalty is 0 only
+  // because the gate fires; ungated it would be (1.995 - 1.115) * norm =
+  // 0.88 * norm. That is what makes this assertion guard the gate.
+  auto pinned = deltaFromInitial({{"trafficObject6", "host2"}});
+  EXPECT_NEAR(
+      0.0, evaluate(r1t2, pinned, /*evaluateConstraintExpr=*/false), 1e-8);
+
+  // MIN constraint violation = limit - util: positive below the floor
+  // (2 - 1 = 1), satisfied once finalUtil reaches the floor (2 - 2 = 0).
+  EXPECT_NEAR(
+      1.0,
+      evaluate(r1t2, deltaFromInitial({}), /*evaluateConstraintExpr=*/true),
+      1e-8);
+  EXPECT_NEAR(
+      0.0, evaluate(r1t2, pinned, /*evaluateConstraintExpr=*/true), 1e-8);
+
+  // groupToExtraAdditivePenalty cancels in the complement (it is added to both
+  // penaltyUtil and its own upper bound), so the active penalty is unchanged
+  // and stays non-negative. A finalUtil-based complement would have gone
+  // negative here (2 - (1.0 + 5) = -4).
+  spec.groupToExtraAdditivePenalty()->type() = interface::LimitType::ABSOLUTE;
+  spec.groupToExtraAdditivePenalty()->groupLimits() = {
+      {"tenant2-trafficObjects", 5.0}};
+  const CapacityWithGroupPresenceSpecBuilder specBuilderWithExtra(
+      universe, spec, /*needsContinuousExpressions=*/true);
+  auto componentsWithExtra = co_await specBuilderWithExtra.constraints(builder);
+  EXPECT_NEAR(
+      (1.995 - 1.0) * kNormTenant2,
+      evaluate(
+          componentsWithExtra[1],
+          deltaFromInitial({}),
+          /*evaluateConstraintExpr=*/false),
+      1e-8);
+}
+
+// MIN is not separable when a single limit aggregates multiple groups, so it is
+// rejected for the PER_SCOPE_ITEM intent (which would also route to the fused
+// MAX-only node).
+CO_TEST_P(
+    CapacityWithGroupPresenceSpecBuilderTest,
+    MinBoundRejectedForPerScopeItemIntent) {
+  if (GetParam() !=
+      interface::CapacityWithGroupPresenceUsageIntent::PER_SCOPE_ITEM) {
+    co_return;
+  }
+
+  interface::CapacityWithGroupPresenceSpec spec;
+  spec.dimension() = "replicaCount";
+  spec.partition() = "tenantTrafficObjects";
+  spec.scope() = "region";
+  spec.bound() = interface::CapacityWithGroupPresenceBound::MIN;
+  spec.intent() =
+      interface::CapacityWithGroupPresenceUsageIntent::PER_SCOPE_ITEM;
+  spec.scopeItemToLimit()->type() = interface::LimitType::ABSOLUTE;
+
+  const auto universe = buildUniverse();
+  EXPECT_THROW(
+      CapacityWithGroupPresenceSpecBuilder(
+          universe, spec, /*needsContinuousExpressions=*/true),
+      std::runtime_error);
+  co_return;
+}
+
+// MIN under aggregation (partition != aggregationPartition) -- the shape the
+// old limit-based penalty (limit - sum util) churned on. Main group allTenants
+// aggregates tenant1+tenant2; per-group gating makes a pinned aggregation group
+// contribute exactly 0, so it can't perturb the aggregate.
+CO_TEST_P(
+    CapacityWithGroupPresenceSpecBuilderTest,
+    MinBoundPenaltySeparableAcrossAggregationGroups) {
+  if (GetParam() !=
+      interface::CapacityWithGroupPresenceUsageIntent::
+          PER_GROUP_AND_SCOPE_ITEM) {
+    co_return;
+  }
+
+  interface::CapacityWithGroupPresenceSpec spec;
+  spec.dimension() = "replicaCount";
+  spec.partition() = "tenantGroups"; // coarse: {allTenants}
+  spec.aggregationPartition() =
+      "tenantTrafficObjects"; // fine: {tenant1, tenant2}
+  spec.scope() = "region";
+  spec.roundUpGroupUtilOnScopeItem() = true;
+  spec.bound() = interface::CapacityWithGroupPresenceBound::MIN;
+  spec.intent() = GetParam();
+  spec.scopeItemToLimit()->type() = interface::LimitType::ABSOLUTE;
+  spec.scopeItemToLimit()->globalLimit() = 6; // floor on allTenants in a region
+  spec.groupToPresenceWeight()->globalLimit() = 0.0;
+
+  const auto universe = buildUniverse();
+  auto& builder = expressionBuilder();
+  const CapacityWithGroupPresenceSpecBuilder specBuilder(
+      universe, spec, /*needsContinuousExpressions=*/true);
+  auto components = co_await specBuilder.constraints(builder);
+
+  EXPECT_EQ(
+      2, components.size()); // (region1, allTenants), (region2, allTenants)
+  const auto& r1 = components[0];
+  EXPECT_TRUE(r1.additionalPenaltyExpr != nullptr);
+
+  // region1 smooth penalty upper bounds: tenant1 =
+  // 1.85+0.4+0.6+0.5+0.13+1.2+0.3 = 4.98; tenant2 = 0.115+0.88+1.0 = 1.995.
+  // Gate thresholds use the rounded finalUtil upper bounds (ceil): tenant1 = 5,
+  // tenant2 = 2. norm uses the main group allTenants (10 objects) ->
+  // kNormPerScopeItem.
+  //
+  // Pin tenant2 at its rounded upper bound (all three objects in region1);
+  // tenant1 stays at its initial region1 util 3.18 (finalUtil ceil = 4 < 5):
+  //   tenant1 term = (penaltyUpperBound 4.98 - smooth 3.18) = 1.8 (active)
+  //   tenant2 term = gated to 0 (finalUtil ceil = 2 = its rounded ub).
+  // Aggregate penalty = (1.8 + 0) * norm; the pinned group adds nothing.
+  auto tenant2Pinned = deltaFromInitial(
+      {{"trafficObject6", "host2"}, {"trafficObject7", "host2"}});
+  EXPECT_NEAR(
+      1.8 * kNormPerScopeItem,
+      evaluate(r1, tenant2Pinned, /*evaluateConstraintExpr=*/false),
+      1e-8);
+
+  // No churn: move trafficObject6 back out of region1 -> tenant2's smooth util
+  // changes (1.88 vs 1.995) but it stays pinned (ceil(1.88) = 2 = ub), so the
+  // aggregate penalty is unchanged. The old limit-based penalty would have
+  // moved here because trafficObject6 shifts the sum.
+  auto tenant2StillPinned = deltaFromInitial({{"trafficObject7", "host2"}});
+  EXPECT_NEAR(
+      1.8 * kNormPerScopeItem,
+      evaluate(r1, tenant2StillPinned, /*evaluateConstraintExpr=*/false),
+      1e-8);
+}
+
+CO_TEST_P(
+    CapacityWithGroupPresenceSpecBuilderTest,
+    WithMinBoundAndWithRoundUp) {
+  if (GetParam() !=
+      interface::CapacityWithGroupPresenceUsageIntent::
+          PER_GROUP_AND_SCOPE_ITEM) {
+    co_return;
+  }
+
+  interface::CapacityWithGroupPresenceSpec spec;
+  spec.dimension() = "replicaCount";
+  spec.partition() = "tenantTrafficObjects";
+  spec.scope() = "region";
+  spec.roundUpGroupUtilOnScopeItem() = true;
+  spec.bound() = interface::CapacityWithGroupPresenceBound::MIN;
+  spec.intent() = GetParam();
+  spec.scopeItemToLimit()->type() = interface::LimitType::ABSOLUTE;
+  spec.scopeItemToLimit()->globalLimit() = 6.5;
+  spec.groupToPresenceWeight()->globalLimit() = 2;
+  spec.groupToPresenceWeight()->groupLimits() = {{"tenant1-trafficObjects", 3}};
+
+  const auto universe = buildUniverse();
+  auto& builder = expressionBuilder();
+  const CapacityWithGroupPresenceSpecBuilder specBuilder(universe, spec, true);
+  auto components = co_await specBuilder.constraints(builder);
+  assertConstraintViolationBounds(components);
+  auto goalExpr = co_await specBuilder.goalCoro(builder);
+
+  EXPECT_EQ(4, components.size()); // t1r1, t2r1, t1r2, t2r2
+
+  // Smooth penalty upper bounds (no floor, no ceil): tenant1 = 4.98 in both
+  // regions; tenant2 region1 = 1.995; tenant2 region2 = 2.995. Gate thresholds
+  // use the rounded finalUtil upper bounds (incl. floor): tenant1 = 5, tenant2
+  // region1 = 2, tenant2 region2 = 3. Penalty = gated (penaltyUpperBound -
+  // rawUtil) * norm.
+  auto initial = deltaFromInitial({});
+  ExpectedInfo initialExpected;
+  initialExpected.constraintAndPenaltyValues = {
+      // tenant1-region1: finalUtil 4 (< gate ub 5); penalty (4.98 - 3.18)
+      {.constraintValue = 6.5 - 4.0,
+       .penaltyValue = (4.98 - 3.18) * kNormTenant1},
+      // tenant2-region1: floor pins finalUtil at gate ub 2 -> gated to 0 (the
+      // old ungated penalty here was (6.5 - 1.0)*norm and churned on an
+      // infeasible floor)
+      {.constraintValue = 6.5 - 2.0, .penaltyValue = 0.0},
+      // tenant1-region2: finalUtil 3 (< gate ub 5); penalty (4.98 - 1.5)
+      {.constraintValue = 6.5 - 3.0,
+       .penaltyValue = (4.98 - 1.5) * kNormTenant1},
+      // tenant2-region2: finalUtil 2 (< gate ub 3); penalty (2.995 - 1.995)
+      {.constraintValue = 6.5 - 2.0,
+       .penaltyValue = (2.995 - 1.995) * kNormTenant2},
+  };
+  initialExpected.goalValue = 15.0 +
+      ((4.98 - 3.18) + (4.98 - 1.5)) * kNormTenant1 +
+      (2.995 - 1.995) * kNormTenant2;
+  VERIFY_CONSTRAINT_COMPONENTS_AND_GOAL_VALUES(
+      initialExpected, components, goalExpr, initial);
+
+  // Move trafficObject2, trafficObject3 (tenant1) into region1: tenant1-region1
+  // finalUtil -> ceil(4.18) = 5 (= gate ub, gated), tenant1-region2 raw -> 0.5.
+  auto delta = deltaFromInitial({
+      {"trafficObject2", "host1"},
+      {"trafficObject3", "host1"},
+  });
+  ExpectedInfo deltaExpected;
+  deltaExpected.constraintAndPenaltyValues = {
+      {.constraintValue = 6.5 - 5.0, .penaltyValue = 0.0}, // t1r1 pinned at ub
+      {.constraintValue = 6.5 - 2.0, .penaltyValue = 0.0}, // t2r1 pinned at ub
+      {.constraintValue = 6.5 - 3.0,
+       .penaltyValue = (4.98 - 0.5) * kNormTenant1}, // t1r2
+      {.constraintValue = 6.5 - 2.0,
+       .penaltyValue = (2.995 - 1.995) * kNormTenant2}, // t2r2
+  };
+  deltaExpected.goalValue =
+      14.0 + (4.98 - 0.5) * kNormTenant1 + (2.995 - 1.995) * kNormTenant2;
+  VERIFY_CONSTRAINT_COMPONENTS_AND_GOAL_VALUES(
+      deltaExpected, components, goalExpr, delta);
+}
+
+CO_TEST_P(
+    CapacityWithGroupPresenceSpecBuilderTest,
+    WithMinBoundAndWithoutRoundUp) {
+  if (GetParam() !=
+      interface::CapacityWithGroupPresenceUsageIntent::
+          PER_GROUP_AND_SCOPE_ITEM) {
+    co_return;
+  }
+
+  interface::CapacityWithGroupPresenceSpec spec;
+  spec.dimension() = "replicaCount";
+  spec.partition() = "tenantTrafficObjects";
+  spec.scope() = "region";
+  spec.roundUpGroupUtilOnScopeItem() = false;
+  spec.bound() = interface::CapacityWithGroupPresenceBound::MIN;
+  spec.intent() = GetParam();
+  spec.scopeItemToLimit()->type() = interface::LimitType::ABSOLUTE;
+  spec.scopeItemToLimit()->globalLimit() = 6.5;
+  spec.scopeItemToLimit()->scopeItemLimits() = {{"region1", 4.58}};
+  spec.groupToPresenceWeight()->globalLimit() = 0.0;
+
+  const auto universe = buildUniverse();
+  auto& builder = expressionBuilder();
+  const CapacityWithGroupPresenceSpecBuilder specBuilder(universe, spec, true);
+  auto components = co_await specBuilder.constraints(builder);
+  assertConstraintViolationBounds(components);
+  auto goalExpr = co_await specBuilder.goalCoro(builder);
+
+  EXPECT_EQ(4, components.size()); // t1r1, t2r1, t1r2, t2r2
+
+  // Smooth penalty upper bounds (no ceil): tenant1 = 4.98 in both regions;
+  // tenant2 region1 = 1.995; tenant2 region2 = 2.995. Penalty = (ub - util) *
+  // norm; no group is all-in so every gate is on.
+  auto initial = deltaFromInitial({});
+  ExpectedInfo initialExpected;
+  initialExpected.constraintAndPenaltyValues = {
+      {.constraintValue = 4.58 - 3.18,
+       .penaltyValue = (4.98 - 3.18) * kNormTenant1NoRoundUp},
+      {.constraintValue = 4.58 - 1.0,
+       .penaltyValue = (1.995 - 1.0) * kNormTenant2NoRoundUp},
+      {.constraintValue = 6.5 - 1.5,
+       .penaltyValue = (4.98 - 1.5) * kNormTenant1NoRoundUp},
+      {.constraintValue = 6.5 - 1.995,
+       .penaltyValue = (2.995 - 1.995) * kNormTenant2NoRoundUp},
+  };
+  initialExpected.goalValue = 14.485 +
+      ((4.98 - 3.18) + (4.98 - 1.5)) * kNormTenant1NoRoundUp +
+      ((1.995 - 1.0) + (2.995 - 1.995)) * kNormTenant2NoRoundUp;
+  VERIFY_CONSTRAINT_COMPONENTS_AND_GOAL_VALUES(
+      initialExpected, components, goalExpr, initial);
+
+  // Move trafficObject10 (tenant1, value 0.3) into region1: tenant1-region1
+  // util rises 3.18 -> 3.48, so its penalty shrinks (util closer to its bound)
+  // and the goal improves -- the MIN penalty pulls util up.
+  auto delta = deltaFromInitial({{"trafficObject10", "host1"}});
+  ExpectedInfo deltaExpected;
+  deltaExpected.constraintAndPenaltyValues = {
+      {.constraintValue = 4.58 - 3.48,
+       .penaltyValue = (4.98 - 3.48) * kNormTenant1NoRoundUp},
+      {.constraintValue = 4.58 - 1.0,
+       .penaltyValue = (1.995 - 1.0) * kNormTenant2NoRoundUp},
+      {.constraintValue = 6.5 - 1.5,
+       .penaltyValue = (4.98 - 1.5) * kNormTenant1NoRoundUp},
+      {.constraintValue = 6.5 - 1.995,
+       .penaltyValue = (2.995 - 1.995) * kNormTenant2NoRoundUp},
+  };
+  deltaExpected.goalValue = 14.185 +
+      ((4.98 - 3.48) + (4.98 - 1.5)) * kNormTenant1NoRoundUp +
+      ((1.995 - 1.0) + (2.995 - 1.995)) * kNormTenant2NoRoundUp;
+  VERIFY_CONSTRAINT_COMPONENTS_AND_GOAL_VALUES(
+      deltaExpected, components, goalExpr, delta);
+}
+
 // Fused-path (optimized PER_SCOPE_ITEM) counterpart of the MAX gate. Here the
 // per-scope-item util is built by ObjectPartitionLookupWithMinPresence, which
 // sums each group's penalty internally, so the gate lives inside that node. An
