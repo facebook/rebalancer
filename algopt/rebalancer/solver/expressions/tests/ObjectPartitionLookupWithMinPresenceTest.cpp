@@ -132,7 +132,11 @@ class ObjectPartitionLookupWithMinPresenceTest : public ExpressionTestsBase {
       folly::F14FastMap<
           entities::ScopeItemId,
           folly::F14FastSet<entities::GroupId>> scopeItemToAlwaysPresentGroups =
-          {}) const {
+          {},
+      ObjectPartitionLookup<ObjectPartitionLookupWithMinPresencePolicy>::Bound
+          bound = ObjectPartitionLookup<
+              ObjectPartitionLookupWithMinPresencePolicy>::Bound::MAX,
+      std::optional<double> defaultGroupLimitOverride = std::nullopt) const {
     auto objectPartition = object_partition(
         partition(),
         replicaCountDimId(),
@@ -162,12 +166,11 @@ class ObjectPartitionLookupWithMinPresenceTest : public ExpressionTestsBase {
                 assignment,
                 /*groupLimitOverrides=*/{},
                 /*initialDuringObjects=*/{},
-                /*defaultGroupLimitOverride=*/std::nullopt,
+                defaultGroupLimitOverride,
                 /*penaltyTransform=*/
                 ObjectPartitionLookupPenaltyTransform::IDENTITY,
                 /*groupsAllowed=*/0,
-                ObjectPartitionLookup<
-                    ObjectPartitionLookupWithMinPresencePolicy>::Bound::MAX,
+                bound,
                 ObjectPartitionLookupWithMinPresencePolicy::Data(
                     makeLimitWrapper(universe, groupToPresenceWeight),
                     makeLimitWrapper(universe, groupToExtraAdditivePenalty),
@@ -439,6 +442,40 @@ CO_TEST_F(ObjectPartitionLookupWithMinPresenceTest, PenaltyWithNoMultipliers) {
           objectPartitionLookup, changes2, assignment, lpAssertOptions),
       1e-8);
   EXPECT_NEAR(4.825, objectPartitionLookup->value, 1e-8);
+}
+
+// A MIN-bound lookup with continuousPenalty=false must encode the MIN
+// constraint directly: each group's contribution is max(0, limit - finalUtil),
+// the amount it sits below its limit. This is the generic computePenalty path;
+// the continuous-penalty MIN behavior is added in a later diff.
+CO_TEST_F(
+    ObjectPartitionLookupWithMinPresenceTest,
+    MinBoundConstraintWithoutContinuousPenalty) {
+  co_await setUpUniverse();
+  const auto& universe = getUniverse();
+  auto assignment = getInitialAssignment(universe);
+
+  auto objectPartitionLookup = makeObjectPartitionLookupWithMinPresence(
+      universe,
+      /*aggregationScopeItemId=*/region(1),
+      /*groupIds=*/{group(1), group(2)},
+      /*multiplierList=*/{},
+      /*makeContinuousPenaltyTerm=*/false,
+      /*roundUpGroupUtilOnScopeItem=*/false,
+      /*scopeItemToAlwaysPresentGroups=*/{},
+      ObjectPartitionLookup<
+          ObjectPartitionLookupWithMinPresencePolicy>::Bound::MIN,
+      /*defaultGroupLimitOverride=*/4.0);
+
+  const LpAssertOptions lpAssertOptions = {
+      .exceptionForLpExpr =
+          "LP expressions are not yet implemented for ObjectPartitionWithMinPresence"};
+
+  // finalUtil (with presence floor): group1 = max(3.0, 1.85+0.13+1.2 = 3.18) =
+  // 3.18; group2 = max(2.0, 1.0) = 2.0. MIN deviation vs limit 4.0: group1 =
+  // 4.0-3.18 = 0.82; group2 = 4.0-2.0 = 2.0. Total = 2.82.
+  EXPECT_NEAR(
+      2.82, apply(objectPartitionLookup, assignment, lpAssertOptions), 1e-8);
 }
 
 CO_TEST_F(ObjectPartitionLookupWithMinPresenceTest, PenaltyWithMultipliers) {
