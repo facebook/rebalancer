@@ -317,7 +317,7 @@ class ExpressionBuilder {
    NOTE: this  will throw if the partitions are not properly nested.
    This function is cached
   */
-  const entities::Set<entities::GroupId>& getNestedImage(
+  std::shared_ptr<const entities::Set<entities::GroupId>> getNestedImage(
       entities::PartitionId outerPartitionId,
       entities::PartitionId innerPartitionId,
       entities::GroupId outerGroupId);
@@ -718,7 +718,7 @@ class ExpressionBuilder {
           entities::PartitionId,
           entities::PartitionId,
           entities::GroupId>,
-      entities::Set<entities::GroupId>>
+      std::shared_ptr<const entities::Set<entities::GroupId>>>
       nestedPartitionImageCache_;
 
   // Cache for getObjectPartition(dimensionId, partitionId,

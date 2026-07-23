@@ -2189,12 +2189,12 @@ TEST_F(ExpressionBuilderNestedImagePartitionTest, SamePartitions) {
   EXPECT_EQ(
       std::set<entities::GroupId>{tenant(1)},
       toSet<entities::GroupId>(
-          builder.getNestedImage(tenant(), tenant(), tenant(1))));
+          *builder.getNestedImage(tenant(), tenant(), tenant(1))));
 
   EXPECT_EQ(
       std::set<entities::GroupId>{tenant(2)},
       toSet<entities::GroupId>(
-          builder.getNestedImage(tenant(), tenant(), tenant(2))));
+          *builder.getNestedImage(tenant(), tenant(), tenant(2))));
 }
 
 TEST_F(
@@ -2206,12 +2206,12 @@ TEST_F(
   EXPECT_EQ(
       j0TenantExpected,
       toSet<entities::GroupId>(
-          builder.getNestedImage(job(), tenant(), job(0))));
+          *builder.getNestedImage(job(), tenant(), job(0))));
 
   EXPECT_EQ(
       std::set<entities::GroupId>{tenant(4)},
       toSet<entities::GroupId>(
-          builder.getNestedImage(job(), tenant(), job(1))));
+          *builder.getNestedImage(job(), tenant(), job(1))));
 
   REBALANCER_EXPECT_RUNTIME_ERROR(
       builder.getNestedImage(job(), tenantWithDuplicate(), job(0)),
@@ -2230,7 +2230,7 @@ TEST_F(ExpressionBuilderNestedImagePartitionTest, SymmetricNestingCheck) {
   EXPECT_EQ(
       std::set<entities::GroupId>{job(1)},
       toSet<entities::GroupId>(
-          builder.getNestedImage(tenantSet(), job(), tenantSet(2))));
+          *builder.getNestedImage(tenantSet(), job(), tenantSet(2))));
 }
 
 TEST_F(

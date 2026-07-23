@@ -1469,14 +1469,16 @@ std::vector<entities::ScopeItemId> ExpressionBuilder::getNestedImage(
   return std::vector(innerScopeItemView.begin(), innerScopeItemView.end());
 }
 
-const entities::Set<entities::GroupId>& ExpressionBuilder::getNestedImage(
+std::shared_ptr<const entities::Set<entities::GroupId>>
+ExpressionBuilder::getNestedImage(
     entities::PartitionId outerPartitionId,
     entities::PartitionId innerPartitionId,
     entities::GroupId outerGroupId) {
   auto key = std::make_tuple(outerPartitionId, innerPartitionId, outerGroupId);
   return nestedPartitionImageCache_.getSavedOrCompute(key, [&]() {
     if (outerPartitionId == innerPartitionId) {
-      return entities::Set<entities::GroupId>{outerGroupId};
+      return std::make_shared<entities::Set<entities::GroupId>>(
+          entities::Set<entities::GroupId>{outerGroupId});
     }
 
     const auto& outerPartition = universe_->getPartition(outerPartitionId);
@@ -1529,7 +1531,8 @@ const entities::Set<entities::GroupId>& ExpressionBuilder::getNestedImage(
       }
     }
 
-    return innerGroups;
+    return std::make_shared<entities::Set<entities::GroupId>>(
+        std::move(innerGroups));
   });
 }
 

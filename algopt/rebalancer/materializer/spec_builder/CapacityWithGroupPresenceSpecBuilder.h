@@ -64,13 +64,9 @@ class CapacityWithGroupPresenceSpecBuilder : public SpecBuilder {
     ExprPtr penaltyUtil = nullptr;
   };
 
-  // Builds one constraint per scope item. `aggregationGroupIds` is set for the
-  // optimized path (fused per-scope-item util) and nullopt for the
-  // non-optimized fallback.
+  // Builds one constraint per scope item.
   folly::coro::Task<std::vector<ConstraintInfo>> scopeItemConstraints(
-      ExpressionBuilder& expressionBuilder,
-      const std::shared_ptr<const entities::Set<entities::GroupId>>&
-          aggregationGroupIds) const;
+      ExpressionBuilder& expressionBuilder) const;
 
   folly::coro::Task<std::vector<ConstraintInfo>> groupAndScopeItemConstraints(
       ExpressionBuilder& expressionBuilder) const;

@@ -43,12 +43,13 @@ struct ExpectedInfo {
     expectedInfo, constraintComponents, localSearchGoalExpr, assignment)                                                    \
   do {                                                                                                                      \
     const auto& testIntent = apache::thrift::util::enumNameSafe(GetParam());                                                \
+    /* The optimized (continuous) path builds                                                                               \
+       ObjectPartitionLookupWithMinPresence, which has no LP form; asserted                                                 \
+       only if LP construction throws (explicit optimal-solver components                                                   \
+       build a real LP expression and are value-checked). */                                                                \
     const packer::tests::LpAssertOptions lpAssertOptions = {                                                                \
-        .exceptionForLpExpr = GetParam() ==                                                                                 \
-                interface::CapacityWithGroupPresenceUsageIntent::                                                           \
-                    PER_SCOPE_ITEM                                                                                          \
-            ? "LP expressions are not yet implemented for ObjectPartitionWithMinPresence"                                   \
-            : "",                                                                                                           \
+        .exceptionForLpExpr =                                                                                               \
+            "LP expressions are not yet implemented for ObjectPartitionWithMinPresence",                                    \
         .lpTolerances =                                                                                                     \
             algopt::lp::Tolerances{.constraint = 1e-7, .integer = 1e-6}};                                                   \
     for (const auto i :                                                                                                     \
@@ -653,6 +654,11 @@ CO_TEST_P(
   const auto& r1t2 = components[1];
   EXPECT_TRUE(r1t2.additionalPenaltyExpr != nullptr);
 
+  // Optimized path has no LP form; asserted only if LP construction throws.
+  const packer::tests::LpAssertOptions lpAssertOptions = {
+      .exceptionForLpExpr =
+          "LP expressions are not yet implemented for ObjectPartitionWithMinPresence"};
+
   // Pinned at the lower bound with NONZERO raw util: keep tenant2 present in
   // region1 but below the floor. Move its only region1 object (trafficObject8)
   // out to region2 and bring trafficObject6 (value 0.115) in. tenant2's actual
@@ -665,7 +671,11 @@ CO_TEST_P(
       {{"trafficObject8", "host3"}, {"trafficObject6", "host2"}});
   EXPECT_NEAR(
       0.0,
-      evaluate(r1t2, atLowerBound, /*evaluateConstraintExpr=*/false),
+      evaluate(
+          r1t2,
+          atLowerBound,
+          /*evaluateConstraintExpr=*/false,
+          lpAssertOptions),
       1e-8);
 
   // Above the lower bound: bring trafficObject6 into region1 (host2) so
@@ -674,7 +684,11 @@ CO_TEST_P(
   auto aboveLowerBound = deltaFromInitial({{"trafficObject6", "host2"}});
   EXPECT_NEAR(
       1.115 * kNormTenant2NoRoundUp,
-      evaluate(r1t2, aboveLowerBound, /*evaluateConstraintExpr=*/false),
+      evaluate(
+          r1t2,
+          aboveLowerBound,
+          /*evaluateConstraintExpr=*/false,
+          lpAssertOptions),
       1e-8);
 }
 
@@ -719,12 +733,21 @@ CO_TEST_P(
   const auto& r1t2 = components[1];
   EXPECT_TRUE(r1t2.additionalPenaltyExpr != nullptr);
 
+  // Optimized path has no LP form; asserted only if LP construction throws.
+  const packer::tests::LpAssertOptions lpAssertOptions = {
+      .exceptionForLpExpr =
+          "LP expressions are not yet implemented for ObjectPartitionWithMinPresence"};
+
   // Below the upper bound: the initial assignment has only trafficObject8 (1.0)
   // in region1 for tenant2, so rawUtil = 1.0, finalUtil = ceil(1.0) = 1 < ub 2.
   // The penalty is active: (penaltyUpperBound 1.995 - smoothUtil 1.0) * norm.
   EXPECT_NEAR(
       (1.995 - 1.0) * kNormTenant2,
-      evaluate(r1t2, deltaFromInitial({}), /*evaluateConstraintExpr=*/false),
+      evaluate(
+          r1t2,
+          deltaFromInitial({}),
+          /*evaluateConstraintExpr=*/false,
+          lpAssertOptions),
       1e-8);
 
   // Rounded-pinned with a NONZERO smooth residual: add only trafficObject6, so
@@ -734,16 +757,24 @@ CO_TEST_P(
   // 0.88 * norm. That is what makes this assertion guard the gate.
   auto pinned = deltaFromInitial({{"trafficObject6", "host2"}});
   EXPECT_NEAR(
-      0.0, evaluate(r1t2, pinned, /*evaluateConstraintExpr=*/false), 1e-8);
+      0.0,
+      evaluate(r1t2, pinned, /*evaluateConstraintExpr=*/false, lpAssertOptions),
+      1e-8);
 
   // MIN constraint violation = limit - util: positive below the floor
   // (2 - 1 = 1), satisfied once finalUtil reaches the floor (2 - 2 = 0).
   EXPECT_NEAR(
       1.0,
-      evaluate(r1t2, deltaFromInitial({}), /*evaluateConstraintExpr=*/true),
+      evaluate(
+          r1t2,
+          deltaFromInitial({}),
+          /*evaluateConstraintExpr=*/true,
+          lpAssertOptions),
       1e-8);
   EXPECT_NEAR(
-      0.0, evaluate(r1t2, pinned, /*evaluateConstraintExpr=*/true), 1e-8);
+      0.0,
+      evaluate(r1t2, pinned, /*evaluateConstraintExpr=*/true, lpAssertOptions),
+      1e-8);
 
   // groupToExtraAdditivePenalty cancels in the complement (it is added to both
   // penaltyUtil and its own upper bound), so the active penalty is unchanged
@@ -760,7 +791,8 @@ CO_TEST_P(
       evaluate(
           componentsWithExtra[1],
           deltaFromInitial({}),
-          /*evaluateConstraintExpr=*/false),
+          /*evaluateConstraintExpr=*/false,
+          lpAssertOptions),
       1e-8);
 }
 
@@ -863,6 +895,11 @@ CO_TEST_P(
   const auto& r1 = components[0];
   EXPECT_TRUE(r1.additionalPenaltyExpr != nullptr);
 
+  // Optimized path has no LP form; asserted only if LP construction throws.
+  const packer::tests::LpAssertOptions lpAssertOptions = {
+      .exceptionForLpExpr =
+          "LP expressions are not yet implemented for ObjectPartitionWithMinPresence"};
+
   // region1 smooth penalty upper bounds: tenant1 =
   // 1.85+0.4+0.6+0.5+0.13+1.2+0.3 = 4.98; tenant2 = 0.115+0.88+1.0 = 1.995.
   // Gate thresholds use the rounded finalUtil upper bounds (ceil): tenant1 = 5,
@@ -878,7 +915,8 @@ CO_TEST_P(
       {{"trafficObject6", "host2"}, {"trafficObject7", "host2"}});
   EXPECT_NEAR(
       1.8 * kNormPerScopeItem,
-      evaluate(r1, tenant2Pinned, /*evaluateConstraintExpr=*/false),
+      evaluate(
+          r1, tenant2Pinned, /*evaluateConstraintExpr=*/false, lpAssertOptions),
       1e-8);
 
   // No churn: move trafficObject6 back out of region1 -> tenant2's smooth util
@@ -888,7 +926,11 @@ CO_TEST_P(
   auto tenant2StillPinned = deltaFromInitial({{"trafficObject7", "host2"}});
   EXPECT_NEAR(
       1.8 * kNormPerScopeItem,
-      evaluate(r1, tenant2StillPinned, /*evaluateConstraintExpr=*/false),
+      evaluate(
+          r1,
+          tenant2StillPinned,
+          /*evaluateConstraintExpr=*/false,
+          lpAssertOptions),
       1e-8);
 }
 

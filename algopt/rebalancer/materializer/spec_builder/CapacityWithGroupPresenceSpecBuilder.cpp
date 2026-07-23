@@ -223,17 +223,8 @@ folly::coro::Task<std::vector<ConstraintInfo>>
 CapacityWithGroupPresenceSpecBuilder::constraints(
     ExpressionBuilder& expressionBuilder) const {
   switch (*spec_.intent()) {
-    case interface::CapacityWithGroupPresenceUsageIntent::PER_SCOPE_ITEM: {
-      // Aggregation groups are only needed by (and computed for) the optimized
-      // path.
-      std::shared_ptr<const entities::Set<entities::GroupId>>
-          aggregationGroupIds;
-      if (shouldUseOptimizedPath()) {
-        aggregationGroupIds = buildAggregationGroupIds(expressionBuilder);
-      }
-      co_return co_await scopeItemConstraints(
-          expressionBuilder, aggregationGroupIds);
-    }
+    case interface::CapacityWithGroupPresenceUsageIntent::PER_SCOPE_ITEM:
+      co_return co_await scopeItemConstraints(expressionBuilder);
     case interface::CapacityWithGroupPresenceUsageIntent::
         PER_GROUP_AND_SCOPE_ITEM:
       co_return co_await groupAndScopeItemConstraints(expressionBuilder);
@@ -242,10 +233,13 @@ CapacityWithGroupPresenceSpecBuilder::constraints(
 
 folly::coro::Task<std::vector<ConstraintInfo>>
 CapacityWithGroupPresenceSpecBuilder::scopeItemConstraints(
-    ExpressionBuilder& expressionBuilder,
-    const std::shared_ptr<const entities::Set<entities::GroupId>>&
-        aggregationGroupIds) const {
+    ExpressionBuilder& expressionBuilder) const {
   const auto& scopeItemIds = getRelevantMainScopeItemIds();
+  // Aggregation groups are only needed by (and computed for) the optimized
+  // path.
+  const auto aggregationGroupIds = shouldUseOptimizedPath()
+      ? buildAggregationGroupIds(expressionBuilder)
+      : nullptr;
   std::vector<ConstraintInfo> constraints;
   constraints.reserve(scopeItemIds.size());
   for (auto mainScopeItemId : scopeItemIds) {
@@ -327,6 +321,8 @@ ExprPtr CapacityWithGroupPresenceSpecBuilder::getAdditionalPenaltyExpr(
     case interface::CapacityWithGroupPresenceBound::MIN:
       return normFactor == 1.0 ? penaltyUtil : penaltyUtil * normFactor;
   }
+
+  throw std::runtime_error("Unknown bound type");
 }
 
 folly::coro::Task<std::vector<ConstraintInfo>>
@@ -336,6 +332,7 @@ CapacityWithGroupPresenceSpecBuilder::groupAndScopeItemConstraints(
   const auto& mainGroupIds = getRelevantMainGroupIds();
   const auto numGroups = mainGroupIds.size();
   const auto totalPairs = scopeItemIds.size() * numGroups;
+  const auto optimized = shouldUseOptimizedPath();
 
   std::vector<ConstraintInfo> constraints(totalPairs, ConstraintInfo{nullptr});
   co_await CoroUtils::runEachTaskBatched<size_t>(
@@ -343,13 +340,21 @@ CapacityWithGroupPresenceSpecBuilder::groupAndScopeItemConstraints(
         const auto mainScopeItemId = scopeItemIds[pairIdx / numGroups];
         const auto mainGroupId = mainGroupIds[pairIdx % numGroups];
 
-        auto groupScopeItemUtil = co_await getGroupUtilInMainScopeItem(
-            mainGroupId, mainScopeItemId, expressionBuilder);
+        // When optimized=true, aggregate using this mainGroup's aggregation
+        // groups and ObjectPartitionLookupWithMinPresence expressions
+        const auto groupScopeItemUtil = optimized
+            ? co_await getScopeItemUtil(
+                  mainScopeItemId,
+                  expressionBuilder,
+                  expressionBuilder.getNestedImage(
+                      mainPartitionId_, aggregationPartitionId_, mainGroupId))
+            : co_await getGroupUtilInMainScopeItem(
+                  mainGroupId, mainScopeItemId, expressionBuilder);
+
         auto constraintExpr = getConstraintExpr(
             mainScopeItemId, mainGroupId, groupScopeItemUtil.util);
         auto additionalPenaltyExpr = getAdditionalPenaltyExpr(
             mainGroupId, groupScopeItemUtil.penaltyUtil);
-
         constraints[pairIdx] = ConstraintInfo{
             std::move(constraintExpr), std::move(additionalPenaltyExpr)};
       });
@@ -422,7 +427,7 @@ CapacityWithGroupPresenceSpecBuilder::buildAggregationGroupIds(
   for (const auto mainGroupId : getRelevantMainGroupIds()) {
     const auto& nestedGroupIds = expressionBuilder.getNestedImage(
         mainPartitionId_, aggregationPartitionId_, mainGroupId);
-    aggregationGroupIds.insert(nestedGroupIds.begin(), nestedGroupIds.end());
+    aggregationGroupIds.insert(nestedGroupIds->begin(), nestedGroupIds->end());
   }
   return std::make_shared<const entities::Set<entities::GroupId>>(
       std::move(aggregationGroupIds));
@@ -546,7 +551,7 @@ CapacityWithGroupPresenceSpecBuilder::getGroupUtilInMainScopeItem(
 
   auto utilExprs = zeroUtilExprs();
   for (auto aggregationScopeItemId : aggregationScopeItemIds) {
-    for (auto aggregationGroupId : aggregationGroupIds) {
+    for (auto aggregationGroupId : *aggregationGroupIds) {
       addUtilExprs(
           utilExprs,
           co_await getGroupUtilContributionToScopeItemUtil(
