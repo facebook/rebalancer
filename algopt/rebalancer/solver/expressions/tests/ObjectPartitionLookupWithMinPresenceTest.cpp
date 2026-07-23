@@ -32,16 +32,16 @@ std::shared_ptr<const MinPresenceConfig> makeConfig(MinPresenceConfig config) {
 
 class ObjectPartitionLookupWithMinPresenceTest : public ExpressionTestsBase {
  protected:
-  folly::coro::Task<std::shared_ptr<const entities::Universe>> setUpUniverse() {
-    // Set up initial assignment with objects mapped to containers
-    setInitialAssignment(
-        folly::F14FastMap<std::string, std::vector<std::string>>{
-            {"container1", {"object8"}},
-            {"container2", {"object1", "object5", "object9"}},
-            {"container3", {"object2", "object6"}},
-            {"container4", {"object3"}},
-            {"container5", {"object4", "object7"}},
-            {"container6", {"object10"}}});
+  folly::coro::Task<std::shared_ptr<const entities::Universe>> setUpUniverse(
+      const folly::F14FastMap<std::string, std::vector<std::string>>&
+          initialAssignment = {
+              {"container1", {"object8"}},
+              {"container2", {"object1", "object5", "object9"}},
+              {"container3", {"object2", "object6"}},
+              {"container4", {"object3"}},
+              {"container5", {"object4", "object7"}},
+              {"container6", {"object10"}}}) {
+    setInitialAssignment(initialAssignment);
 
     // container 6 is not part of any region
     co_await addScope(
@@ -518,6 +518,39 @@ CO_TEST_F(ObjectPartitionLookupWithMinPresenceTest, MinBoundPenalty) {
       3.65,
       evaluate(objectPartitionLookup, utilDown, assignment, lpAssertOptions),
       1e-8);
+}
+
+// A MIN group with no objects in the region must still carry its penalty
+CO_TEST_F(
+    ObjectPartitionLookupWithMinPresenceTest,
+    MinBoundPenaltyMissingGroupInInitialAssignment) {
+  // group1 (object1, object5, object9) is placed outside region1, so it has no
+  // objects there.
+  const auto universe = co_await setUpUniverse(
+      {{"container1", {"object8"}},
+       {"container2", {}},
+       {"container3", {"object2", "object6", "object1", "object5", "object9"}},
+       {"container4", {"object3"}},
+       {"container5", {"object4", "object7"}},
+       {"container6", {"object10"}}});
+
+  auto objectPartitionLookup = makeObjectPartitionLookupWithMinPresence(
+      *universe,
+      /*aggregationScopeItemId=*/region(1),
+      /*groupIds=*/{group(1), group(2)},
+      /*multiplierList=*/{},
+      /*makeContinuousPenaltyTerm=*/true,
+      /*roundUpGroupUtilOnScopeItem=*/false,
+      /*scopeItemToAlwaysPresentGroups=*/{},
+      ObjectPartitionLookup<
+          ObjectPartitionLookupWithMinPresencePolicy>::Bound::MIN);
+
+  // Each group's MIN penalty is its upper bound minus its current util
+  // (upperBound - util). group1 is at util 0, so its penalty is its full upper
+  // bound 4.98 = the sum of all group1 object weights
+  // (1.85 + 0.4 + 0.6 + 0.5 + 0.13 + 1.2 + 0.3). group2 is already at its upper
+  // bound, so its penalty is 0.
+  EXPECT_NEAR(4.98, objectPartitionLookup->getInitialValue(), 1e-8);
 }
 
 // A MIN-bound lookup with continuousPenalty=false must encode the MIN

@@ -181,16 +181,29 @@ double ObjectPartitionLookup<Policy>::computeFromAssignment(
   groupObjectWeights_.clear();
   objectToAssignmentDimensionScopeItem_.clear();
 
-  // if bound is MAX: initialize groups with negative limits as they'll have
-  // non-zero penalty even when empty
-  // if bound is MIN: initialize groups with positive limits as they'll have
-  // non-zero penalty even when empty
-  auto& contributingGroupsWhenEmpty = bound_ == Bound::MAX
-      ? objectPartition_->getGroupNegativeLimits()
-      : objectPartition_->getGroupPositiveLimits();
-  for (auto& [groupId, _] : contributingGroupsWhenEmpty) {
-    groupObjectCounts_[groupId] = {};
-    groupObjectWeights_[groupId] = {};
+  // Give an empty entry to every group whose penalty is non-zero even when none
+  // of its objects are in the lookup containers
+  const auto initialize = [&](const auto& groups) {
+    for (const auto& [groupId, _] : groups) {
+      groupObjectCounts_[groupId] = {};
+      groupObjectWeights_[groupId] = {};
+    }
+  };
+
+  // MAX: groups with a negative limit; MIN: groups with a positive limit.
+  initialize(
+      bound_ == Bound::MAX ? objectPartition_->getGroupNegativeLimits()
+                           : objectPartition_->getGroupPositiveLimits());
+
+  // When using MinPresencePolicy, MIN bound and makeContinuousPenaltyTerm=true,
+  // a group's penalty is its upper bound minus its util. So, every group must
+  // be initialized.
+  if constexpr (std::is_same_v<
+                    Policy,
+                    ObjectPartitionLookupWithMinPresencePolicy>) {
+    if (getData().makeContinuousPenaltyTerm && bound_ == Bound::MIN) {
+      initialize(objectPartition_->getGroupToTotalPositiveAndNegativeWeights());
+    }
   }
 
   // if bound is MAX: initialize any groups with negative limit overrides which
