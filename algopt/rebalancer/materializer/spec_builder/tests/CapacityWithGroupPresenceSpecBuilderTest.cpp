@@ -23,6 +23,8 @@
 #include <folly/coro/GtestHelpers.h>
 #include <gtest/gtest.h>
 
+#include <algorithm>
+
 namespace entities = facebook::rebalancer::entities;
 namespace interface = facebook::rebalancer::interface;
 
@@ -39,57 +41,117 @@ struct ExpectedInfo {
   double goalValue = 0.0;
 };
 
-#define VERIFY_CONSTRAINT_COMPONENTS_AND_GOAL_VALUES(                                                                       \
-    expectedInfo, constraintComponents, localSearchGoalExpr, assignment)                                                    \
-  do {                                                                                                                      \
-    const auto& testIntent = apache::thrift::util::enumNameSafe(GetParam());                                                \
-    /* The optimized (continuous) path builds                                                                               \
-       ObjectPartitionLookupWithMinPresence, which has no LP form; asserted                                                 \
-       only if LP construction throws (explicit optimal-solver components                                                   \
-       build a real LP expression and are value-checked). */                                                                \
-    const packer::tests::LpAssertOptions lpAssertOptions = {                                                                \
-        .exceptionForLpExpr =                                                                                               \
-            "LP expressions are not yet implemented for ObjectPartitionWithMinPresence",                                    \
-        .lpTolerances =                                                                                                     \
-            algopt::lp::Tolerances{.constraint = 1e-7, .integer = 1e-6}};                                                   \
-    for (const auto i :                                                                                                     \
-         folly::irange(expectedInfo.constraintAndPenaltyValues.size())) {                                                   \
-      const auto expectedConstraintValue =                                                                                  \
-          expectedInfo.constraintAndPenaltyValues[i].constraintValue;                                                       \
-      const auto actualConstraintValue = evaluate(                                                                          \
-          constraintComponents[i].constraintExpr,                                                                           \
-          assignment,                                                                                                       \
-          lpAssertOptions);                                                                                                 \
-      EXPECT_NEAR(expectedConstraintValue, actualConstraintValue, 1e-8)                                                     \
-          << fmt::format(                                                                                                   \
-                 "mismatch between expected constraint value {} and actual {} w.r.t. component index {} | GetParam() = {}", \
-                 expectedConstraintValue,                                                                                   \
-                 actualConstraintValue,                                                                                     \
-                 i,                                                                                                         \
-                 testIntent);                                                                                               \
-                                                                                                                            \
-      if (expectedInfo.constraintAndPenaltyValues[i]                                                                        \
-              .penaltyValue.has_value()) {                                                                                  \
-        const auto expectedPenaltyValue =                                                                                   \
-            expectedInfo.constraintAndPenaltyValues[i].penaltyValue.value();                                                \
-        const auto actualPenaltyValue = evaluate(                                                                           \
-            constraintComponents[i].additionalPenaltyExpr,                                                                  \
-            assignment,                                                                                                     \
-            lpAssertOptions);                                                                                               \
-        EXPECT_NEAR(expectedPenaltyValue, actualPenaltyValue, 1e-8) << fmt::format(                                         \
-            "mismatch between expected penalty value {} and actual {} w.r.t. component index {} | GetParam() = {}",         \
-            expectedPenaltyValue,                                                                                           \
-            actualPenaltyValue,                                                                                             \
-            i,                                                                                                              \
-            testIntent);                                                                                                    \
-      } else {                                                                                                              \
-        EXPECT_TRUE(constraintComponents[i].additionalPenaltyExpr == nullptr);                                              \
-      }                                                                                                                     \
-    }                                                                                                                       \
-    EXPECT_NEAR(                                                                                                            \
-        expectedInfo.goalValue,                                                                                             \
-        evaluate(localSearchGoalExpr, assignment, lpAssertOptions),                                                         \
-        1e-8);                                                                                                              \
+// Verifies ONLY the local-search path (needsContinuousExpressions=true). Its
+// util is built by ObjectPartitionWithMinPresence, which has no lp(), so LP
+// construction is asserted to throw; constraint, penalty, and goal are
+// value-checked against `expectedInfo`. Prefer
+// VERIFY_CONSTRAINT_COMPONENTS_AND_GOAL_VALUES, which also checks the optimal
+// path.
+#define VERIFY_LOCAL_SEARCH_PATH(                                                                                              \
+    expectedInfo, spec, universe, builder, assignment)                                                                         \
+  do {                                                                                                                         \
+    const auto& testIntent = apache::thrift::util::enumNameSafe(GetParam());                                                   \
+    const auto& expectedValues = (expectedInfo).constraintAndPenaltyValues;                                                    \
+    const CapacityWithGroupPresenceSpecBuilder lsSpecBuilder(                                                                  \
+        universe, spec, /*needsContinuousExpressions=*/true);                                                                  \
+    const auto lsComponents = co_await lsSpecBuilder.constraints(builder);                                                     \
+    const auto lsGoalExpr = co_await lsSpecBuilder.goalCoro(builder);                                                          \
+                                                                                                                               \
+    assertConstraintViolationBounds(lsComponents);                                                                             \
+    CO_ASSERT_EQ(expectedValues.size(), lsComponents.size());                                                                  \
+                                                                                                                               \
+    const packer::tests::LpAssertOptions lsLpAssertOptions = {                                                                 \
+        .exceptionForLpExpr =                                                                                                  \
+            "LP expressions are not yet implemented for ObjectPartitionWithMinPresence",                                       \
+        .lpTolerances =                                                                                                        \
+            algopt::lp::Tolerances{.constraint = 1e-7, .integer = 1e-6}};                                                      \
+                                                                                                                               \
+    for (const auto i : folly::irange(lsComponents.size())) {                                                                  \
+      const auto expectedConstraintValue = expectedValues[i].constraintValue;                                                  \
+      const auto actualConstraintValue = evaluate(                                                                             \
+          lsComponents[i].constraintExpr, assignment, lsLpAssertOptions);                                                      \
+      EXPECT_NEAR(expectedConstraintValue, actualConstraintValue, 1e-8)                                                        \
+          << fmt::format(                                                                                                      \
+                 "LS mismatch between expected constraint value {} and actual {} w.r.t. component index {} | GetParam() = {}", \
+                 expectedConstraintValue,                                                                                      \
+                 actualConstraintValue,                                                                                        \
+                 i,                                                                                                            \
+                 testIntent);                                                                                                  \
+      if (expectedValues[i].penaltyValue.has_value()) {                                                                        \
+        const auto expectedPenaltyValue =                                                                                      \
+            expectedValues[i].penaltyValue.value();                                                                            \
+        const auto actualPenaltyValue = evaluate(                                                                              \
+            lsComponents[i].additionalPenaltyExpr,                                                                             \
+            assignment,                                                                                                        \
+            lsLpAssertOptions);                                                                                                \
+        EXPECT_NEAR(expectedPenaltyValue, actualPenaltyValue, 1e-8) << fmt::format(                                            \
+            "LS mismatch between expected penalty value {} and actual {} w.r.t. component index {} | GetParam() = {}",         \
+            expectedPenaltyValue,                                                                                              \
+            actualPenaltyValue,                                                                                                \
+            i,                                                                                                                 \
+            testIntent);                                                                                                       \
+      } else {                                                                                                                 \
+        EXPECT_TRUE(lsComponents[i].additionalPenaltyExpr == nullptr);                                                         \
+      }                                                                                                                        \
+    }                                                                                                                          \
+    EXPECT_NEAR(                                                                                                               \
+        (expectedInfo).goalValue,                                                                                              \
+        evaluate(lsGoalExpr, assignment, lsLpAssertOptions),                                                                   \
+        1e-8);                                                                                                                 \
+  } while (0)
+
+// Verifies ONLY the optimal-solver path (needsContinuousExpressions=false). The
+// constraintExpr matches local search; there is no penalty (nullptr) and the
+// goal is the sum of violations above zero. Prefer
+// VERIFY_CONSTRAINT_COMPONENTS_AND_GOAL_VALUES; use this directly only for
+// tests that intentionally target the optimal solver.
+#define VERIFY_OPTIMAL_SOLVER_PATH(                                                   \
+    expectedInfo, spec, universe, builder, assignment)                                \
+  do {                                                                                \
+    const CapacityWithGroupPresenceSpecBuilder optimalSolverSpecBuilder(              \
+        universe, spec, /*needsContinuousExpressions=*/false);                        \
+    const auto optimalComponents =                                                    \
+        co_await optimalSolverSpecBuilder.constraints(builder);                       \
+    const auto optimalGoalExpr =                                                      \
+        co_await optimalSolverSpecBuilder.goalCoro(builder);                          \
+    const auto& optimalExpected = (expectedInfo).constraintAndPenaltyValues;          \
+    CO_ASSERT_EQ(optimalExpected.size(), optimalComponents.size());                   \
+                                                                                      \
+    const packer::tests::LpAssertOptions optimalLpAssertOptions = {                   \
+        .lpTolerances =                                                               \
+            algopt::lp::Tolerances{.constraint = 1e-7, .integer = 1e-6}};             \
+                                                                                      \
+    double optimalExpectedGoal = 0.0;                                                 \
+    for (const auto optIdx : folly::irange(optimalComponents.size())) {               \
+      EXPECT_TRUE(optimalComponents[optIdx].additionalPenaltyExpr == nullptr)         \
+          << "optimal solver should not produce an additional penalty expr at index " \
+          << optIdx;                                                                  \
+      EXPECT_NEAR(                                                                    \
+          optimalExpected[optIdx].constraintValue,                                    \
+          evaluate(                                                                   \
+              optimalComponents[optIdx].constraintExpr,                               \
+              assignment,                                                             \
+              optimalLpAssertOptions),                                                \
+          1e-8);                                                                      \
+      optimalExpectedGoal +=                                                          \
+          std::max(0.0, optimalExpected[optIdx].constraintValue);                     \
+    }                                                                                 \
+    EXPECT_NEAR(                                                                      \
+        optimalExpectedGoal,                                                          \
+        evaluate(optimalGoalExpr, assignment, optimalLpAssertOptions),                \
+        1e-8);                                                                        \
+  } while (0)
+
+// Verifies BOTH solver paths for a spec against a single ExpectedInfo. A macro
+// so failing EXPECT_* lines report at the call site and so co_await expands
+// inside the caller's coroutine.
+#define VERIFY_CONSTRAINT_COMPONENTS_AND_GOAL_VALUES(       \
+    expectedInfo, spec, universe, builder, assignment)      \
+  do {                                                      \
+    VERIFY_LOCAL_SEARCH_PATH(                               \
+        expectedInfo, spec, universe, builder, assignment); \
+    VERIFY_OPTIMAL_SOLVER_PATH(                             \
+        expectedInfo, spec, universe, builder, assignment); \
   } while (0)
 
 } // namespace
@@ -234,35 +296,6 @@ CO_TEST_P(CapacityWithGroupPresenceSpecBuilderTest, WithRoundUpAndMaxBound) {
   auto& builder = expressionBuilder();
 
   {
-    // local search constraint and goal
-    const CapacityWithGroupPresenceSpecBuilder localSearchSpecBuilder(
-        universe, spec, true);
-    auto localSearchComponents =
-        co_await localSearchSpecBuilder.constraints(builder);
-
-    assertConstraintViolationBounds(localSearchComponents);
-
-    // local search goal
-    const CapacityWithGroupPresenceSpecBuilder localSearchGoalSpecBuilder(
-        universe, spec, true);
-    auto localSearchGoalExpr =
-        co_await localSearchGoalSpecBuilder.goalCoro(builder);
-
-    // verify expected number of components
-    switch (GetParam()) {
-      case interface::CapacityWithGroupPresenceUsageIntent::PER_SCOPE_ITEM: {
-        //  2 constraints (one per scope item)
-        EXPECT_EQ(2, localSearchComponents.size());
-        break;
-      }
-      case interface::CapacityWithGroupPresenceUsageIntent::
-          PER_GROUP_AND_SCOPE_ITEM: {
-        // / 4 constraints (one per group-scope item pair)
-        EXPECT_EQ(4, localSearchComponents.size());
-        break;
-      }
-    }
-
     // verify initial values
     const auto initial = deltaFromInitial({});
     ExpectedInfo initialExpectedInfo;
@@ -325,10 +358,7 @@ CO_TEST_P(CapacityWithGroupPresenceSpecBuilderTest, WithRoundUpAndMaxBound) {
       }
     }
     VERIFY_CONSTRAINT_COMPONENTS_AND_GOAL_VALUES(
-        initialExpectedInfo,
-        localSearchComponents,
-        localSearchGoalExpr,
-        initial);
+        initialExpectedInfo, spec, universe, builder, initial);
 
     auto delta1 = deltaFromInitial({{"trafficObject5", "host4"}});
     ExpectedInfo delta1ExpectedInfo;
@@ -389,7 +419,7 @@ CO_TEST_P(CapacityWithGroupPresenceSpecBuilderTest, WithRoundUpAndMaxBound) {
       }
     }
     VERIFY_CONSTRAINT_COMPONENTS_AND_GOAL_VALUES(
-        delta1ExpectedInfo, localSearchComponents, localSearchGoalExpr, delta1);
+        delta1ExpectedInfo, spec, universe, builder, delta1);
 
     // remove tenant1-trafficObjects from region1 and move trafficObject7 to
     // host1
@@ -457,72 +487,19 @@ CO_TEST_P(CapacityWithGroupPresenceSpecBuilderTest, WithRoundUpAndMaxBound) {
       }
     }
     VERIFY_CONSTRAINT_COMPONENTS_AND_GOAL_VALUES(
-        delta2ExpectedInfo, localSearchComponents, localSearchGoalExpr, delta2);
-  }
-
-  {
-    // for the same example with optimal solver, just check that
-    // additionalPenlty is nullptr and constraintExpr have the same values as
-    // with localSearch
-    const CapacityWithGroupPresenceSpecBuilder optimalSolverSpecBuilder(
-        universe, spec, false);
-    auto optimalSolverComponents =
-        co_await optimalSolverSpecBuilder.constraints(builder);
-
-    auto optimalSolverGoalExpr =
-        co_await optimalSolverSpecBuilder.goalCoro(builder);
-
-    auto initial = deltaFromInitial({});
-    ExpectedInfo optimalSolverExpectedInfo;
-    switch (GetParam()) {
-      case interface::CapacityWithGroupPresenceUsageIntent::PER_SCOPE_ITEM: {
-        // 2 constraints (one per scope item)
-        // For optimal solver, additionalPenaltyExpr should be nullptr
-        // but constraintExpr should have same values as localSearch
-        EXPECT_EQ(2, optimalSolverComponents.size());
-        optimalSolverExpectedInfo.constraintAndPenaltyValues = {
-            // Region1 component - same constraint value as localSearch initial
-            {.constraintValue = 4.0 + 2.0 - 2.0, .penaltyValue = std::nullopt},
-            // Region2 component - same constraint value as localSearch initial
-            {.constraintValue = 3.0 + 2.0 - 5.0, .penaltyValue = std::nullopt},
-        };
-
-        // goal value is just the sum of constraint expressions
-        optimalSolverExpectedInfo.goalValue =
-            (4.0 + 2.0 - 2.0) + (3.0 + 2.0 - 5.0);
-        break;
-      }
-      case interface::CapacityWithGroupPresenceUsageIntent::
-          PER_GROUP_AND_SCOPE_ITEM: {
-        // 4 constraints (one per group-scope item pair)
-        // For optimal solver, additionalPenaltyExpr should be nullptr
-        EXPECT_EQ(4, optimalSolverComponents.size());
-        optimalSolverExpectedInfo.constraintAndPenaltyValues = {
-            {.constraintValue = 2.0, .penaltyValue = std::nullopt},
-            {.constraintValue = 0.0, .penaltyValue = std::nullopt},
-            {.constraintValue = 2.0, .penaltyValue = std::nullopt},
-            {.constraintValue = -3.0, .penaltyValue = std::nullopt},
-        };
-
-        optimalSolverExpectedInfo.goalValue = 2.0 + 0.0 + 2.0 + 0.0;
-        break;
-      }
-    }
-    VERIFY_CONSTRAINT_COMPONENTS_AND_GOAL_VALUES(
-        optimalSolverExpectedInfo,
-        optimalSolverComponents,
-        optimalSolverGoalExpr,
-        initial);
+        delta2ExpectedInfo, spec, universe, builder, delta2);
   }
 }
 
 // always-present: for (group, scope item) pairs listed in always-present, the
-// presence floor is honored even when the group has zero actual utilization in
+// minPresence is honored even when the group has zero actual utilization in
 // that scope item (step(util) is forced to 1). Verifies the optimal-solver path
 // (getGroupUtilContributionToScopeItemUtil), with a side-by-side against a spec
 // that omits always-present. roundUp=false and all limits=0 so each constraint
 // value equals the computed utilization.
-CO_TEST_P(CapacityWithGroupPresenceSpecBuilderTest, AlwaysPresentHonorsFloor) {
+CO_TEST_P(
+    CapacityWithGroupPresenceSpecBuilderTest,
+    AlwaysPresentHonorsMinPresence) {
   auto makeSpec = [&](bool withAlwaysPresent) {
     interface::CapacityWithGroupPresenceSpec spec;
     spec.dimension() = "replicaCount";
@@ -536,7 +513,7 @@ CO_TEST_P(CapacityWithGroupPresenceSpecBuilderTest, AlwaysPresentHonorsFloor) {
     spec.groupToPresenceWeight()->groupLimits() = {
         {"tenant1-trafficObjects", 3}};
     if (withAlwaysPresent) {
-      // Force presence only for (region1, tenant2). The floor magnitude comes
+      // Force presence only for (region1, tenant2). The minPresence value comes
       // from groupToPresenceWeight (2.0).
       spec.scopeItemToAlwaysPresentGroups() = {
           {"region1", {"tenant2-trafficObjects"}}};
@@ -557,19 +534,7 @@ CO_TEST_P(CapacityWithGroupPresenceSpecBuilderTest, AlwaysPresentHonorsFloor) {
   //            tenant2 util = max(0.115+1.88+1.0, 2.0) = 2.995
   // tenant2's region1 contribution is the only value always-present changes:
   //   without always-present -> step(0) gates it to 0
-  //   with always-present    -> presence floor 2.0 is honored
-  const CapacityWithGroupPresenceSpecBuilder withoutFp(
-      universe,
-      makeSpec(/*withAlwaysPresent=*/false),
-      /*needsContinuousExpressions=*/false);
-  const CapacityWithGroupPresenceSpecBuilder withFp(
-      universe,
-      makeSpec(/*withAlwaysPresent=*/true),
-      /*needsContinuousExpressions=*/false);
-  auto componentsWithout = co_await withoutFp.constraints(builder);
-  auto componentsWith = co_await withFp.constraints(builder);
-  auto goalWithout = co_await withoutFp.goalCoro(builder);
-  auto goalWith = co_await withFp.goalCoro(builder);
+  //   with always-present    -> minPresence 2.0 is honored
 
   ExpectedInfo expectedWithout;
   ExpectedInfo expectedWith;
@@ -583,7 +548,8 @@ CO_TEST_P(CapacityWithGroupPresenceSpecBuilderTest, AlwaysPresentHonorsFloor) {
       };
       expectedWithout.goalValue = 3.18 + 5.995;
       expectedWith.constraintAndPenaltyValues = {
-          {.constraintValue = 5.18, .penaltyValue = std::nullopt}, // +2.0 floor
+          {.constraintValue = 5.18,
+           .penaltyValue = std::nullopt}, // +2.0 minPresence
           {.constraintValue = 5.995, .penaltyValue = std::nullopt},
       };
       expectedWith.goalValue = 5.18 + 5.995;
@@ -603,7 +569,7 @@ CO_TEST_P(CapacityWithGroupPresenceSpecBuilderTest, AlwaysPresentHonorsFloor) {
       expectedWith.constraintAndPenaltyValues = {
           {.constraintValue = 3.18, .penaltyValue = std::nullopt},
           {.constraintValue = 2.0,
-           .penaltyValue = std::nullopt}, // floor honored
+           .penaltyValue = std::nullopt}, // minPresence honored
           {.constraintValue = 3.0, .penaltyValue = std::nullopt},
           {.constraintValue = 2.995, .penaltyValue = std::nullopt},
       };
@@ -612,10 +578,18 @@ CO_TEST_P(CapacityWithGroupPresenceSpecBuilderTest, AlwaysPresentHonorsFloor) {
     }
   }
 
-  VERIFY_CONSTRAINT_COMPONENTS_AND_GOAL_VALUES(
-      expectedWithout, componentsWithout, goalWithout, postMove);
-  VERIFY_CONSTRAINT_COMPONENTS_AND_GOAL_VALUES(
-      expectedWith, componentsWith, goalWith, postMove);
+  VERIFY_OPTIMAL_SOLVER_PATH(
+      expectedWithout,
+      makeSpec(/*withAlwaysPresent=*/false),
+      universe,
+      builder,
+      postMove);
+  VERIFY_OPTIMAL_SOLVER_PATH(
+      expectedWith,
+      makeSpec(/*withAlwaysPresent=*/true),
+      universe,
+      builder,
+      postMove);
 }
 
 CO_TEST_P(
@@ -636,60 +610,52 @@ CO_TEST_P(
   spec.intent() = GetParam();
   spec.scopeItemToLimit()->type() = interface::LimitType::ABSOLUTE;
   spec.scopeItemToLimit()->globalLimit() = 0; // MAX limit 0 -> always broken
-  // Presence floor of 1.0 for every group; force tenant2 always-present in
-  // region1 so its contribution has a static lower bound of 1.0 there.
+  // minPresence of 1.0 for every group; tenant2 is always-present in region1,
+  // so its contribution there is at least 1.0 even with no actual usage.
   spec.groupToPresenceWeight()->globalLimit() = 1.0;
   spec.scopeItemToAlwaysPresentGroups() = {
       {"region1", {"tenant2-trafficObjects"}}};
 
   const auto universe = buildUniverse();
   auto& builder = expressionBuilder();
-  const CapacityWithGroupPresenceSpecBuilder specBuilder(
-      universe, spec, /*needsContinuousExpressions=*/true);
-  auto components = co_await specBuilder.constraints(builder);
 
-  EXPECT_EQ(4, components.size());
-  // Component order is (region1,tenant1),(region1,tenant2),(region2,tenant1),
-  // (region2,tenant2); index 1 is the always-present (region1, tenant2) group.
-  const auto& r1t2 = components[1];
-  EXPECT_TRUE(r1t2.additionalPenaltyExpr != nullptr);
+  // Components are (region1,tenant1),(region1,tenant2),
+  // (region2,tenant1),(region2,tenant2); limit is 0, so each constraint equals
+  // the group's finalUtil.
 
-  // Optimized path has no LP form; asserted only if LP construction throws.
-  const packer::tests::LpAssertOptions lpAssertOptions = {
-      .exceptionForLpExpr =
-          "LP expressions are not yet implemented for ObjectPartitionWithMinPresence"};
-
-  // Pinned at the lower bound with NONZERO raw util: keep tenant2 present in
-  // region1 but below the floor. Move its only region1 object (trafficObject8)
-  // out to region2 and bring trafficObject6 (value 0.115) in. tenant2's actual
-  // util in region1 is then 0.115 < floor, so finalUtil = max(floor 1.0, 0.115)
-  // = 1.0 = its static lower bound -- the contribution cannot be reduced
-  // further. Because the raw util (0.115) is nonzero, the penalty is 0 only
-  // because the gate fires; an ungated penalty would be 0.115 * normFactor.
-  // This is what makes the assertion actually guard the gate.
+  // Pin tenant2 at its region1 minPresence: move trafficObject8 to region2 and
+  // add trafficObject6 (usage 0.115 < minPresence 1.0). finalUtil = 1.0, so the
+  // penalty is 0 (usage can't push the contribution below minPresence) while
+  // the optimal solver still sees 1.0 in the constraint.
   auto atLowerBound = deltaFromInitial(
       {{"trafficObject8", "host3"}, {"trafficObject6", "host2"}});
-  EXPECT_NEAR(
-      0.0,
-      evaluate(
-          r1t2,
-          atLowerBound,
-          /*evaluateConstraintExpr=*/false,
-          lpAssertOptions),
-      1e-8);
+  ExpectedInfo pinned;
+  pinned.constraintAndPenaltyValues = {
+      {.constraintValue = 3.18, .penaltyValue = 3.18 * kNormTenant1NoRoundUp},
+      {.constraintValue = 1.0, .penaltyValue = 0.0}, // at minPresence
+      {.constraintValue = 1.5, .penaltyValue = 1.5 * kNormTenant1NoRoundUp},
+      {.constraintValue = 2.88, .penaltyValue = 2.88 * kNormTenant2NoRoundUp},
+  };
+  pinned.goalValue =
+      8.56 + 4.68 * kNormTenant1NoRoundUp + 2.88 * kNormTenant2NoRoundUp;
+  VERIFY_CONSTRAINT_COMPONENTS_AND_GOAL_VALUES(
+      pinned, spec, universe, builder, atLowerBound);
 
-  // Above the lower bound: bring trafficObject6 into region1 (host2) so
-  // tenant2's actual util in region1 is 1.0 + 0.115 = 1.115 > floor. finalUtil
-  // = 1.115 > lower bound, so the penalty is active (normalized raw util).
+  // Above minPresence: trafficObject8 stays and trafficObject6 joins region1,
+  // so tenant2's region1 usage is 1.0 + 0.115 = 1.115 > minPresence -> penalty
+  // active (normalized usage).
   auto aboveLowerBound = deltaFromInitial({{"trafficObject6", "host2"}});
-  EXPECT_NEAR(
-      1.115 * kNormTenant2NoRoundUp,
-      evaluate(
-          r1t2,
-          aboveLowerBound,
-          /*evaluateConstraintExpr=*/false,
-          lpAssertOptions),
-      1e-8);
+  ExpectedInfo above;
+  above.constraintAndPenaltyValues = {
+      {.constraintValue = 3.18, .penaltyValue = 3.18 * kNormTenant1NoRoundUp},
+      {.constraintValue = 1.115, .penaltyValue = 1.115 * kNormTenant2NoRoundUp},
+      {.constraintValue = 1.5, .penaltyValue = 1.5 * kNormTenant1NoRoundUp},
+      {.constraintValue = 1.88, .penaltyValue = 1.88 * kNormTenant2NoRoundUp},
+  };
+  above.goalValue =
+      7.675 + 4.68 * kNormTenant1NoRoundUp + 2.995 * kNormTenant2NoRoundUp;
+  VERIFY_CONSTRAINT_COMPONENTS_AND_GOAL_VALUES(
+      above, spec, universe, builder, aboveLowerBound);
 }
 
 // MIN counterpart of the per-group MAX gate: penalty = upper-bound complement,
@@ -720,80 +686,58 @@ CO_TEST_P(
 
   const auto universe = buildUniverse();
   auto& builder = expressionBuilder();
-  const CapacityWithGroupPresenceSpecBuilder specBuilder(
-      universe, spec, /*needsContinuousExpressions=*/true);
-  auto components = co_await specBuilder.constraints(builder);
 
-  EXPECT_EQ(4, components.size());
-  // Component order is (region1,tenant1),(region1,tenant2),(region2,tenant1),
-  // (region2,tenant2); index 1 is (region1, tenant2). tenant2's region1 values
-  // are {trafficObject6: 0.115, trafficObject7: 0.88, trafficObject8: 1.0}, so
-  // its smooth penalty upper bound is 1.995 and its rounded finalUtil upper
-  // bound (the gate threshold) is ceil(1.995) = 2.
-  const auto& r1t2 = components[1];
-  EXPECT_TRUE(r1t2.additionalPenaltyExpr != nullptr);
+  // Components are (region1,tenant1),(region1,tenant2),(region2,tenant1),
+  // (region2,tenant2); MIN so each constraint is limit - finalUtil. Per-group
+  // penalty upper bounds: tenant1 = 4.98, tenant2 region1 = 1.995, tenant2
+  // region2 = 2.995.
 
-  // Optimized path has no LP form; asserted only if LP construction throws.
-  const packer::tests::LpAssertOptions lpAssertOptions = {
-      .exceptionForLpExpr =
-          "LP expressions are not yet implemented for ObjectPartitionWithMinPresence"};
+  // Initial: nothing is at its upper bound, so every penalty is active.
+  auto initial = deltaFromInitial({});
+  ExpectedInfo initialExpected;
+  initialExpected.constraintAndPenaltyValues = {
+      {.constraintValue = 2.0 - 4.0,
+       .penaltyValue = (4.98 - 3.18) * kNormTenant1},
+      {.constraintValue = 2.0 - 1.0,
+       .penaltyValue = (1.995 - 1.0) * kNormTenant2},
+      {.constraintValue = 2.0 - 2.0,
+       .penaltyValue = (4.98 - 1.5) * kNormTenant1},
+      {.constraintValue = 2.0 - 2.0,
+       .penaltyValue = (2.995 - 1.995) * kNormTenant2},
+  };
+  initialExpected.goalValue = 1.0 + (1.995 - 1.0) * kNormTenant2;
+  VERIFY_CONSTRAINT_COMPONENTS_AND_GOAL_VALUES(
+      initialExpected, spec, universe, builder, initial);
 
-  // Below the upper bound: the initial assignment has only trafficObject8 (1.0)
-  // in region1 for tenant2, so rawUtil = 1.0, finalUtil = ceil(1.0) = 1 < ub 2.
-  // The penalty is active: (penaltyUpperBound 1.995 - smoothUtil 1.0) * norm.
-  EXPECT_NEAR(
-      (1.995 - 1.0) * kNormTenant2,
-      evaluate(
-          r1t2,
-          deltaFromInitial({}),
-          /*evaluateConstraintExpr=*/false,
-          lpAssertOptions),
-      1e-8);
-
-  // Rounded-pinned with a NONZERO smooth residual: add only trafficObject6, so
-  // rawUtil = 1.115 and finalUtil = ceil(1.115) = 2 = the rounded upper bound
-  // -- no move can raise the rounded utilization further. The penalty is 0 only
-  // because the gate fires; ungated it would be (1.995 - 1.115) * norm =
-  // 0.88 * norm. That is what makes this assertion guard the gate.
+  // Pin tenant2 at its region1 upper bound: add trafficObject6 so rawUtil =
+  // 1.115 and finalUtil = ceil(1.115) = 2 = the upper bound. Its penalty gates
+  // to 0 (ungated it would be (1.995 - 1.115) * norm); the optimal solver still
+  // sees finalUtil = 2 in the constraint.
   auto pinned = deltaFromInitial({{"trafficObject6", "host2"}});
-  EXPECT_NEAR(
-      0.0,
-      evaluate(r1t2, pinned, /*evaluateConstraintExpr=*/false, lpAssertOptions),
-      1e-8);
+  ExpectedInfo pinnedExpected;
+  pinnedExpected.constraintAndPenaltyValues = {
+      {.constraintValue = 2.0 - 4.0,
+       .penaltyValue = (4.98 - 3.18) * kNormTenant1},
+      {.constraintValue = 2.0 - 2.0,
+       .penaltyValue = 0.0}, // pinned at upper bound
+      {.constraintValue = 2.0 - 2.0,
+       .penaltyValue = (4.98 - 1.5) * kNormTenant1},
+      {.constraintValue = 2.0 - 2.0,
+       .penaltyValue = (2.995 - 1.88) * kNormTenant2},
+  };
+  pinnedExpected.goalValue = 0.0;
+  VERIFY_CONSTRAINT_COMPONENTS_AND_GOAL_VALUES(
+      pinnedExpected, spec, universe, builder, pinned);
 
-  // MIN constraint violation = limit - util: positive below the floor
-  // (2 - 1 = 1), satisfied once finalUtil reaches the floor (2 - 2 = 0).
-  EXPECT_NEAR(
-      1.0,
-      evaluate(
-          r1t2,
-          deltaFromInitial({}),
-          /*evaluateConstraintExpr=*/true,
-          lpAssertOptions),
-      1e-8);
-  EXPECT_NEAR(
-      0.0,
-      evaluate(r1t2, pinned, /*evaluateConstraintExpr=*/true, lpAssertOptions),
-      1e-8);
-
-  // groupToExtraAdditivePenalty cancels in the complement (it is added to both
-  // penaltyUtil and its own upper bound), so the active penalty is unchanged
-  // and stays non-negative. A finalUtil-based complement would have gone
-  // negative here (2 - (1.0 + 5) = -4).
+  // groupToExtraAdditivePenalty is added to both the penalty and its own upper
+  // bound, so it cancels in the complement: tenant2's penalties are unchanged
+  // and stay non-negative. The extra-penalty spec therefore reproduces
+  // initialExpected.
   spec.groupToExtraAdditivePenalty()->type() = interface::LimitType::ABSOLUTE;
   spec.groupToExtraAdditivePenalty()->groupLimits() = {
       {"tenant2-trafficObjects", 5.0}};
-  const CapacityWithGroupPresenceSpecBuilder specBuilderWithExtra(
-      universe, spec, /*needsContinuousExpressions=*/true);
-  auto componentsWithExtra = co_await specBuilderWithExtra.constraints(builder);
-  EXPECT_NEAR(
-      (1.995 - 1.0) * kNormTenant2,
-      evaluate(
-          componentsWithExtra[1],
-          deltaFromInitial({}),
-          /*evaluateConstraintExpr=*/false,
-          lpAssertOptions),
-      1e-8);
+  VERIFY_CONSTRAINT_COMPONENTS_AND_GOAL_VALUES(
+      initialExpected, spec, universe, builder, initial);
 }
 
 // Fused-path (optimized PER_SCOPE_ITEM) counterpart of the per-group MIN gate.
@@ -822,40 +766,41 @@ CO_TEST_P(CapacityWithGroupPresenceSpecBuilderTest, MinBoundFusedPerScopeItem) {
 
   const auto universe = buildUniverse();
   auto& builder = expressionBuilder();
-  const CapacityWithGroupPresenceSpecBuilder specBuilder(
-      universe, spec, /*needsContinuousExpressions=*/true);
-  auto components = co_await specBuilder.constraints(builder);
-  EXPECT_EQ(2, components.size()); // one per scope item (region1, region2)
-  const auto& region1 = components[0];
-  EXPECT_TRUE(region1.additionalPenaltyExpr != nullptr);
 
-  // ObjectPartitionLookupWithMinPresence has no LP form yet.
-  const packer::tests::LpAssertOptions lpOpts = {
-      .exceptionForLpExpr =
-          "LP expressions are not yet implemented for ObjectPartitionWithMinPresence"};
+  // 2 components: [region1, region2]. MIN so each constraint is limit -
+  // sum(finalUtil over groups). Region1 penalty upper bounds: tenant1 = 4.98,
+  // tenant2 = 1.995. Region2: tenant1 = 4.98, tenant2 = 2.995.
 
-  // Smooth penalty upper bounds in region1 (no floor, no ceil): tenant1 = 4.98,
-  // tenant2 = 1.995. Initial region1 utils: tenant1 = 3.18, tenant2 = 1.0.
-  // Both below their bounds -> aggregate penalty = (4.98 - 3.18) + (1.995
-  // - 1.0) = 1.8 + 0.995, normalized over all objects in the scope item.
+  // Initial: nothing is at its upper bound, so every group's term is active.
   auto initial = deltaFromInitial({});
-  EXPECT_NEAR(
-      (1.8 + 0.995) * kNormPerScopeItemNoRoundUp,
-      evaluate(region1, initial, /*evaluateConstraintExpr=*/false, lpOpts),
-      1e-8);
+  ExpectedInfo initialExpected;
+  initialExpected.constraintAndPenaltyValues = {
+      {.constraintValue = 6.0 - 4.18,
+       .penaltyValue = (1.8 + 0.995) * kNormPerScopeItemNoRoundUp},
+      {.constraintValue = 6.0 - 3.495,
+       .penaltyValue = (3.48 + 1.0) * kNormPerScopeItemNoRoundUp},
+  };
+  initialExpected.goalValue =
+      4.325 + (2.795 + 4.48) * kNormPerScopeItemNoRoundUp;
+  VERIFY_CONSTRAINT_COMPONENTS_AND_GOAL_VALUES(
+      initialExpected, spec, universe, builder, initial);
 
-  // Pin tenant2 at its upper bound (all three objects in region1): its term
-  // gates to 0, while tenant1 stays at 3.18. Aggregate = 1.8 only -- the pinned
-  // group adds nothing, and further shuffling of tenant2 within region1 cannot
-  // move the aggregate.
+  // Pin tenant2 at its region1 upper bound (all three objects in region1): its
+  // region1 term gates to 0. In region2 tenant2 is absent (util 0, below its
+  // upper bound), so its term is the full complement (2.995 - 0).
   auto tenant2Pinned = deltaFromInitial(
       {{"trafficObject6", "host2"}, {"trafficObject7", "host2"}});
-  EXPECT_NEAR(
-      1.8 * kNormPerScopeItemNoRoundUp,
-      evaluate(
-          region1, tenant2Pinned, /*evaluateConstraintExpr=*/false, lpOpts),
-      1e-8);
-  co_return;
+  ExpectedInfo tenant2PinnedExpected;
+  tenant2PinnedExpected.constraintAndPenaltyValues = {
+      {.constraintValue = 6.0 - 5.175,
+       .penaltyValue = 1.8 * kNormPerScopeItemNoRoundUp},
+      {.constraintValue = 6.0 - 1.5,
+       .penaltyValue = (3.48 + 2.995) * kNormPerScopeItemNoRoundUp},
+  };
+  tenant2PinnedExpected.goalValue =
+      5.325 + (1.8 + 6.475) * kNormPerScopeItemNoRoundUp;
+  VERIFY_CONSTRAINT_COMPONENTS_AND_GOAL_VALUES(
+      tenant2PinnedExpected, spec, universe, builder, tenant2Pinned);
 }
 
 // MIN under aggregation (partition != aggregationPartition) -- the shape the
@@ -886,52 +831,44 @@ CO_TEST_P(
 
   const auto universe = buildUniverse();
   auto& builder = expressionBuilder();
-  const CapacityWithGroupPresenceSpecBuilder specBuilder(
-      universe, spec, /*needsContinuousExpressions=*/true);
-  auto components = co_await specBuilder.constraints(builder);
 
-  EXPECT_EQ(
-      2, components.size()); // (region1, allTenants), (region2, allTenants)
-  const auto& r1 = components[0];
-  EXPECT_TRUE(r1.additionalPenaltyExpr != nullptr);
+  // 2 components: (region1, allTenants), (region2, allTenants). allTenants
+  // aggregates tenant1 + tenant2, each gated independently. MIN + roundUp:
+  // constraint = limit - sum(ceil(rawUtil)); per-group penalty upper bounds
+  // tenant1 = 4.98, tenant2 region1 = 1.995, tenant2 region2 = 2.995; norm uses
+  // allTenants (10 objects) -> kNormPerScopeItem.
 
-  // Optimized path has no LP form; asserted only if LP construction throws.
-  const packer::tests::LpAssertOptions lpAssertOptions = {
-      .exceptionForLpExpr =
-          "LP expressions are not yet implemented for ObjectPartitionWithMinPresence"};
-
-  // region1 smooth penalty upper bounds: tenant1 =
-  // 1.85+0.4+0.6+0.5+0.13+1.2+0.3 = 4.98; tenant2 = 0.115+0.88+1.0 = 1.995.
-  // Gate thresholds use the rounded finalUtil upper bounds (ceil): tenant1 = 5,
-  // tenant2 = 2. norm uses the main group allTenants (10 objects) ->
-  // kNormPerScopeItem.
-  //
-  // Pin tenant2 at its rounded upper bound (all three objects in region1);
-  // tenant1 stays at its initial region1 util 3.18 (finalUtil ceil = 4 < 5):
-  //   tenant1 term = (penaltyUpperBound 4.98 - smooth 3.18) = 1.8 (active)
-  //   tenant2 term = gated to 0 (finalUtil ceil = 2 = its rounded ub).
-  // Aggregate penalty = (1.8 + 0) * norm; the pinned group adds nothing.
+  // Pin tenant2 at its region1 upper bound (all three objects in region1);
+  // tenant1 stays at 3.18. tenant2's region1 term gates to 0. In region2
+  // tenant2 is absent (util 0, below its upper bound), so its term is the full
+  // complement (2.995 - 0).
   auto tenant2Pinned = deltaFromInitial(
       {{"trafficObject6", "host2"}, {"trafficObject7", "host2"}});
-  EXPECT_NEAR(
-      1.8 * kNormPerScopeItem,
-      evaluate(
-          r1, tenant2Pinned, /*evaluateConstraintExpr=*/false, lpAssertOptions),
-      1e-8);
+  ExpectedInfo tenant2PinnedExpected;
+  tenant2PinnedExpected.constraintAndPenaltyValues = {
+      {.constraintValue = 6.0 - 6.0, .penaltyValue = 1.8 * kNormPerScopeItem},
+      {.constraintValue = 6.0 - 2.0,
+       .penaltyValue = (3.48 + 2.995) * kNormPerScopeItem},
+  };
+  tenant2PinnedExpected.goalValue = 4.0 + (3.48 + 2.995) * kNormPerScopeItem;
+  VERIFY_CONSTRAINT_COMPONENTS_AND_GOAL_VALUES(
+      tenant2PinnedExpected, spec, universe, builder, tenant2Pinned);
 
-  // No churn: move trafficObject6 back out of region1 -> tenant2's smooth util
-  // changes (1.88 vs 1.995) but it stays pinned (ceil(1.88) = 2 = ub), so the
-  // aggregate penalty is unchanged. The old limit-based penalty would have
-  // moved here because trafficObject6 shifts the sum.
+  // No churn: move trafficObject6 back out of region1. tenant2's region1 smooth
+  // util changes (1.88 vs 1.995) but ceil(1.88) = 2 keeps it pinned, so
+  // region1's penalty is unchanged; region2 shifts because trafficObject6
+  // rejoins it (present -> complement 2.995 - 0.115 = 2.88).
   auto tenant2StillPinned = deltaFromInitial({{"trafficObject7", "host2"}});
-  EXPECT_NEAR(
-      1.8 * kNormPerScopeItem,
-      evaluate(
-          r1,
-          tenant2StillPinned,
-          /*evaluateConstraintExpr=*/false,
-          lpAssertOptions),
-      1e-8);
+  ExpectedInfo tenant2StillPinnedExpected;
+  tenant2StillPinnedExpected.constraintAndPenaltyValues = {
+      {.constraintValue = 6.0 - 6.0, .penaltyValue = 1.8 * kNormPerScopeItem},
+      {.constraintValue = 6.0 - 3.0,
+       .penaltyValue = (3.48 + 2.88) * kNormPerScopeItem},
+  };
+  tenant2StillPinnedExpected.goalValue =
+      3.0 + (3.48 + 2.88) * kNormPerScopeItem;
+  VERIFY_CONSTRAINT_COMPONENTS_AND_GOAL_VALUES(
+      tenant2StillPinnedExpected, spec, universe, builder, tenant2StillPinned);
 }
 
 CO_TEST_P(
@@ -957,13 +894,6 @@ CO_TEST_P(
 
   const auto universe = buildUniverse();
   auto& builder = expressionBuilder();
-  const CapacityWithGroupPresenceSpecBuilder specBuilder(universe, spec, true);
-  auto components = co_await specBuilder.constraints(builder);
-  assertConstraintViolationBounds(components);
-  auto goalExpr = co_await specBuilder.goalCoro(builder);
-
-  EXPECT_EQ(4, components.size()); // t1r1, t2r1, t1r2, t2r2
-
   // Smooth penalty upper bounds (no floor, no ceil): tenant1 = 4.98 in both
   // regions; tenant2 region1 = 1.995; tenant2 region2 = 2.995. Gate thresholds
   // use the rounded finalUtil upper bounds (incl. floor): tenant1 = 5, tenant2
@@ -990,7 +920,7 @@ CO_TEST_P(
       ((4.98 - 3.18) + (4.98 - 1.5)) * kNormTenant1 +
       (2.995 - 1.995) * kNormTenant2;
   VERIFY_CONSTRAINT_COMPONENTS_AND_GOAL_VALUES(
-      initialExpected, components, goalExpr, initial);
+      initialExpected, spec, universe, builder, initial);
 
   // Move trafficObject2, trafficObject3 (tenant1) into region1: tenant1-region1
   // finalUtil -> ceil(4.18) = 5 (= gate ub, gated), tenant1-region2 raw -> 0.5.
@@ -1010,7 +940,7 @@ CO_TEST_P(
   deltaExpected.goalValue =
       14.0 + (4.98 - 0.5) * kNormTenant1 + (2.995 - 1.995) * kNormTenant2;
   VERIFY_CONSTRAINT_COMPONENTS_AND_GOAL_VALUES(
-      deltaExpected, components, goalExpr, delta);
+      deltaExpected, spec, universe, builder, delta);
 }
 
 CO_TEST_P(
@@ -1036,13 +966,6 @@ CO_TEST_P(
 
   const auto universe = buildUniverse();
   auto& builder = expressionBuilder();
-  const CapacityWithGroupPresenceSpecBuilder specBuilder(universe, spec, true);
-  auto components = co_await specBuilder.constraints(builder);
-  assertConstraintViolationBounds(components);
-  auto goalExpr = co_await specBuilder.goalCoro(builder);
-
-  EXPECT_EQ(4, components.size()); // t1r1, t2r1, t1r2, t2r2
-
   // Smooth penalty upper bounds (no ceil): tenant1 = 4.98 in both regions;
   // tenant2 region1 = 1.995; tenant2 region2 = 2.995. Penalty = (ub - util) *
   // norm; no group is all-in so every gate is on.
@@ -1062,7 +985,7 @@ CO_TEST_P(
       ((4.98 - 3.18) + (4.98 - 1.5)) * kNormTenant1NoRoundUp +
       ((1.995 - 1.0) + (2.995 - 1.995)) * kNormTenant2NoRoundUp;
   VERIFY_CONSTRAINT_COMPONENTS_AND_GOAL_VALUES(
-      initialExpected, components, goalExpr, initial);
+      initialExpected, spec, universe, builder, initial);
 
   // Move trafficObject10 (tenant1, value 0.3) into region1: tenant1-region1
   // util rises 3.18 -> 3.48, so its penalty shrinks (util closer to its bound)
@@ -1083,14 +1006,15 @@ CO_TEST_P(
       ((4.98 - 3.48) + (4.98 - 1.5)) * kNormTenant1NoRoundUp +
       ((1.995 - 1.0) + (2.995 - 1.995)) * kNormTenant2NoRoundUp;
   VERIFY_CONSTRAINT_COMPONENTS_AND_GOAL_VALUES(
-      deltaExpected, components, goalExpr, delta);
+      deltaExpected, spec, universe, builder, delta);
 }
 
 // Fused-path (optimized PER_SCOPE_ITEM) counterpart of the MAX gate. Here the
 // per-scope-item util is built by ObjectPartitionLookupWithMinPresence, which
 // sums each group's penalty internally, so the gate lives inside that node. An
-// always-present group pinned at its floor must contribute zero continuous
-// penalty. Targets PER_SCOPE_ITEM (the only intent that uses the fused node).
+// always-present group pinned at its minPresence must contribute zero
+// continuous penalty. Targets PER_SCOPE_ITEM (the only intent that uses the
+// fused node).
 CO_TEST_P(
     CapacityWithGroupPresenceSpecBuilderTest,
     ContinuousPenaltyGatedAtLowerBoundMaxBoundFusedPerScopeItem) {
@@ -1108,28 +1032,20 @@ CO_TEST_P(
   spec.intent() = GetParam();
   spec.scopeItemToLimit()->type() = interface::LimitType::ABSOLUTE;
   spec.scopeItemToLimit()->globalLimit() = 0; // MAX limit 0 -> always broken
-  spec.groupToPresenceWeight()->globalLimit() = 1.0; // floor 1.0
+  spec.groupToPresenceWeight()->globalLimit() = 1.0; // minPresence 1.0
   spec.scopeItemToAlwaysPresentGroups() = {
       {"region1", {"tenant2-trafficObjects"}}};
 
   const auto universe = buildUniverse();
   auto& builder = expressionBuilder();
-  const CapacityWithGroupPresenceSpecBuilder specBuilder(
-      universe, spec, /*needsContinuousExpressions=*/true);
-  auto components = co_await specBuilder.constraints(builder);
-  EXPECT_EQ(2, components.size()); // one per scope item (region1, region2)
-  const auto& region1 = components[0];
-  EXPECT_TRUE(region1.additionalPenaltyExpr != nullptr);
 
-  // ObjectPartitionLookupWithMinPresence has no LP form yet.
-  const packer::tests::LpAssertOptions lpOpts = {
-      .exceptionForLpExpr =
-          "LP expressions are not yet implemented for ObjectPartitionWithMinPresence"};
+  // 2 components: [region1, region2]; limit is 0, so each constraint equals the
+  // scope item's summed finalUtil.
 
-  // region1 holds only tenant2, pinned below its floor: move tenant1 out of
-  // region1 and leave tenant2 with just trafficObject6 (0.115 < floor 1.0)
-  // there. finalUtil = max(1.0, 0.115) = 1.0 = its lower bound, so tenant2's
-  // fused penalty is gated to 0 -> region1's continuous penalty is 0.
+  // region1 holds only tenant2, pinned at its minPresence: move tenant1 out and
+  // leave tenant2 with just trafficObject6 (usage 0.115 < minPresence 1.0).
+  // finalUtil = 1.0, so tenant2's penalty is 0 and region1's continuous penalty
+  // is 0; the optimal solver still sees 1.0.
   auto pinned = deltaFromInitial({
       {"trafficObject1", "host3"},
       {"trafficObject5", "host3"},
@@ -1137,24 +1053,34 @@ CO_TEST_P(
       {"trafficObject8", "host3"},
       {"trafficObject6", "host2"},
   });
-  EXPECT_NEAR(
-      0.0,
-      evaluate(region1, pinned, /*evaluateConstraintExpr=*/false, lpOpts),
-      1e-8);
+  ExpectedInfo pinnedInfo;
+  pinnedInfo.constraintAndPenaltyValues = {
+      {.constraintValue = 1.0, .penaltyValue = 0.0}, // at minPresence
+      {.constraintValue = 7.56,
+       .penaltyValue = 7.56 * kNormPerScopeItemNoRoundUp},
+  };
+  pinnedInfo.goalValue = 8.56 + 7.56 * kNormPerScopeItemNoRoundUp;
+  VERIFY_CONSTRAINT_COMPONENTS_AND_GOAL_VALUES(
+      pinnedInfo, spec, universe, builder, pinned);
 
-  // Above the floor: keep trafficObject8 (1.0) in region1 too, so tenant2's
-  // util is 1.0 + 0.115 = 1.115 > floor -> not pinned -> penalty active
-  // (normalized raw util).
-  auto aboveFloor = deltaFromInitial({
+  // Above minPresence: keep trafficObject8 (1.0) in region1, so tenant2's
+  // region1 usage is 1.0 + 0.115 = 1.115 > minPresence -> penalty active.
+  auto aboveMinPresence = deltaFromInitial({
       {"trafficObject1", "host3"},
       {"trafficObject5", "host3"},
       {"trafficObject9", "host3"},
       {"trafficObject6", "host2"},
   });
-  EXPECT_NEAR(
-      1.115 * kNormPerScopeItemNoRoundUp,
-      evaluate(region1, aboveFloor, /*evaluateConstraintExpr=*/false, lpOpts),
-      1e-8);
+  ExpectedInfo aboveInfo;
+  aboveInfo.constraintAndPenaltyValues = {
+      {.constraintValue = 1.115,
+       .penaltyValue = 1.115 * kNormPerScopeItemNoRoundUp},
+      {.constraintValue = 6.56,
+       .penaltyValue = 6.56 * kNormPerScopeItemNoRoundUp},
+  };
+  aboveInfo.goalValue = 7.675 + 7.675 * kNormPerScopeItemNoRoundUp;
+  VERIFY_CONSTRAINT_COMPONENTS_AND_GOAL_VALUES(
+      aboveInfo, spec, universe, builder, aboveMinPresence);
 }
 
 CO_TEST_P(
@@ -1196,35 +1122,6 @@ CO_TEST_P(
   auto& builder = expressionBuilder();
 
   {
-    // local search constraint
-    const CapacityWithGroupPresenceSpecBuilder localSearchSpecBuilder(
-        universe, spec, true);
-    auto localSearchComponents =
-        co_await localSearchSpecBuilder.constraints(builder);
-
-    assertConstraintViolationBounds(localSearchComponents);
-
-    // local search goal
-    const CapacityWithGroupPresenceSpecBuilder localSearchGoalSpecBuilder(
-        universe, spec, true);
-    auto localSearchGoalExpr =
-        co_await localSearchGoalSpecBuilder.goalCoro(builder);
-
-    // verify expected number of components
-    switch (GetParam()) {
-      case interface::CapacityWithGroupPresenceUsageIntent::PER_SCOPE_ITEM: {
-        // 2 constraints (one per scope item)
-        EXPECT_EQ(2, localSearchComponents.size());
-        break;
-      }
-      case interface::CapacityWithGroupPresenceUsageIntent::
-          PER_GROUP_AND_SCOPE_ITEM: {
-        // 4 constraints (one per group-scope item pair)
-        EXPECT_EQ(4, localSearchComponents.size());
-        break;
-      }
-    }
-
     auto initial = deltaFromInitial({});
     ExpectedInfo initialExpectedInfo;
     switch (GetParam()) {
@@ -1317,10 +1214,7 @@ CO_TEST_P(
       }
     }
     VERIFY_CONSTRAINT_COMPONENTS_AND_GOAL_VALUES(
-        initialExpectedInfo,
-        localSearchComponents,
-        localSearchGoalExpr,
-        initial);
+        initialExpectedInfo, spec, universe, builder, initial);
   }
 }
 
@@ -1380,35 +1274,6 @@ CO_TEST_P(
   auto& builder = expressionBuilder();
 
   {
-    // local search constraint and goal
-    const CapacityWithGroupPresenceSpecBuilder localSearchSpecBuilder(
-        universe, spec, true);
-    auto localSearchComponents =
-        co_await localSearchSpecBuilder.constraints(builder);
-
-    assertConstraintViolationBounds(localSearchComponents);
-
-    // local search goal
-    const CapacityWithGroupPresenceSpecBuilder localSearchGoalSpecBuilder(
-        universe, spec, true);
-    auto localSearchGoalExpr =
-        co_await localSearchGoalSpecBuilder.goalCoro(builder);
-
-    // verify expected number of components
-    switch (GetParam()) {
-      case interface::CapacityWithGroupPresenceUsageIntent::PER_SCOPE_ITEM: {
-        // 2 constraints (one per scope item)
-        EXPECT_EQ(2, localSearchComponents.size());
-        break;
-      }
-      case interface::CapacityWithGroupPresenceUsageIntent::
-          PER_GROUP_AND_SCOPE_ITEM: {
-        // 4 constraints (one per group-scope item pair)
-        EXPECT_EQ(4, localSearchComponents.size());
-        break;
-      }
-    }
-
     // verify initial values
     const auto initial = deltaFromInitial({});
     ExpectedInfo initialExpectedInfo;
@@ -1491,10 +1356,7 @@ CO_TEST_P(
       }
     }
     VERIFY_CONSTRAINT_COMPONENTS_AND_GOAL_VALUES(
-        initialExpectedInfo,
-        localSearchComponents,
-        localSearchGoalExpr,
-        initial);
+        initialExpectedInfo, spec, universe, builder, initial);
   }
 }
 
@@ -1539,35 +1401,6 @@ CO_TEST_P(
   auto& builder = expressionBuilder();
 
   {
-    // local search constraint
-    const CapacityWithGroupPresenceSpecBuilder localSearchSpecBuilder(
-        universe, spec, true);
-    auto localSearchComponents =
-        co_await localSearchSpecBuilder.constraints(builder);
-
-    assertConstraintViolationBounds(localSearchComponents);
-
-    // local search goal
-    const CapacityWithGroupPresenceSpecBuilder localSearchGoalSpecBuilder(
-        universe, spec, true);
-    auto localSearchGoalExpr =
-        co_await localSearchGoalSpecBuilder.goalCoro(builder);
-
-    // verify expected number of components
-    switch (GetParam()) {
-      case interface::CapacityWithGroupPresenceUsageIntent::PER_SCOPE_ITEM: {
-        // 2 constraints (one per scope item)
-        EXPECT_EQ(2, localSearchComponents.size());
-        break;
-      }
-      case interface::CapacityWithGroupPresenceUsageIntent::
-          PER_GROUP_AND_SCOPE_ITEM: {
-        // 4 constraints (one per group-scope item pair)
-        EXPECT_EQ(4, localSearchComponents.size());
-        break;
-      }
-    }
-
     auto initial = deltaFromInitial({});
     ExpectedInfo initialExpectedInfo;
     switch (GetParam()) {
@@ -1719,10 +1552,7 @@ CO_TEST_P(
       }
     }
     VERIFY_CONSTRAINT_COMPONENTS_AND_GOAL_VALUES(
-        initialExpectedInfo,
-        localSearchComponents,
-        localSearchGoalExpr,
-        initial);
+        initialExpectedInfo, spec, universe, builder, initial);
   }
 }
 
@@ -1752,32 +1582,6 @@ CO_TEST_P(CapacityWithGroupPresenceSpecBuilderTest, WithoutRoundUp) {
 
   const auto universe = buildUniverse();
   auto& builder = expressionBuilder();
-
-  const CapacityWithGroupPresenceSpecBuilder specBuilder(universe, spec, true);
-  auto components = co_await specBuilder.constraints(builder);
-
-  assertConstraintViolationBounds(components);
-
-  // local search goal
-  const CapacityWithGroupPresenceSpecBuilder localSearchGoalSpecBuilder(
-      universe, spec, true);
-  auto localSearchGoalExpr =
-      co_await localSearchGoalSpecBuilder.goalCoro(builder);
-
-  // verify expected number of components
-  switch (GetParam()) {
-    case interface::CapacityWithGroupPresenceUsageIntent::PER_SCOPE_ITEM: {
-      // 2 constraints (one per scope item)
-      EXPECT_EQ(2, components.size());
-      break;
-    }
-    case interface::CapacityWithGroupPresenceUsageIntent::
-        PER_GROUP_AND_SCOPE_ITEM: {
-      // 4 constraints (one per group-scope item pair)
-      EXPECT_EQ(4, components.size());
-      break;
-    }
-  }
 
   // for explanations on the how the values were computed, see test case
   // WithRoundUpAndMaxBound
@@ -1826,7 +1630,7 @@ CO_TEST_P(CapacityWithGroupPresenceSpecBuilderTest, WithoutRoundUp) {
       }
     }
     VERIFY_CONSTRAINT_COMPONENTS_AND_GOAL_VALUES(
-        initialExpectedInfo, components, localSearchGoalExpr, initial);
+        initialExpectedInfo, spec, universe, builder, initial);
   }
 
   {
@@ -1871,7 +1675,7 @@ CO_TEST_P(CapacityWithGroupPresenceSpecBuilderTest, WithoutRoundUp) {
       }
     }
     VERIFY_CONSTRAINT_COMPONENTS_AND_GOAL_VALUES(
-        deltaExpectedInfo, components, localSearchGoalExpr, delta);
+        deltaExpectedInfo, spec, universe, builder, delta);
   }
 
   {
@@ -1923,7 +1727,7 @@ CO_TEST_P(CapacityWithGroupPresenceSpecBuilderTest, WithoutRoundUp) {
       }
     }
     VERIFY_CONSTRAINT_COMPONENTS_AND_GOAL_VALUES(
-        deltaExpectedInfo, components, localSearchGoalExpr, delta);
+        deltaExpectedInfo, spec, universe, builder, delta);
   }
 }
 
@@ -1972,32 +1776,6 @@ CO_TEST_P(
 
   const auto universe = buildUniverse();
   auto& builder = expressionBuilder();
-
-  const CapacityWithGroupPresenceSpecBuilder specBuilder(universe, spec, true);
-  auto components = co_await specBuilder.constraints(builder);
-
-  assertConstraintViolationBounds(components);
-
-  // local search goal
-  const CapacityWithGroupPresenceSpecBuilder localSearchGoalSpecBuilder(
-      universe, spec, true);
-  auto localSearchGoalExpr =
-      co_await localSearchGoalSpecBuilder.goalCoro(builder);
-
-  // verify expected number of components
-  switch (GetParam()) {
-    case interface::CapacityWithGroupPresenceUsageIntent::PER_SCOPE_ITEM: {
-      // 2 constraints (one per scope item)
-      EXPECT_EQ(2, components.size());
-      break;
-    }
-    case interface::CapacityWithGroupPresenceUsageIntent::
-        PER_GROUP_AND_SCOPE_ITEM: {
-      // 4 constraints (one per group-scope item pair)
-      EXPECT_EQ(4, components.size());
-      break;
-    }
-  }
 
   // for explanations on the how the values were computed, see test case
   // WithoutRoundUp; the only difference is that we have multipliers
@@ -2082,7 +1860,7 @@ CO_TEST_P(
       }
     }
     VERIFY_CONSTRAINT_COMPONENTS_AND_GOAL_VALUES(
-        initialExpectedInfo, components, localSearchGoalExpr, initial);
+        initialExpectedInfo, spec, universe, builder, initial);
   }
 }
 
@@ -2138,23 +1916,6 @@ CO_TEST_P(
   }
 
   {
-    // local search constraint
-    const CapacityWithGroupPresenceSpecBuilder localSearchSpecBuilder(
-        universe, spec, true);
-    auto localSearchComponents =
-        co_await localSearchSpecBuilder.constraints(builder);
-
-    // local search goal
-    const CapacityWithGroupPresenceSpecBuilder localSearchGoalSpecBuilder(
-        universe, spec, true);
-    auto localSearchGoalExpr =
-        co_await localSearchGoalSpecBuilder.goalCoro(builder);
-
-    // 2 constraints (one per mainPartition group- main scope item item pair)
-    // mainPartition has 1 group: allTenants-trafficObjects
-    // scope has 2 items: region1, region2
-    EXPECT_EQ(2, localSearchComponents.size());
-
     auto initial = deltaFromInitial({});
     ExpectedInfo initialExpectedInfo;
 
@@ -2204,10 +1965,7 @@ CO_TEST_P(
         24.0 + (3.18 * 1.1 * 4 + 1.0 * 1.1 * 8) * kNormPerScopeItem;
 
     VERIFY_CONSTRAINT_COMPONENTS_AND_GOAL_VALUES(
-        initialExpectedInfo,
-        localSearchComponents,
-        localSearchGoalExpr,
-        initial);
+        initialExpectedInfo, spec, universe, builder, initial);
   }
 }
 
