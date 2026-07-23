@@ -444,10 +444,72 @@ CO_TEST_F(ObjectPartitionLookupWithMinPresenceTest, PenaltyWithNoMultipliers) {
   EXPECT_NEAR(4.825, objectPartitionLookup->value, 1e-8);
 }
 
+// MIN continuous penalty: each group's term is the complement of its smooth
+// penalty vs the penalty's own upper bound (the value at the group's max
+// weight), gated to 0 once finalUtil reaches its upper bound. The penalty
+// therefore shrinks as a group's utilization rises toward its bound -- the
+// mirror image of the MAX penalty, which grows with utilization.
+CO_TEST_F(ObjectPartitionLookupWithMinPresenceTest, MinBoundPenalty) {
+  co_await setUpUniverse();
+  const auto& universe = getUniverse();
+  auto assignment = getInitialAssignment(universe);
+
+  auto objectPartitionLookup = makeObjectPartitionLookupWithMinPresence(
+      universe,
+      /*aggregationScopeItemId=*/region(1),
+      /*groupIds=*/{group(1), group(2)},
+      /*multiplierList=*/{},
+      /*makeContinuousPenaltyTerm=*/true,
+      /*roundUpGroupUtilOnScopeItem=*/false,
+      /*scopeItemToAlwaysPresentGroups=*/{},
+      ObjectPartitionLookup<
+          ObjectPartitionLookupWithMinPresencePolicy>::Bound::MIN);
+
+  const LpAssertOptions lpAssertOptions = {
+      .exceptionForLpExpr =
+          "LP expressions are not yet implemented for ObjectPartitionWithMinPresence"};
+
+  // Per-group smooth penalty upper bounds (value at max weight): group1 =
+  // 1.85+0.4+0.6+0.5+0.13+1.2+0.3 = 4.98; group2 = 0.115+0.88+1.0 + extra 1.5 =
+  // 3.495. Rounded-up-free finalUtil upper bounds (incl. presence floor):
+  // group1 = 4.98, group2 = max(2.0 floor, 1.995) = 2.0.
+  //
+  // Initial region1: group1 = 1.85+0.13+1.2 = 3.18 (< ub 4.98, gate on) ->
+  // complement 4.98-3.18 = 1.8; group2 = object8 = 1.0, but its floor pins
+  // finalUtil at 2.0 = its upper bound (gate off) -> 0. Total = 1.8.
+  EXPECT_NEAR(
+      1.8, apply(objectPartitionLookup, assignment, lpAssertOptions), 1e-8);
+  EXPECT_NEAR(1.8, objectPartitionLookup->value, 1e-8);
+
+  // getBounds is flipped vs MAX: the penalty is largest at min weight (0, all
+  // objects out) and smallest at max weight. Lower = 0 (both groups gated off /
+  // fully present); upper = group1 (4.98-0) + group2 (3.495-1.5) = 6.975.
+  Context context;
+  const auto bounds = objectPartitionLookup->lowerAndUpperBounds(context);
+  EXPECT_NEAR(0.0, bounds.lower_bound, 1e-8);
+  EXPECT_NEAR(6.975, bounds.upper_bound, 1e-8);
+
+  // Move object2 (group1, 0.4) into region1: group1 util rises to 3.58, so its
+  // penalty shrinks toward the bound -> 4.98-3.58 = 1.4.
+  const auto utilUp = ObjectToNewContainer{{object(2), container(1)}};
+  EXPECT_NEAR(
+      1.4,
+      evaluate(objectPartitionLookup, utilUp, assignment, lpAssertOptions),
+      1e-8);
+
+  // Move object1 (group1, 1.85) out of region1: group1 util falls to 1.33, so
+  // its penalty grows away from the bound -> 4.98-1.33 = 3.65.
+  const auto utilDown = ObjectToNewContainer{{object(1), container(3)}};
+  EXPECT_NEAR(
+      3.65,
+      evaluate(objectPartitionLookup, utilDown, assignment, lpAssertOptions),
+      1e-8);
+}
+
 // A MIN-bound lookup with continuousPenalty=false must encode the MIN
 // constraint directly: each group's contribution is max(0, limit - finalUtil),
-// the amount it sits below its limit. This is the generic computePenalty path;
-// the continuous-penalty MIN behavior is added in a later diff.
+// the amount it sits below its limit. Guards against the continuous-penalty MIN
+// branch hijacking the non-continuous case.
 CO_TEST_F(
     ObjectPartitionLookupWithMinPresenceTest,
     MinBoundConstraintWithoutContinuousPenalty) {

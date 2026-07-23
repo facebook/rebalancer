@@ -38,10 +38,6 @@ gated to 0 once the group can no longer move in the constraint-fixing direction
 aggregationPartition). MAX: per-group utilization, gated at the lower bound.
 MIN: per-group upper-bound complement (upperBound - utilization), gated at the
 upper bound.
-
-MIN is restricted to PER_GROUP_AND_SCOPE_ITEM; the PER_SCOPE_ITEM local-search
-path uses the fused ObjectPartitionLookupWithMinPresence node, which is
-MAX-only.
 */
 class CapacityWithGroupPresenceSpecBuilder : public SpecBuilder {
  public:

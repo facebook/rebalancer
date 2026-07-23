@@ -175,13 +175,6 @@ CapacityWithGroupPresenceSpecBuilder::CapacityWithGroupPresenceSpecBuilder(
             universe_->getEntityName(aggregationPartitionId_)));
   }
 
-  if (spec_.bound() == interface::CapacityWithGroupPresenceBound::MIN &&
-      spec_.intent() !=
-          interface::CapacityWithGroupPresenceUsageIntent::
-              PER_GROUP_AND_SCOPE_ITEM) {
-    throwMsg("MIN bound is only supported for PER_GROUP_AND_SCOPE_ITEM intent");
-  }
-
   if (!spec_.groupUtilMultipliers()->empty()) {
     for (const auto& multiplier : *spec_.groupUtilMultipliers()) {
       auto limitWrapper = LimitWrapper(
@@ -440,8 +433,15 @@ CapacityWithGroupPresenceSpecBuilder::createGroupUtilExpr(
         /*penaltyTransform=*/
         ObjectPartitionLookupPenaltyTransform::IDENTITY,
         /*groupsAllowed=*/0,
-        ObjectPartitionLookup<
-            ObjectPartitionLookupWithMinPresencePolicy>::Bound::MAX,
+        // The util node is always MAX (it computes the raw scope-item util,
+        // direction-agnostic). Only the continuous-penalty node carries the
+        // spec's bound for different gating behaviors.
+        makeContinuousPenaltyTerm &&
+                *spec_.bound() == interface::CapacityWithGroupPresenceBound::MIN
+            ? ObjectPartitionLookup<
+                  ObjectPartitionLookupWithMinPresencePolicy>::Bound::MIN
+            : ObjectPartitionLookup<
+                  ObjectPartitionLookupWithMinPresencePolicy>::Bound::MAX,
         ObjectPartitionLookupWithMinPresencePolicy::Data(
             groupToPresenceWeight_,
             groupToExtraAdditivePenalty_,

@@ -449,6 +449,64 @@ TEST_P(CapacityWithGroupPresenceTest, BasicGoalMinBoundRecovered) {
   EXPECT_LE(finalObjectiveValue, initialObjectiveValue);
 }
 
+// PER_SCOPE_ITEM MIN: the floor applies to a scope item's aggregate utilization
+// across all groups, so under local search this exercises the fused
+// ObjectPartitionLookupWithMinPresence node. region1's aggregate util starts at
+// 3.18 (tenant1 2.18 + tenant2 1.0); a hard aggregate floor of 5.0 forces the
+// solver to pull more objects into region1. Both solvers satisfy the floor.
+TEST_P(
+    CapacityWithGroupPresenceTest,
+    MinBoundPerScopeItemEnforcesAggregateFloor) {
+  setUpProblem();
+
+  Limit noPresence;
+  noPresence.type() = interface::LimitType::ABSOLUTE;
+  noPresence.globalLimit() = 0;
+
+  // Aggregate floor of 5 in region1; no floor elsewhere.
+  Limit capacityLimits;
+  capacityLimits.type() = interface::LimitType::ABSOLUTE;
+  capacityLimits.globalLimit() = 0;
+  capacityLimits.scopeItemLimits() = {{"region1", 5}};
+
+  addCapacityWithGroupPresenceSpec(
+      SpecParams{
+          .isConstraint = true,
+          .bound = CapacityWithGroupPresenceBound::MIN,
+          .groupToPresenceWeight = std::move(noPresence),
+          .intent =
+              interface::CapacityWithGroupPresenceUsageIntent::PER_SCOPE_ITEM,
+          .capacityLimits = std::move(capacityLimits)});
+
+  const auto solution = solver->solve();
+  const auto initialObjectiveValue =
+      *solution.initialGlobalObjective()->goals()->at(0).value();
+  const auto finalObjectiveValue =
+      *solution.finalGlobalObjective()->goals()->at(0).value();
+
+  // region1 aggregate util (per-group ceil): tenant1 = ceil(0.85+0.13+1.2 =
+  // 2.18) = 3; tenant2 = ceil(1.0) = 1; aggregate = 4, below floor 5 ->
+  // violation 1. Under local search the normalized MIN continuous penalty is
+  // also added: the sum of per-group upper-bound complements (smooth,
+  // un-ceiled) = tenant1 (3.98 - 2.18 = 1.8) + tenant2 (1.995 - 1.0 = 0.995) =
+  // 2.795. Optimal has no continuous penalty.
+  switch (getSolverAlgoType()) {
+    case LOCALSEARCH:
+      EXPECT_NEAR(
+          10000 + 100 * (1 + 2.795 * kNormPerScopeItem),
+          initialObjectiveValue,
+          1e-8);
+      break;
+    case OPTIMAL:
+      EXPECT_NEAR(10100.0, initialObjectiveValue, 1e-8);
+      break;
+  }
+
+  // The floor is satisfiable (max aggregate = ceil(3.98) + ceil(1.995) = 6), so
+  // the solver drives the violation -- and the objective -- to 0.
+  EXPECT_NEAR(0.0, finalObjectiveValue, 1e-8);
+}
+
 TEST_P(CapacityWithGroupPresenceTest, MaxConstraintLocalSearchWithMultipliers) {
   setUpProblem();
 

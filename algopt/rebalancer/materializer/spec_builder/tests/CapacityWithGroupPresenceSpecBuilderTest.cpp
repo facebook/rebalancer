@@ -764,12 +764,12 @@ CO_TEST_P(
       1e-8);
 }
 
-// MIN is not separable when a single limit aggregates multiple groups, so it is
-// rejected for the PER_SCOPE_ITEM intent (which would also route to the fused
-// MAX-only node).
-CO_TEST_P(
-    CapacityWithGroupPresenceSpecBuilderTest,
-    MinBoundRejectedForPerScopeItemIntent) {
+// Fused-path (optimized PER_SCOPE_ITEM) counterpart of the per-group MIN gate.
+// The per-scope-item penalty is built by ObjectPartitionLookupWithMinPresence,
+// which sums each group's upper-bound complement internally and gates each one
+// independently -- so a group pinned at its upper bound contributes zero and
+// cannot churn the aggregate.
+CO_TEST_P(CapacityWithGroupPresenceSpecBuilderTest, MinBoundFusedPerScopeItem) {
   if (GetParam() !=
       interface::CapacityWithGroupPresenceUsageIntent::PER_SCOPE_ITEM) {
     co_return;
@@ -777,18 +777,52 @@ CO_TEST_P(
 
   interface::CapacityWithGroupPresenceSpec spec;
   spec.dimension() = "replicaCount";
-  spec.partition() = "tenantTrafficObjects";
+  spec.partition() = "tenantTrafficObjects"; // {tenant1, tenant2}
   spec.scope() = "region";
+  spec.roundUpGroupUtilOnScopeItem() = false;
   spec.bound() = interface::CapacityWithGroupPresenceBound::MIN;
   spec.intent() =
       interface::CapacityWithGroupPresenceUsageIntent::PER_SCOPE_ITEM;
   spec.scopeItemToLimit()->type() = interface::LimitType::ABSOLUTE;
+  spec.scopeItemToLimit()->globalLimit() =
+      6; // aggregate floor; penalty-agnostic
+  spec.groupToPresenceWeight()->globalLimit() = 0.0;
 
   const auto universe = buildUniverse();
-  EXPECT_THROW(
-      CapacityWithGroupPresenceSpecBuilder(
-          universe, spec, /*needsContinuousExpressions=*/true),
-      std::runtime_error);
+  auto& builder = expressionBuilder();
+  const CapacityWithGroupPresenceSpecBuilder specBuilder(
+      universe, spec, /*needsContinuousExpressions=*/true);
+  auto components = co_await specBuilder.constraints(builder);
+  EXPECT_EQ(2, components.size()); // one per scope item (region1, region2)
+  const auto& region1 = components[0];
+  EXPECT_TRUE(region1.additionalPenaltyExpr != nullptr);
+
+  // ObjectPartitionLookupWithMinPresence has no LP form yet.
+  const packer::tests::LpAssertOptions lpOpts = {
+      .exceptionForLpExpr =
+          "LP expressions are not yet implemented for ObjectPartitionWithMinPresence"};
+
+  // Smooth penalty upper bounds in region1 (no floor, no ceil): tenant1 = 4.98,
+  // tenant2 = 1.995. Initial region1 utils: tenant1 = 3.18, tenant2 = 1.0.
+  // Both below their bounds -> aggregate penalty = (4.98 - 3.18) + (1.995
+  // - 1.0) = 1.8 + 0.995, normalized over all objects in the scope item.
+  auto initial = deltaFromInitial({});
+  EXPECT_NEAR(
+      (1.8 + 0.995) * kNormPerScopeItemNoRoundUp,
+      evaluate(region1, initial, /*evaluateConstraintExpr=*/false, lpOpts),
+      1e-8);
+
+  // Pin tenant2 at its upper bound (all three objects in region1): its term
+  // gates to 0, while tenant1 stays at 3.18. Aggregate = 1.8 only -- the pinned
+  // group adds nothing, and further shuffling of tenant2 within region1 cannot
+  // move the aggregate.
+  auto tenant2Pinned = deltaFromInitial(
+      {{"trafficObject6", "host2"}, {"trafficObject7", "host2"}});
+  EXPECT_NEAR(
+      1.8 * kNormPerScopeItemNoRoundUp,
+      evaluate(
+          region1, tenant2Pinned, /*evaluateConstraintExpr=*/false, lpOpts),
+      1e-8);
   co_return;
 }
 

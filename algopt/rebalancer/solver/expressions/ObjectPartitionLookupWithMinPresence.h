@@ -73,12 +73,6 @@ struct ObjectPartitionLookupWithMinPresencePolicy {
         std::initializer_list<interface::GroupUtilMultiplierTarget> targets,
         const Precision& precision,
         bool applyCeil = false) const;
-
-    double transformWeight(
-        double weight,
-        const entities::GroupId& groupId,
-        const entities::ScopeItemId& scopeItemId,
-        const Precision& precision) const;
   };
 };
 
