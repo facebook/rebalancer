@@ -884,6 +884,9 @@ TEST_P(ColocateGroupsTest, SpreadWhileMinimizingOverlap) {
   // * For every pair of tenants, the number of hosts they overlap in is
   // minimized.
   auto [threads, solverPkg] = GetParam();
+  if (solverPkg == OptimalSolverPackage::HIGHS) {
+    GTEST_SKIP() << "HiGHS does not support quadratic expressions";
+  }
   auto solver = initializeTestProblemSolver({.executorThreadCount = threads});
   solver->setObjectName("object");
   solver->setContainerName("shard");
