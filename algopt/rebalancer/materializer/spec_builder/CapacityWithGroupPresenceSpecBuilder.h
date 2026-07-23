@@ -152,18 +152,10 @@ class CapacityWithGroupPresenceSpecBuilder : public SpecBuilder {
   const entities::PartitionId aggregationPartitionId_;
   const entities::Partition& aggregationPartition_;
   const LimitWrapper capacityLimits_;
-  const LimitWrapper groupToPresenceWeight_;
-  const LimitWrapper groupToExtraAdditivePenalty_;
-  const folly::
-      F14FastMap<entities::ScopeItemId, folly::F14FastSet<entities::GroupId>>
-          scopeItemToAlwaysPresentGroups_;
   const std::optional<std::vector<entities::ScopeItemId>>
       filteredMainScopeItemIds_;
   const std::optional<std::vector<entities::GroupId>> filteredGroupIds_;
-  folly::F14FastMap<
-      interface::GroupUtilMultiplierTarget,
-      folly::small_vector<LimitWrapper, 2>>
-      groupUtilMultiplierMap_;
+  const std::shared_ptr<const MinPresenceConfig> minPresenceConfig_;
   const double penaltyBound_;
   const size_t totalObjectCount_;
 };

@@ -88,6 +88,53 @@ buildScopeItemToAlwaysPresentGroups(
   return result;
 }
 
+std::shared_ptr<const MinPresenceConfig> buildMinPresenceConfig(
+    const entities::Universe& universe,
+    const interface::CapacityWithGroupPresenceSpec& spec,
+    entities::ScopeId aggregationScopeId,
+    entities::PartitionId aggregationPartitionId) {
+  folly::F14FastMap<
+      interface::GroupUtilMultiplierTarget,
+      folly::small_vector<LimitWrapper, 2>>
+      groupUtilMultiplierMap;
+  if (!spec.groupUtilMultipliers()->empty()) {
+    for (const auto& multiplier : *spec.groupUtilMultipliers()) {
+      groupUtilMultiplierMap[*multiplier.target()].emplace_back(LimitWrapper(
+          universe,
+          *multiplier.value(),
+          aggregationScopeId,
+          aggregationPartitionId));
+    }
+  } else {
+    for (const auto& multiplier : *spec.multiplierList()) {
+      groupUtilMultiplierMap[interface::GroupUtilMultiplierTarget::COMMON]
+          .emplace_back(LimitWrapper(
+              universe,
+              multiplier,
+              aggregationScopeId,
+              aggregationPartitionId));
+    }
+  }
+
+  return std::make_shared<const MinPresenceConfig>(MinPresenceConfig{
+      .groupToPresenceWeight = LimitWrapper(
+          universe,
+          *spec.groupToPresenceWeight(),
+          aggregationScopeId,
+          aggregationPartitionId),
+      .groupToExtraAdditivePenalty = LimitWrapper(
+          universe,
+          *spec.groupToExtraAdditivePenalty(),
+          aggregationScopeId,
+          aggregationPartitionId),
+      .groupUtilMultiplierMap = std::move(groupUtilMultiplierMap),
+      .scopeItemToAlwaysPresentGroups = buildScopeItemToAlwaysPresentGroups(
+          universe,
+          aggregationScopeId,
+          aggregationPartitionId,
+          *spec.scopeItemToAlwaysPresentGroups())});
+}
+
 } // namespace
 
 CapacityWithGroupPresenceSpecBuilder::CapacityWithGroupPresenceSpecBuilder(
@@ -117,21 +164,6 @@ CapacityWithGroupPresenceSpecBuilder::CapacityWithGroupPresenceSpecBuilder(
           *spec_.scopeItemToLimit(),
           mainScopeId_,
           mainPartitionId_)),
-      groupToPresenceWeight_(LimitWrapper(
-          *universe_,
-          *spec_.groupToPresenceWeight(),
-          aggregationScopeId_,
-          aggregationPartitionId_)),
-      groupToExtraAdditivePenalty_(LimitWrapper(
-          *universe_,
-          *spec_.groupToExtraAdditivePenalty(),
-          aggregationScopeId_,
-          aggregationPartitionId_)),
-      scopeItemToAlwaysPresentGroups_(buildScopeItemToAlwaysPresentGroups(
-          *universe_,
-          aggregationScopeId_,
-          aggregationPartitionId_,
-          *spec_.scopeItemToAlwaysPresentGroups())),
       filteredMainScopeItemIds_(getFilteredScopeItemIds(ScopeItemFilterWrapper(
           *universe_,
           *spec_.scopeItemFilter(),
@@ -140,6 +172,11 @@ CapacityWithGroupPresenceSpecBuilder::CapacityWithGroupPresenceSpecBuilder(
           *universe_,
           *spec_.groupFilter(),
           mainPartitionId_))),
+      minPresenceConfig_(buildMinPresenceConfig(
+          *universe_,
+          spec_,
+          aggregationScopeId_,
+          aggregationPartitionId_)),
       penaltyBound_(computePenaltyBound(
           *spec_.roundUpGroupUtilOnScopeItem(),
           dimension_)),
@@ -173,27 +210,6 @@ CapacityWithGroupPresenceSpecBuilder::CapacityWithGroupPresenceSpecBuilder(
             "main partition and aggregation partition must be the same when CapacityWithGroupPresenceUsageIntent is PER_SCOPE_ITEM, but got mainPartition='{}', aggregationPartition='{}'",
             universe_->getEntityName(mainPartitionId_),
             universe_->getEntityName(aggregationPartitionId_)));
-  }
-
-  if (!spec_.groupUtilMultipliers()->empty()) {
-    for (const auto& multiplier : *spec_.groupUtilMultipliers()) {
-      auto limitWrapper = LimitWrapper(
-          *universe_,
-          *multiplier.value(),
-          aggregationScopeId_,
-          aggregationPartitionId_);
-      groupUtilMultiplierMap_[*multiplier.target()].emplace_back(
-          std::move(limitWrapper));
-    }
-  } else {
-    for (const auto& multiplier : *spec_.multiplierList()) {
-      groupUtilMultiplierMap_[interface::GroupUtilMultiplierTarget::COMMON]
-          .emplace_back(LimitWrapper(
-              *universe_,
-              multiplier,
-              aggregationScopeId_,
-              aggregationPartitionId_));
-    }
   }
 }
 
@@ -445,12 +461,9 @@ CapacityWithGroupPresenceSpecBuilder::createGroupUtilExpr(
             : ObjectPartitionLookup<
                   ObjectPartitionLookupWithMinPresencePolicy>::Bound::MAX,
         ObjectPartitionLookupWithMinPresencePolicy::Data(
-            groupToPresenceWeight_,
-            groupToExtraAdditivePenalty_,
-            groupUtilMultiplierMap_,
+            minPresenceConfig_,
             makeContinuousPenaltyTerm,
-            *spec_.roundUpGroupUtilOnScopeItem(),
-            scopeItemToAlwaysPresentGroups_));
+            *spec_.roundUpGroupUtilOnScopeItem()));
   };
 
   return UtilExprs{
@@ -562,8 +575,9 @@ CapacityWithGroupPresenceSpecBuilder::getGroupUtilContributionToScopeItemUtil(
       ? folly::copy(actualGroupUtilInScopeItem)
       : nullptr;
 
-  const auto presenceWeight = groupToPresenceWeight_.getLimit(
-      aggregationScopeItemId, aggregationGroupId);
+  const auto presenceWeight =
+      minPresenceConfig_->groupToPresenceWeight.getLimit(
+          aggregationScopeItemId, aggregationGroupId);
   auto minContributionToUtil =
       isGroupAlwaysPresent(aggregationScopeItemId, aggregationGroupId)
       ? const_expr(presenceWeight, *universe_)
@@ -591,8 +605,9 @@ CapacityWithGroupPresenceSpecBuilder::getGroupUtilContributionToScopeItemUtil(
     co_return UtilExprs{.util = std::move(finalUtil), .penaltyUtil = nullptr};
   }
 
-  const auto extraAdditivePenalty = groupToExtraAdditivePenalty_.getLimit(
-      aggregationScopeItemId, aggregationGroupId);
+  const auto extraAdditivePenalty =
+      minPresenceConfig_->groupToExtraAdditivePenalty.getLimit(
+          aggregationScopeItemId, aggregationGroupId);
   if (!universe_->getPrecision().isEqual(extraAdditivePenalty, 0.0)) {
     unweightedPenalty = max(unweightedPenalty + extraAdditivePenalty, 0.0);
   }
@@ -642,8 +657,8 @@ ExprPtr CapacityWithGroupPresenceSpecBuilder::getWeightedExpr(
   }
   auto weightedExpr = 1 * expr;
   for (const auto& target : targets) {
-    for (const auto& multiplier :
-         folly::get_default(groupUtilMultiplierMap_, target, {})) {
+    for (const auto& multiplier : folly::get_default(
+             minPresenceConfig_->groupUtilMultiplierMap, target, {})) {
       auto weight =
           multiplier.getLimit(aggregationScopeItemId, aggregationGroupId);
       if (universe_->getPrecision().isEqual(weight, 0)) {
@@ -675,8 +690,9 @@ CapacityWithGroupPresenceSpecBuilder::getRelevantMainScopeItemIds() const {
 bool CapacityWithGroupPresenceSpecBuilder::isGroupAlwaysPresent(
     entities::ScopeItemId aggregationScopeItemId,
     entities::GroupId aggregationGroupId) const {
-  const auto* presentGroups =
-      folly::get_ptr(scopeItemToAlwaysPresentGroups_, aggregationScopeItemId);
+  const auto* presentGroups = folly::get_ptr(
+      minPresenceConfig_->scopeItemToAlwaysPresentGroups,
+      aggregationScopeItemId);
   return presentGroups && presentGroups->contains(aggregationGroupId);
 }
 

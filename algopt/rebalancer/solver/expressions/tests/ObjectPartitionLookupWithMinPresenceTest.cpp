@@ -22,6 +22,14 @@
 
 namespace facebook::rebalancer::packer::tests {
 
+namespace {
+using MinPresencePolicy = ObjectPartitionLookupWithMinPresencePolicy;
+
+std::shared_ptr<const MinPresenceConfig> makeConfig(MinPresenceConfig config) {
+  return std::make_shared<const MinPresenceConfig>(std::move(config));
+}
+} // namespace
+
 class ObjectPartitionLookupWithMinPresenceTest : public ExpressionTestsBase {
  protected:
   folly::coro::Task<std::shared_ptr<const entities::Universe>> setUpUniverse() {
@@ -172,14 +180,19 @@ class ObjectPartitionLookupWithMinPresenceTest : public ExpressionTestsBase {
                 ObjectPartitionLookupPenaltyTransform::IDENTITY,
                 /*groupsAllowed=*/0,
                 bound,
-                ObjectPartitionLookupWithMinPresencePolicy::Data(
-                    makeLimitWrapper(universe, groupToPresenceWeight),
-                    makeLimitWrapper(universe, groupToExtraAdditivePenalty),
-                    {{interface::GroupUtilMultiplierTarget::COMMON,
-                      multiplierList}},
+                MinPresencePolicy::Data(
+                    makeConfig(
+                        {.groupToPresenceWeight =
+                             makeLimitWrapper(universe, groupToPresenceWeight),
+                         .groupToExtraAdditivePenalty = makeLimitWrapper(
+                             universe, groupToExtraAdditivePenalty),
+                         .groupUtilMultiplierMap =
+                             {{interface::GroupUtilMultiplierTarget::COMMON,
+                               multiplierList}},
+                         .scopeItemToAlwaysPresentGroups =
+                             std::move(scopeItemToAlwaysPresentGroups)}),
                     makeContinuousPenaltyTerm,
-                    roundUpGroupUtilOnScopeItem,
-                    std::move(scopeItemToAlwaysPresentGroups))));
+                    roundUpGroupUtilOnScopeItem)));
 
     return objectPartitionLookupWithMinPresence;
   }
@@ -742,10 +755,14 @@ CO_TEST_F(
               /*groupsAllowed=*/0,
               ObjectPartitionLookup<
                   ObjectPartitionLookupWithMinPresencePolicy>::Bound::MAX,
-              ObjectPartitionLookupWithMinPresencePolicy::Data(
-                  makeLimitWrapper(universe, groupToPresenceWeight),
-                  makeLimitWrapper(universe, groupToExtraAdditivePenalty),
-                  std::move(groupUtilMultiplierMap),
+              MinPresencePolicy::Data(
+                  makeConfig(
+                      {.groupToPresenceWeight =
+                           makeLimitWrapper(universe, groupToPresenceWeight),
+                       .groupToExtraAdditivePenalty = makeLimitWrapper(
+                           universe, groupToExtraAdditivePenalty),
+                       .groupUtilMultiplierMap =
+                           std::move(groupUtilMultiplierMap)}),
                   /*makeContinuousPenaltyTerm=*/false,
                   /*roundUpGroupUtilOnScopeItem=*/false)));
 
@@ -850,10 +867,14 @@ CO_TEST_F(
               /*groupsAllowed=*/0,
               ObjectPartitionLookup<
                   ObjectPartitionLookupWithMinPresencePolicy>::Bound::MAX,
-              ObjectPartitionLookupWithMinPresencePolicy::Data(
-                  makeLimitWrapper(universe, groupToPresenceWeight),
-                  makeLimitWrapper(universe, groupToExtraAdditivePenalty),
-                  std::move(groupUtilMultiplierMap),
+              MinPresencePolicy::Data(
+                  makeConfig(
+                      {.groupToPresenceWeight =
+                           makeLimitWrapper(universe, groupToPresenceWeight),
+                       .groupToExtraAdditivePenalty = makeLimitWrapper(
+                           universe, groupToExtraAdditivePenalty),
+                       .groupUtilMultiplierMap =
+                           std::move(groupUtilMultiplierMap)}),
                   /*makeContinuousPenaltyTerm=*/false,
                   /*roundUpGroupUtilOnScopeItem=*/true)));
 

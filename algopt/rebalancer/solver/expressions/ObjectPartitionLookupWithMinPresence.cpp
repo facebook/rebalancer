@@ -41,7 +41,7 @@ double ObjectPartitionLookupWithMinPresencePolicy::Data::applyWeights(
       kEmptyMultipliers;
   for (const auto& target : targets) {
     for (const auto& multiplier : folly::get_ref_default(
-             groupUtilMultiplierMap, target, kEmptyMultipliers)) {
+             config_->groupUtilMultiplierMap, target, kEmptyMultipliers)) {
       const auto weight = multiplier.getLimit(scopeItemId, groupId);
       if (algopt::Precision::isEqual(weight, 0)) {
         return 0;
@@ -90,14 +90,14 @@ GroupUtils computeGroupUtils(
       data.roundUpGroupUtilOnScopeItem);
 
   const auto presentGroupsPtr =
-      folly::get_ptr(data.scopeItemToAlwaysPresentGroups, scopeItemId);
+      folly::get_ptr(data.config_->scopeItemToAlwaysPresentGroups, scopeItemId);
   const auto groupAlwaysPresent =
       presentGroupsPtr && presentGroupsPtr->contains(groupId);
   auto minContributionToUtil = 0.0;
   if (precision.isStrictlyGtZero(actualUtil) || groupAlwaysPresent) {
     // Apply multipliers which targets to presence weight.
     minContributionToUtil =
-        data.groupToPresenceWeight.getLimit(scopeItemId, groupId);
+        data.config_->groupToPresenceWeight.getLimit(scopeItemId, groupId);
     minContributionToUtil = data.applyWeights(
         minContributionToUtil,
         groupId,
@@ -117,7 +117,8 @@ GroupUtils computeGroupUtils(
   if (data.makeContinuousPenaltyTerm) {
     double unweightedPenalty = weight;
     const auto extraAdditivePenalty =
-        data.groupToExtraAdditivePenalty.getLimit(scopeItemId, groupId);
+        data.config_->groupToExtraAdditivePenalty.getLimit(
+            scopeItemId, groupId);
     if (!precision.isEqual(extraAdditivePenalty, 0.0)) {
       unweightedPenalty =
           std::max(unweightedPenalty + extraAdditivePenalty, 0.0);

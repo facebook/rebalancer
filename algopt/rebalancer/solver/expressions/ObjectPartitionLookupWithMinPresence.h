@@ -21,50 +21,39 @@
 #include <folly/container/F14Set.h>
 #include <folly/small_vector.h>
 
-#include <optional>
+#include <memory>
 #include <string_view>
 
 namespace facebook::rebalancer {
+
+struct MinPresenceConfig {
+  materializer::LimitWrapper groupToPresenceWeight;
+  materializer::LimitWrapper groupToExtraAdditivePenalty;
+  folly::F14FastMap<
+      interface::GroupUtilMultiplierTarget,
+      folly::small_vector<materializer::LimitWrapper, 2>>
+      groupUtilMultiplierMap;
+  folly::F14FastMap<entities::ScopeItemId, folly::F14FastSet<entities::GroupId>>
+      scopeItemToAlwaysPresentGroups;
+};
 
 // Policy for ObjectPartitionLookup that uses group min presence
 struct ObjectPartitionLookupWithMinPresencePolicy {
   static constexpr std::string_view typeName =
       "ObjectPartitionLookupWithMinPresence";
 
-  // Per-instance data for ObjectPartitionLookupWithMinPresence
   struct Data {
     Data(
-        materializer::LimitWrapper groupToPresenceWeight_,
-        materializer::LimitWrapper groupToExtraAdditivePenalty_,
-        folly::F14FastMap<
-            interface::GroupUtilMultiplierTarget,
-            folly::small_vector<materializer::LimitWrapper, 2>>
-            groupUtilMultiplierMap_,
-        bool makeContinuousPenaltyTerm_,
-        bool roundUpGroupUtilOnScopeItem_,
-        folly::F14FastMap<
-            entities::ScopeItemId,
-            folly::F14FastSet<entities::GroupId>>
-            scopeItemToAlwaysPresentGroups_ = {})
-        : groupToPresenceWeight(std::move(groupToPresenceWeight_)),
-          groupToExtraAdditivePenalty(std::move(groupToExtraAdditivePenalty_)),
-          groupUtilMultiplierMap(std::move(groupUtilMultiplierMap_)),
-          makeContinuousPenaltyTerm(makeContinuousPenaltyTerm_),
-          roundUpGroupUtilOnScopeItem(roundUpGroupUtilOnScopeItem_),
-          scopeItemToAlwaysPresentGroups(
-              std::move(scopeItemToAlwaysPresentGroups_)) {}
+        std::shared_ptr<const MinPresenceConfig> config,
+        bool makeContinuousPenaltyTerm,
+        bool roundUpGroupUtilOnScopeItem)
+        : config_(std::move(config)),
+          makeContinuousPenaltyTerm(makeContinuousPenaltyTerm),
+          roundUpGroupUtilOnScopeItem(roundUpGroupUtilOnScopeItem) {}
 
-    materializer::LimitWrapper groupToPresenceWeight;
-    materializer::LimitWrapper groupToExtraAdditivePenalty;
-    folly::F14FastMap<
-        interface::GroupUtilMultiplierTarget,
-        folly::small_vector<materializer::LimitWrapper, 2>>
-        groupUtilMultiplierMap;
+    std::shared_ptr<const MinPresenceConfig> config_;
     bool makeContinuousPenaltyTerm = false;
     bool roundUpGroupUtilOnScopeItem = false;
-    folly::
-        F14FastMap<entities::ScopeItemId, folly::F14FastSet<entities::GroupId>>
-            scopeItemToAlwaysPresentGroups;
 
     double applyWeights(
         double value,
