@@ -276,7 +276,10 @@ CO_TEST_F(PropertiesTestCustom, ObjectPartition) {
 
   const auto universe = buildUniverse();
   auto objPartition = object_partition(
-      partitionId("partition1"), objectCountDimensionId, {}, *universe);
+      std::make_shared<const PartitionInfo>(
+          *universe, partitionId("partition1")),
+      objectCountDimensionId,
+      {});
 
   EXPECT_EQ("ObjectPartition", objPartition->getType());
 }
@@ -298,7 +301,10 @@ CO_TEST_F(PropertiesTestCustom, ObjectPartitionLookup) {
 
   auto objPartitionLookup = object_partition_lookup(
       object_partition(
-          partitionId("partition1"), objectCountDimensionId, {}, universe),
+          std::make_shared<const PartitionInfo>(
+              universe, partitionId("partition1")),
+          objectCountDimensionId,
+          {}),
       std::make_shared<PackerSet<entities::ContainerId>>(),
       containerScopeId,
       container1ScopeItemId,

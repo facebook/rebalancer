@@ -106,7 +106,10 @@ CO_TEST_F(ExpressionContainersIteratorTest, ContainerTies) {
   const auto scopeItemId =
       ExpressionTestsBase::scopeItemId(scopeId, "scopeItem");
 
-  auto op = object_partition(partitionId, dimensionId, {}, *universe);
+  auto op = object_partition(
+      std::make_shared<const PartitionInfo>(*universe, partitionId),
+      dimensionId,
+      {});
   auto lookup1 = object_partition_lookup(
       op,
       std::make_shared<PackerSet<entities::ContainerId>>(
@@ -223,7 +226,10 @@ CO_TEST_F(ExpressionContainersIteratorTest, ContainerTiesObjectiveTuple) {
   const auto scopeItemId =
       ExpressionTestsBase::scopeItemId(scopeId, "scopeItem");
 
-  auto op = object_partition(partitionId, dimensionId, {}, *universe);
+  auto op = object_partition(
+      std::make_shared<const PartitionInfo>(*universe, partitionId),
+      dimensionId,
+      {});
   auto lookup1 = object_partition_lookup(
       op,
       std::make_shared<PackerSet<entities::ContainerId>>(
@@ -467,7 +473,10 @@ CO_TEST_F(
   const auto scopeItemId =
       ExpressionTestsBase::scopeItemId(scopeId, "scopeItem");
 
-  const auto op = object_partition(partitionId, dimensionId, {}, *universe);
+  const auto op = object_partition(
+      std::make_shared<const PartitionInfo>(*universe, partitionId),
+      dimensionId,
+      {});
   const auto lookup1 = object_partition_lookup(
       op,
       std::make_shared<PackerSet<entities::ContainerId>>(

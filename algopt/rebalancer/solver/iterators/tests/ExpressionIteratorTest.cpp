@@ -43,7 +43,10 @@ CO_TEST_F(ExpressionIteratorTest, GetSortedChildren) {
   const auto scopeItemId =
       ExpressionTestsBase::scopeItemId(scopeId, "scopeItem");
 
-  auto op = object_partition(partition1Id, objectCountDimId, {}, *universe);
+  auto op = object_partition(
+      std::make_shared<const PartitionInfo>(*universe, partition1Id),
+      objectCountDimId,
+      {});
 
   // val = 1, bound = 0 => potential = 1
   auto a = object_partition_lookup(
@@ -100,8 +103,10 @@ CO_TEST_F(ExpressionIteratorTest, PreOrderExpressionTraversal) {
   const auto scopeItemId =
       ExpressionTestsBase::scopeItemId(scopeId, "scopeItem");
 
-  const auto op =
-      object_partition(partition1Id, objectCountDimId, {}, *universe);
+  const auto op = object_partition(
+      std::make_shared<const PartitionInfo>(*universe, partition1Id),
+      objectCountDimId,
+      {});
 
   auto a = object_partition_lookup(
       op,

@@ -139,19 +139,6 @@ ExprPtr object_partition(
     double defaultGroupLimit = 0.0,
     double defaultGroupCoefficient = 1.0);
 
-// TODO: move call sites to the overload above and delete this.
-ExprPtr object_partition(
-    entities::PartitionId partitionId,
-    entities::DimensionId dimensionId,
-    PackerMap<entities::GroupId, double> groupLimits,
-    const entities::Universe& universe,
-    std::optional<PackerSet<entities::ScopeItemId>> scopeItemIds = std::nullopt,
-    std::shared_ptr<const PackerSet<entities::GroupId>> filteredGroupIds =
-        nullptr,
-    PackerMap<entities::GroupId, double> groupCoefficients = {},
-    double defaultGroupLimit = 0.0,
-    double defaultGroupCoefficient = 1.0);
-
 ExprPtr object_partition_lookup(
     ExprPtr objectPartition,
     std::shared_ptr<const PackerSet<entities::ContainerId>> lookupContainers,

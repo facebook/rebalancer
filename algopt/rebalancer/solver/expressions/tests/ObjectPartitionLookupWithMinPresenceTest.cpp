@@ -138,12 +138,13 @@ class ObjectPartitionLookupWithMinPresenceTest : public ExpressionTestsBase {
               ObjectPartitionLookupWithMinPresencePolicy>::Bound::MAX,
       std::optional<double> defaultGroupLimitOverride = std::nullopt) const {
     auto objectPartition = object_partition(
-        partition(),
+        std::make_shared<const PartitionInfo>(
+            universe,
+            partition(),
+            std::make_shared<const PackerSet<entities::GroupId>>(groupIds)),
         replicaCountDimId(),
         /*groupLimits=*/{},
-        universe,
-        PackerSet<entities::ScopeItemId>({aggregationScopeItemId}),
-        std::make_shared<const PackerSet<entities::GroupId>>(groupIds));
+        PackerSet<entities::ScopeItemId>({aggregationScopeItemId}));
 
     auto groupToPresenceWeight = makeLimit(2.0);
     groupToPresenceWeight.groupLimits() = {{"group1", 3.0}};
@@ -691,12 +692,10 @@ CO_TEST_F(
       PackerSet<entities::GroupId>{group(1), group(2)});
 
   auto objectPartition = object_partition(
-      partition(),
+      std::make_shared<const PartitionInfo>(universe, partition(), groupIds),
       replicaCountDimId(),
       /*groupLimits=*/{},
-      universe,
-      PackerSet<entities::ScopeItemId>({aggregationScopeItemId}),
-      groupIds);
+      PackerSet<entities::ScopeItemId>({aggregationScopeItemId}));
 
   // Set up presence weight: group1 = 3.0, group2 = 2.0 (default)
   auto groupToPresenceWeight = makeLimit(2.0);
@@ -806,12 +805,10 @@ CO_TEST_F(
       PackerSet<entities::GroupId>{group(1), group(2)});
 
   auto objectPartition = object_partition(
-      partition(),
+      std::make_shared<const PartitionInfo>(universe, partition(), groupIds),
       replicaCountDimId(),
       /*groupLimits=*/{},
-      universe,
-      PackerSet<entities::ScopeItemId>({aggregationScopeItemId}),
-      groupIds);
+      PackerSet<entities::ScopeItemId>({aggregationScopeItemId}));
 
   auto groupToPresenceWeight = makeLimit(2.0);
   groupToPresenceWeight.groupLimits() = {{"group1", 3.0}};

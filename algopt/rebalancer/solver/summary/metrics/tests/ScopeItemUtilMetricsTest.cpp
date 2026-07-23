@@ -321,8 +321,10 @@ CO_TEST_F(
   const auto objCountDimId = dimensionId("object_count");
 
   // Create object partition with tight group limits to create violations
-  auto objectPartition =
-      object_partition(partition1Id, objCountDimId, {}, *universe);
+  auto objectPartition = object_partition(
+      std::make_shared<const PartitionInfo>(*universe, partition1Id),
+      objCountDimId,
+      {});
 
   auto host = [&](int i) {
     return universe->getContainerId(fmt::format("host{}", i));

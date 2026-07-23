@@ -115,10 +115,10 @@ CO_TEST_F(ObjectPartitionLookupTest, NegativeLimitsObjectPartitionLookup) {
   auto assignment = Assignment(universe.getContainers().getInitialAssignment());
 
   auto objectPartition = object_partition(
-      partitionId("partition1"),
+      std::make_shared<const PartitionInfo>(
+          universe, partitionId("partition1")),
       dimensionId("object_count"),
-      {{group(0), 1}, {group(1), 1.5}, {group(2), 3}},
-      universe);
+      {{group(0), 1}, {group(1), 1.5}, {group(2), 3}});
 
   auto objectPartitionLookup = std::make_shared<ObjectPartitionLookupDefault>(
       ObjectPartitionLookupDefault(
@@ -211,10 +211,10 @@ CO_TEST_F(ObjectPartitionLookupTest, ObjectPartitionLookup) {
   auto assignment = Assignment(universe.getContainers().getInitialAssignment());
 
   auto objectPartition = object_partition(
-      partitionId("partition1"),
+      std::make_shared<const PartitionInfo>(
+          universe, partitionId("partition1")),
       dimensionId("object_count"),
-      {{group(0), 1}, {group(1), 1.5}, {group(2), 3}},
-      universe);
+      {{group(0), 1}, {group(1), 1.5}, {group(2), 3}});
 
   auto objectPartitionLookup = std::make_shared<ObjectPartitionLookupDefault>(
       ObjectPartitionLookupDefault(
@@ -349,10 +349,10 @@ CO_TEST_F(
   auto assignment = Assignment(universe.getContainers().getInitialAssignment());
 
   auto objectPartition = object_partition(
-      partitionId("partition1"),
+      std::make_shared<const PartitionInfo>(
+          universe, partitionId("partition1")),
       dimensionId("object_count"),
-      {{group(1), -42}},
-      universe);
+      {{group(1), -42}});
 
   auto objectPartitionLookup = std::make_shared<ObjectPartitionLookupDefault>(
       ObjectPartitionLookupDefault(
@@ -391,7 +391,10 @@ CO_TEST_F(
   auto assignment = Assignment(universe.getContainers().getInitialAssignment());
 
   auto objectPartition = object_partition(
-      partitionId("partition1"), weightDim, {{group(1), -15}}, universe);
+      std::make_shared<const PartitionInfo>(
+          universe, partitionId("partition1")),
+      weightDim,
+      {{group(1), -15}});
 
   auto objectPartitionLookup = std::make_shared<ObjectPartitionLookupDefault>(
       ObjectPartitionLookupDefault(
@@ -431,7 +434,10 @@ CO_TEST_F(
   auto assignment = Assignment(universe.getContainers().getInitialAssignment());
 
   auto objectPartition = object_partition(
-      partitionId("partition1"), weightDim, {{group(1), -15}}, universe);
+      std::make_shared<const PartitionInfo>(
+          universe, partitionId("partition1")),
+      weightDim,
+      {{group(1), -15}});
 
   auto objectPartitionLookup = std::make_shared<ObjectPartitionLookupDefault>(
       ObjectPartitionLookupDefault(
@@ -474,10 +480,10 @@ CO_TEST_F(ObjectPartitionLookupTest, ObjectPartitionLookupNegativeLimits) {
   auto assignment = Assignment(universe.getContainers().getInitialAssignment());
 
   auto objectPartition = object_partition(
-      partitionId("partition1"),
+      std::make_shared<const PartitionInfo>(
+          universe, partitionId("partition1")),
       weightDim,
-      {{group(1), -15}, {group(2), -15}},
-      universe);
+      {{group(1), -15}, {group(2), -15}});
 
   auto objectPartitionLookup = std::make_shared<ObjectPartitionLookupDefault>(
       ObjectPartitionLookupDefault(
@@ -525,12 +531,11 @@ CO_TEST_F(ObjectPartitionLookupTest, ObjectPartitionLookupWithSquares) {
   auto assignment = Assignment(universe.getContainers().getInitialAssignment());
 
   auto objectPartition = object_partition(
-      partitionId("partition1"),
+      std::make_shared<const PartitionInfo>(
+          universe, partitionId("partition1")),
       dimensionId("object_count"),
       {{group(0), 0}, {group(1), 1}, {group(2), 10}},
-      universe,
       /*scopeItemIds=*/std::nullopt,
-      /*filteredGroupIds=*/nullptr,
       /*groupCoefficients=*/
       {
           {group(0), 1.0 / 3},
@@ -662,10 +667,10 @@ CO_TEST_F(ObjectPartitionLookupTest, ObjectPartitionLookupWithStep) {
   // g1 has limit 1 (= its count), so STEP=0 despite being present. g0 and g2
   // default to limit 0, so any object in them yields STEP=1.
   auto objectPartition = object_partition(
-      partitionId("partition1"),
+      std::make_shared<const PartitionInfo>(
+          universe, partitionId("partition1")),
       dimensionId("object_count"),
-      {{group(1), 1}},
-      universe);
+      {{group(1), 1}});
 
   auto objectPartitionLookup = std::make_shared<ObjectPartitionLookupDefault>(
       ObjectPartitionLookupDefault(
@@ -730,10 +735,10 @@ CO_TEST_F(
   auto assignment = Assignment(universe.getContainers().getInitialAssignment());
 
   auto objectPartition = object_partition(
-      partitionId("partition1"),
+      std::make_shared<const PartitionInfo>(
+          universe, partitionId("partition1")),
       dimensionId("object_count"),
-      {{group(4), 1}},
-      universe);
+      {{group(4), 1}});
 
   auto objectPartitionLookup = std::make_shared<ObjectPartitionLookupDefault>(
       ObjectPartitionLookupDefault(
@@ -825,10 +830,10 @@ CO_TEST_F(ObjectPartitionLookupTest, ObjectPartitionLookupGroupsLimit) {
       Assignment(universe.getContainers().getInitialAssignment());
 
   auto objectPartition = object_partition(
-      partitionId("partition1"),
+      std::make_shared<const PartitionInfo>(
+          universe, partitionId("partition1")),
       dimensionId("object_count"),
-      {{group(0), 3}, {group(1), 3}},
-      universe);
+      {{group(0), 3}, {group(1), 3}});
 
   auto objectPartitionLookup = std::make_shared<ObjectPartitionLookupDefault>(
       ObjectPartitionLookupDefault(
@@ -887,12 +892,11 @@ CO_TEST_F(ObjectPartitionLookupTest, ObjectPartitionLookup2) {
   auto assignment = Assignment(universe.getContainers().getInitialAssignment());
 
   auto objectPartition = object_partition(
-      partitionId("partition1"),
+      std::make_shared<const PartitionInfo>(
+          universe, partitionId("partition1")),
       dimensionId("object_count"),
       {} /*limits*/,
-      universe,
       /*scopeItemIds=*/std::nullopt,
-      /*filteredGroupIds=*/nullptr,
       {{group(0), 0.25}} /*coefficients*/);
 
   auto objectPartitionLookup = std::make_shared<ObjectPartitionLookupDefault>(
@@ -957,7 +961,10 @@ CO_TEST_F(ObjectPartitionLookupTest, ObjectPartitionLookupCustomDimension) {
   auto assignment = Assignment(universe.getContainers().getInitialAssignment());
 
   auto partitionExpr = object_partition(
-      partitionId("partition1"), weightDim, {} /*limits*/, universe);
+      std::make_shared<const PartitionInfo>(
+          universe, partitionId("partition1")),
+      weightDim,
+      {} /*limits*/);
 
   auto lookup = std::make_shared<ObjectPartitionLookupDefault>(
       ObjectPartitionLookupDefault(
@@ -1003,12 +1010,11 @@ CO_TEST_F(ObjectPartitionLookupTest, ObjectPartitionLookupMinBound) {
   auto assignment = Assignment(universe.getContainers().getInitialAssignment());
 
   auto objectPartition = object_partition(
-      partitionId("partition1"),
+      std::make_shared<const PartitionInfo>(
+          universe, partitionId("partition1")),
       dimensionId("object_count"),
       {{group(0), 2.0}, {group(1), 0.0}, {group(2), 0.0}} /*limits*/,
-      universe,
       /*scopeItemIds=*/std::nullopt,
-      /*filteredGroupIds=*/nullptr,
       /*groupCoefficients=*/{},
       /*defaultGroupLimit=*/1.0);
 
@@ -1090,12 +1096,11 @@ CO_TEST_F(ObjectPartitionLookupTest, DynamicDimensionWithDifferentScope) {
   auto assignment = Assignment(universe.getContainers().getInitialAssignment());
 
   auto objectPartition = object_partition(
-      partitionId("partition1"),
+      std::make_shared<const PartitionInfo>(
+          universe, partitionId("partition1")),
       weightDim,
       {{group(1), 2.0}, {group(2), 3.0}},
-      universe,
       PackerSet<entities::ScopeItemId>{host(0), host(1)},
-      /*filteredGroupIds=*/nullptr,
       {} /*groupCoefficients*/,
       0.0 /*defaultGroupLimit*/,
       1.0 /*defaultGroupCoefficient*/);
@@ -1192,10 +1197,10 @@ CO_TEST_F(
   auto assignment = Assignment(universe.getContainers().getInitialAssignment());
 
   auto objectPartition = object_partition(
-      partitionId("partition1"),
+      std::make_shared<const PartitionInfo>(
+          universe, partitionId("partition1")),
       weightDim,
       {{group(1), 50.0}},
-      universe,
       PackerSet<entities::ScopeItemId>{host(0), host(1)});
 
   // Test with limit override
@@ -1276,10 +1281,10 @@ CO_TEST_F(
   auto assignment = Assignment(universe.getContainers().getInitialAssignment());
 
   auto objectPartition = object_partition(
-      partitionId("partition1"),
+      std::make_shared<const PartitionInfo>(
+          universe, partitionId("partition1")),
       weightDim,
       {{group(1), 10.0}, {group(2), 5.0}},
-      universe,
       PackerSet<entities::ScopeItemId>{host(0), host(1)});
 
   auto objectPartitionLookup = std::make_shared<ObjectPartitionLookupDefault>(
@@ -1365,10 +1370,10 @@ CO_TEST_F(
   const auto weightDim = dimensionId("dynamicWeight");
 
   auto objectPartition = object_partition(
-      partitionId("partition1"),
+      std::make_shared<const PartitionInfo>(
+          universe, partitionId("partition1")),
       weightDim,
       {{group(1), 2.0}},
-      universe,
       PackerSet<entities::ScopeItemId>{host(0)});
 
   // Should throw when trying to create with initialDuringObjects
@@ -1423,10 +1428,10 @@ CO_TEST_F(
   auto assignment = Assignment(universe.getContainers().getInitialAssignment());
 
   auto objectPartition = object_partition(
-      partitionId("partition1"),
+      std::make_shared<const PartitionInfo>(
+          universe, partitionId("partition1")),
       weightDim,
       {{group(1), 3.0}, {group(2), 4.0}},
-      universe,
       PackerSet<entities::ScopeItemId>{host(0), host(1)});
 
   auto objectPartitionLookup = std::make_shared<ObjectPartitionLookupDefault>(
@@ -1552,12 +1557,10 @@ CO_TEST_F(ObjectPartitionLookupTest, FilteredGroupIdsObjectCount) {
           PackerSet<entities::GroupId>{group(1), group(2)});
 
   const auto objectPartition = object_partition(
-      partitionId("partition1"),
+      std::make_shared<const PartitionInfo>(
+          universe, partitionId("partition1"), filteredGroupIds),
       dimensionId("object_count"),
-      {{group(1), 2.0}, {group(2), 2.0}},
-      universe,
-      std::nullopt,
-      filteredGroupIds);
+      {{group(1), 2.0}, {group(2), 2.0}});
 
   auto objectPartitionLookup = std::make_shared<ObjectPartitionLookupDefault>(
       ObjectPartitionLookupDefault(
@@ -1608,10 +1611,10 @@ CO_TEST_F(ObjectPartitionLookupTest, ObjectPartitionLookupInitialValue) {
   const Assignment assignment(universe.getContainers().getInitialAssignment());
 
   auto objPart = object_partition(
-      partitionId("partition1"),
+      std::make_shared<const PartitionInfo>(
+          universe, partitionId("partition1")),
       dimensionId("object_count"),
-      {{group(0), 1}},
-      universe);
+      {{group(0), 1}});
 
   auto lookup = object_partition_lookup(
       objPart,
@@ -1648,10 +1651,10 @@ CO_TEST_F(
   auto assignment = Assignment(universe.getContainers().getInitialAssignment());
 
   auto objectPartition = object_partition(
-      partitionId("partition1"),
+      std::make_shared<const PartitionInfo>(
+          universe, partitionId("partition1")),
       dimensionId("dynamicWeight"),
       {{group(0), 0.0}},
-      universe,
       PackerSet<entities::ScopeItemId>{host(0), host(1)});
 
   auto opl = std::make_shared<ObjectPartitionLookupDefault>(

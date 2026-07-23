@@ -492,27 +492,6 @@ ExprPtr object_partition(
       defaultGroupCoefficient);
 }
 
-ExprPtr object_partition(
-    entities::PartitionId partitionId,
-    entities::DimensionId dimensionId,
-    PackerMap<entities::GroupId, double> groupLimits,
-    const entities::Universe& universe,
-    std::optional<PackerSet<entities::ScopeItemId>> scopeItemIds,
-    std::shared_ptr<const PackerSet<entities::GroupId>> filteredGroupIds,
-    PackerMap<entities::GroupId, double> groupCoefficients,
-    double defaultGroupLimit,
-    double defaultGroupCoefficient) {
-  return object_partition(
-      std::make_shared<const PartitionInfo>(
-          universe, partitionId, std::move(filteredGroupIds)),
-      dimensionId,
-      std::move(groupLimits),
-      std::move(scopeItemIds),
-      std::move(groupCoefficients),
-      defaultGroupLimit,
-      defaultGroupCoefficient);
-}
-
 ExprPtr object_partition_lookup(
     ExprPtr objectPartition,
     std::shared_ptr<const PackerSet<entities::ContainerId>> lookupContainersPtr,

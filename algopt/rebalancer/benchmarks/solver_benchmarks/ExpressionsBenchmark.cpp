@@ -864,8 +864,10 @@ BENCHMARK(ObjectPartitionLookupBounds) {
   sum = const_expr(0, *universe);
 
   for (const auto _ : folly::irange(nObjectPartitions)) {
-    auto objectPartition =
-        object_partition(partitionId, dimensionId, {}, *universe);
+    auto objectPartition = object_partition(
+        std::make_shared<const PartitionInfo>(*universe, partitionId),
+        dimensionId,
+        {});
 
     for (const auto j : folly::irange(nLookupsPerPartition)) {
       const auto containerId =
@@ -1165,8 +1167,10 @@ BENCHMARK(ObjectPartitionLookupEvaluateManyGroups) {
   const auto universe = builder.buildUniverse();
   const Assignment assignment(universe->getContainers().getInitialAssignment());
 
-  auto objectPartition =
-      object_partition(partitionId, dimensionId, {}, *universe);
+  auto objectPartition = object_partition(
+      std::make_shared<const PartitionInfo>(*universe, partitionId),
+      dimensionId,
+      {});
   auto containers = std::make_shared<PackerSet<entities::ContainerId>>();
   for (const auto i : folly::irange(containerCount)) {
     containers->insert(container(i, universe));

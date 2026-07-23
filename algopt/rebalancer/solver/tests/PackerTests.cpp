@@ -737,12 +737,11 @@ CO_TEST_F(PackerTests, MipExprObjParLookup) {
 
   // Limits, g0=3, g1=1.5, g2=3
   auto obj_part = object_partition(
-      partId,
+      std::make_shared<const PartitionInfo>(*universe, partId),
       objectCountDimensionId,
       {{groupId(partId, "group0"), 1},
        {groupId(partId, "group1"), 1.5},
-       {groupId(partId, "group2"), 3}},
-      *universe);
+       {groupId(partId, "group2"), 3}});
 
   auto objective = object_partition_lookup(
       obj_part,
@@ -790,7 +789,9 @@ CO_TEST_F(PackerTests, ObjPartitionLookupBrokenConstraint) {
   const auto objectCountDimensionId = dimensionId("object_count");
 
   auto obj_part = object_partition(
-      partId, objectCountDimensionId, /*groupLimits=*/{}, *universe);
+      std::make_shared<const PartitionInfo>(*universe, partId),
+      objectCountDimensionId,
+      /*groupLimits=*/{});
   // let us say containers are allowed to have just one group (group 0)
   // the constraint is initially broken
   const Assignment assignment(universe->getContainers().getInitialAssignment());
