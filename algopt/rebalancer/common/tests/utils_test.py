@@ -274,11 +274,11 @@ class TestUtils(testutil.BaseFacebookTestCase):
     # pyre-fixme[2]: Parameter must be annotated.
     def test_get_event_loop(self, mock_asyncio) -> None:
         # First, exercise the typical case, when things to right
-        mock_asyncio.get_event_loop.return_value = "foo"
+        mock_asyncio.get_running_loop.return_value = "foo"
         mock_asyncio.new_event_loop.return_value = "bar"
         self.assertEqual(utils.get_event_loop(), "foo")
-        # But when asyncio.get_event_loop throws, utils.get_event_loop has a recovery
+        # But when asyncio.get_running_loop throws, utils.get_event_loop has a recovery
         # workflow. Let's exercise that as well.
-        mock_asyncio.get_event_loop.side_effect = RuntimeError
+        mock_asyncio.get_running_loop.side_effect = RuntimeError
         self.assertEqual(utils.get_event_loop(), "bar")
         mock_asyncio.set_event_loop.assert_called_once_with("bar")
