@@ -25,16 +25,21 @@
 #include "algopt/rebalancer/solver/expressions/GroupRoutingRing.h"
 #include "algopt/rebalancer/solver/expressions/GroupRoutingTrafficLookup.h"
 #include "algopt/rebalancer/solver/expressions/ObjectLookup.h"
+#include "algopt/rebalancer/solver/expressions/ObjectPartition.h"
 #include "algopt/rebalancer/solver/expressions/ObjectPartitionLookup.h"
 #include "algopt/rebalancer/solver/expressions/ObjectPartitionMoveLimit.h"
 #include "algopt/rebalancer/solver/expressions/ObjectVector.h"
 #include "algopt/rebalancer/solver/expressions/StableStayed.h"
 #include "algopt/rebalancer/solver/summary/metrics/Metrics.h"
 #include "algopt/rebalancer/solver/utils/Assignment.h"
+#include "algopt/rebalancer/solver/utils/Util.h"
 #include "algopt/rebalancer/treeprof/ExecutorWrapper.h"
 
 #include <folly/coro/Collect.h>
+#include <folly/hash/Hash.h>
 #include <folly/synchronization/ThreadAnnotations.h>
+
+#include <limits>
 
 namespace facebook::rebalancer::materializer {
 
@@ -45,6 +50,42 @@ constexpr int DEFAULT_APPROX_PIECE_COUNT = 100;
 template <typename DimensionOrIndex>
 concept IsDimensionOrIndexType = std::is_same_v<DimensionOrIndex, int> ||
     std::is_same_v<DimensionOrIndex, entities::ObjectScalarDimension>;
+
+// Keyed by filteredGroupIds's contents, so equal filters reuse one cached
+// PartitionInfo instead of rebuilding its object->group map.
+struct PartitionInfoCacheKey {
+  entities::PartitionId partitionId;
+  std::shared_ptr<const entities::Set<entities::GroupId>> filteredGroupIds;
+
+  bool operator==(const PartitionInfoCacheKey& other) const {
+    if (partitionId != other.partitionId) {
+      return false;
+    }
+    if (filteredGroupIds == other.filteredGroupIds) {
+      return true;
+    }
+    return filteredGroupIds && other.filteredGroupIds &&
+        *filteredGroupIds == *other.filteredGroupIds;
+  }
+};
+
+} // namespace facebook::rebalancer::materializer
+
+namespace std {
+template <>
+struct hash<facebook::rebalancer::materializer::PartitionInfoCacheKey> {
+  std::size_t operator()(
+      const facebook::rebalancer::materializer::PartitionInfoCacheKey& key)
+      const {
+    const auto filterHash = key.filteredGroupIds
+        ? facebook::rebalancer::UnorderedSetHash{}(*key.filteredGroupIds)
+        : std::numeric_limits<std::size_t>::max();
+    return folly::hash::hash_combine(key.partitionId, filterHash);
+  }
+};
+} // namespace std
+
+namespace facebook::rebalancer::materializer {
 
 class ExpressionBuilder {
  public:
@@ -192,18 +233,22 @@ class ExpressionBuilder {
       entities::PartitionId partitionId,
       bool normalizeByGroupSize,
       const std::optional<ScopeParams>& scopeParams = std::nullopt,
-      std::optional<PackerSet<entities::GroupId>> filteredGroupIds =
-          std::nullopt,
+      std::shared_ptr<const entities::Set<entities::GroupId>> filteredGroupIds =
+          nullptr,
       double defaultGroupCoefficient = 1.0);
 
  private:
+  std::shared_ptr<const PartitionInfo> getPartitionInfo(
+      entities::PartitionId partitionId,
+      std::shared_ptr<const entities::Set<entities::GroupId>> filteredGroupIds);
+
   ExprPtr createObjectPartition(
       const entities::Map<entities::GroupId, double>& groupLimits,
       entities::DimensionId dimensionId,
       entities::PartitionId partitionId,
       bool normalizeByGroupSize,
       const std::optional<ScopeParams>& scopeParams,
-      std::optional<PackerSet<entities::GroupId>> filteredGroupIds,
+      std::shared_ptr<const entities::Set<entities::GroupId>> filteredGroupIds,
       double defaultGroupCoefficient);
 
   std::shared_ptr<Expression> createObjectPartitionLookup(
@@ -691,6 +736,9 @@ class ExpressionBuilder {
           double>,
       ExprPtr>
       objectPartitionCache_;
+
+  Cache<PartitionInfoCacheKey, std::shared_ptr<const PartitionInfo>>
+      partitionInfoCache_;
 
   // Cache for getObjectPartitionLookup. Only caches when overrides is empty.
   Cache<

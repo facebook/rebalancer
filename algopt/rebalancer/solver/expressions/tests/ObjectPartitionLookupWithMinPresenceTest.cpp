@@ -143,7 +143,7 @@ class ObjectPartitionLookupWithMinPresenceTest : public ExpressionTestsBase {
         /*groupLimits=*/{},
         universe,
         PackerSet<entities::ScopeItemId>({aggregationScopeItemId}),
-        groupIds);
+        std::make_shared<const PackerSet<entities::GroupId>>(groupIds));
 
     auto groupToPresenceWeight = makeLimit(2.0);
     groupToPresenceWeight.groupLimits() = {{"group1", 3.0}};
@@ -687,7 +687,8 @@ CO_TEST_F(
   auto assignment = getInitialAssignment(universe);
 
   const entities::ScopeItemId aggregationScopeItemId = region(1);
-  const PackerSet<entities::GroupId> groupIds = {group(1), group(2)};
+  const auto groupIds = std::make_shared<const PackerSet<entities::GroupId>>(
+      PackerSet<entities::GroupId>{group(1), group(2)});
 
   auto objectPartition = object_partition(
       partition(),
@@ -801,7 +802,8 @@ CO_TEST_F(
   auto assignment = getInitialAssignment(universe);
 
   const entities::ScopeItemId aggregationScopeItemId = region(1);
-  const PackerSet<entities::GroupId> groupIds = {group(1), group(2)};
+  const auto groupIds = std::make_shared<const PackerSet<entities::GroupId>>(
+      PackerSet<entities::GroupId>{group(1), group(2)});
 
   auto objectPartition = object_partition(
       partition(),

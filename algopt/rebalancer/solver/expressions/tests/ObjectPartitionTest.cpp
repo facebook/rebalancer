@@ -21,6 +21,13 @@
 #include <gtest/gtest.h>
 
 namespace facebook::rebalancer::packer::tests {
+namespace {
+std::shared_ptr<const PackerSet<entities::GroupId>> makeFilteredGroupIds(
+    PackerSet<entities::GroupId> groupIds) {
+  return std::make_shared<const PackerSet<entities::GroupId>>(
+      std::move(groupIds));
+}
+} // namespace
 
 class ObjectPartitionTest : public ExpressionTestsBase {
  protected:
@@ -45,19 +52,16 @@ CO_TEST_F(ObjectPartitionTest, ThrowsWhenGroupLimitsContainFilteredOutGroup) {
   const auto partition1Id = partitionId(kPartitionName);
   const auto objectCountDimId = dimensionId("object_count");
 
-  // Create filteredGroupIds that only includes group(1)
-  PackerSet<entities::GroupId> filteredGroupIds{group(1)};
+  const auto filteredGroupIds = makeFilteredGroupIds({group(1)});
 
   // Try to create ObjectPartition with groupLimits containing group(2) which
   // is not in filteredGroupIds
   REBALANCER_EXPECT_RUNTIME_ERROR(
       ObjectPartition(
-          partition1Id,
+          std::make_shared<const PartitionInfo>(
+              universe, partition1Id, filteredGroupIds),
           objectCountDimId,
-          {{group(1), 1.0}, {group(2), 2.0}}, // group(2) not in filter
-          universe,
-          std::nullopt,
-          filteredGroupIds),
+          {{group(1), 1.0}, {group(2), 2.0}}), // group(2) not in filter
       "groupLimits contains group that is not in filteredGroupIds");
 }
 
@@ -77,19 +81,17 @@ CO_TEST_F(
   const auto partition1Id = partitionId(kPartitionName);
   const auto objectCountDimId = dimensionId("object_count");
 
-  // Create filteredGroupIds that only includes group(1)
-  PackerSet<entities::GroupId> filteredGroupIds{group(1)};
+  const auto filteredGroupIds = makeFilteredGroupIds({group(1)});
 
   // Try to create ObjectPartition with groupCoefficients containing group(2)
   // which is not in filteredGroupIds
   REBALANCER_EXPECT_RUNTIME_ERROR(
       ObjectPartition(
-          partition1Id,
+          std::make_shared<const PartitionInfo>(
+              universe, partition1Id, filteredGroupIds),
           objectCountDimId,
           {},
-          universe,
           std::nullopt,
-          filteredGroupIds,
           {{group(1), 1.0}, {group(2), 2.0}}, // group(2) not in filter
           1.0,
           1.0),
@@ -112,16 +114,14 @@ CO_TEST_F(ObjectPartitionTest, FilteredGroupIdsGetGroupLimitAndCoefficient) {
   const auto partition1Id = partitionId(kPartitionName);
   const auto objectCountDimId = dimensionId("object_count");
 
-  const std::optional<PackerSet<entities::GroupId>> filteredGroupIds =
-      PackerSet<entities::GroupId>{group(1), group(2)};
+  const auto filteredGroupIds = makeFilteredGroupIds({group(1), group(2)});
 
   const ObjectPartition objectPartition(
-      partition1Id,
+      std::make_shared<const PartitionInfo>(
+          universe, partition1Id, filteredGroupIds),
       objectCountDimId,
       {{group(1), 10.0}, {group(2), 20.0}},
-      universe,
       std::nullopt,
-      filteredGroupIds,
       {{group(1), 1.5}, {group(2), 2.5}});
 
   // Should work for filtered groups
@@ -162,16 +162,13 @@ CO_TEST_F(ObjectPartitionTest, FilteredGroupIdsObjectGroups) {
   const auto partition1Id = partitionId(kPartitionName);
   const auto objectCountDimId = dimensionId("object_count");
 
-  const std::optional<PackerSet<entities::GroupId>> filteredGroupIds =
-      PackerSet<entities::GroupId>{group(1), group(2)};
+  const auto filteredGroupIds = makeFilteredGroupIds({group(1), group(2)});
 
   const ObjectPartition objectPartition(
-      partition1Id,
+      std::make_shared<const PartitionInfo>(
+          universe, partition1Id, filteredGroupIds),
       objectCountDimId,
-      {{group(1), 10.0}, {group(2), 20.0}},
-      universe,
-      std::nullopt,
-      filteredGroupIds);
+      {{group(1), 10.0}, {group(2), 20.0}});
 
   const PackerMap<entities::ObjectId, std::vector<entities::GroupId>>
       expectedGroups = {
@@ -201,16 +198,13 @@ CO_TEST_F(ObjectPartitionTest, EmptyFilteredGroupIds) {
   const auto partition1Id = partitionId(kPartitionName);
   const auto objectCountDimId = dimensionId("object_count");
 
-  const std::optional<PackerSet<entities::GroupId>> filteredGroupIds =
-      PackerSet<entities::GroupId>{};
+  const auto filteredGroupIds = makeFilteredGroupIds({});
 
   const ObjectPartition objectPartition(
-      partition1Id,
+      std::make_shared<const PartitionInfo>(
+          universe, partition1Id, filteredGroupIds),
       objectCountDimId,
-      {},
-      universe,
-      std::nullopt,
-      filteredGroupIds);
+      {});
 
   // All objects should be filtered out
   EXPECT_TRUE(objectPartition.getObjectGroups().empty());
@@ -232,16 +226,14 @@ CO_TEST_F(ObjectPartitionTest, FilteredGroupIdsWithDefaultLimits) {
   const auto partition1Id = partitionId(kPartitionName);
   const auto objectCountDimId = dimensionId("object_count");
 
-  const std::optional<PackerSet<entities::GroupId>> filteredGroupIds =
-      PackerSet<entities::GroupId>{group(1), group(2)};
+  const auto filteredGroupIds = makeFilteredGroupIds({group(1), group(2)});
 
   const ObjectPartition objectPartition(
-      partition1Id,
+      std::make_shared<const PartitionInfo>(
+          universe, partition1Id, filteredGroupIds),
       objectCountDimId,
       {{group(1), 5.0}}, // Only group 1 has explicit limit
-      universe,
       std::nullopt,
-      filteredGroupIds,
       {},
       /*defaultGroupLimit=*/10.0);
 

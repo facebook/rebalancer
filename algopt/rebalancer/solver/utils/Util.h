@@ -15,6 +15,7 @@
 #pragma once
 
 #include <folly/FileUtil.h>
+#include <folly/hash/Hash.h>
 #include <folly/logging/xlog.h>
 
 #include <ostream>
@@ -46,6 +47,16 @@ using PackerMap = folly::F14FastMap<Key, Value>;
 template <class Value>
 using PackerSet = folly::F14FastSet<Value>;
 #endif
+
+// Order-independent hash for an unordered set, matching its order-independent
+// operator==. Unordered sets have no default hash, so use this as an explicit
+// hasher for maps or composite keys.
+struct UnorderedSetHash {
+  template <class Set>
+  std::size_t operator()(const Set& set) const {
+    return folly::hash::commutative_hash_combine_range(set.begin(), set.end());
+  }
+};
 
 template <class K, class V>
 std::ostream& operator<<(std::ostream& os, const PackerMap<K, V>& m) {

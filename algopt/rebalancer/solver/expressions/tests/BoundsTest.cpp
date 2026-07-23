@@ -115,7 +115,9 @@ class BoundsTest : public ExpressionTestsBase {
 
     // Create ObjectPartition
     auto objectPartition = std::make_shared<ObjectPartition>(
-        partition1Id, objectWeightDimensionId, groupLimits, *universe_);
+        std::make_shared<const PartitionInfo>(*universe_, partition1Id),
+        objectWeightDimensionId,
+        groupLimits);
 
     // Create ObjectPartitionLookup
     Assignment assignment(universe_->getContainers().getInitialAssignment());

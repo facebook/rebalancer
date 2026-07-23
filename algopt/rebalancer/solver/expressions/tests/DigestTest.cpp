@@ -628,7 +628,9 @@ CO_TEST_F(DigestTest, ObjectPartitionLookup) {
   }
 
   auto objectPartition = std::make_shared<ObjectPartition>(
-      partition1Id, objectWeightDimensionId, groupLimits, universe);
+      std::make_shared<const PartitionInfo>(universe, partition1Id),
+      objectWeightDimensionId,
+      groupLimits);
 
   const Assignment assignment(universe.getContainers().getInitialAssignment());
   auto ePartitionLookup = std::make_shared<ObjectPartitionLookupDefault>(

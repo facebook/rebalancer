@@ -20,6 +20,7 @@
 #include "algopt/rebalancer/entities/Set.h"
 #include "algopt/rebalancer/interface/thrift/ThriftUtils.h"
 #include "algopt/rebalancer/solver/expressions/GroupRoutingTrafficLookup.h"
+#include "algopt/rebalancer/solver/expressions/ObjectPartition.h"
 #include "algopt/rebalancer/solver/expressions/ObjectPartitionLookup.h"
 #include "algopt/rebalancer/solver/expressions/Operators.h"
 
@@ -1054,14 +1055,14 @@ ExprPtr ExpressionBuilder::getObjectPartition(
     entities::PartitionId partitionId,
     bool normalizeByGroupSize,
     const std::optional<ScopeParams>& scopeParams,
-    std::optional<PackerSet<entities::GroupId>> filteredGroupIds,
+    std::shared_ptr<const entities::Set<entities::GroupId>> filteredGroupIds,
     double defaultGroupCoefficient) {
   // Only use cache when groupLimits is empty since entities::Map<GroupId,
   // double> doesn't have a standard hash function
   if (groupLimits.empty()) {
     // Compute hash of filteredGroupIds for cache key using commutative hash
     std::optional<size_t> filteredGroupIdsHash;
-    if (filteredGroupIds.has_value()) {
+    if (filteredGroupIds) {
       filteredGroupIdsHash = folly::hash::commutative_hash_combine_range(
           filteredGroupIds->begin(), filteredGroupIds->end());
     }
@@ -1103,7 +1104,7 @@ ExprPtr ExpressionBuilder::createObjectPartition(
     entities::PartitionId partitionId,
     bool normalizeByGroupSize,
     const std::optional<ScopeParams>& scopeParams,
-    std::optional<PackerSet<entities::GroupId>> filteredGroupIds,
+    std::shared_ptr<const entities::Set<entities::GroupId>> filteredGroupIds,
     double defaultGroupCoefficient) {
   auto& dimension = universe_->getObjects().getDimension(dimensionId);
   if (dimension.size() != 1 || dimension.at(0).isRoutingConfigBased()) {
@@ -1117,8 +1118,7 @@ ExprPtr ExpressionBuilder::createObjectPartition(
   const auto& partition = universe_->getPartition(partitionId);
   if (normalizeByGroupSize) {
     for (const auto& groupId : partition.getGroupIds()) {
-      if (filteredGroupIds.has_value() &&
-          !filteredGroupIds->contains(groupId)) {
+      if (filteredGroupIds && !filteredGroupIds->contains(groupId)) {
         continue;
       }
       normalizationCoefs[groupId] =
@@ -1151,17 +1151,27 @@ ExprPtr ExpressionBuilder::createObjectPartition(
   }
 
   return object_partition(
-      partitionId,
+      getPartitionInfo(partitionId, std::move(filteredGroupIds)),
       dimensionId,
       groupLimits,
-      *universe_,
       std::move(scopeItemIdsOpt),
-      std::move(filteredGroupIds),
       std::move(normalizationCoefs),
       // TODO: consider removing defaultGroupLimit as it seems to be only used
       // in tests (?)
       0.0 /*defaultGroupLimit*/,
       defaultGroupCoefficient);
+}
+
+std::shared_ptr<const PartitionInfo> ExpressionBuilder::getPartitionInfo(
+    entities::PartitionId partitionId,
+    std::shared_ptr<const entities::Set<entities::GroupId>> filteredGroupIds) {
+  return partitionInfoCache_.getSavedOrCompute(
+      PartitionInfoCacheKey{
+          .partitionId = partitionId, .filteredGroupIds = filteredGroupIds},
+      [&]() {
+        return std::make_shared<const PartitionInfo>(
+            *universe_, partitionId, std::move(filteredGroupIds));
+      });
 }
 
 std::shared_ptr<Expression> ExpressionBuilder::getObjectPartitionLookup(

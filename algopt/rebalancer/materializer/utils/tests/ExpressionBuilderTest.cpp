@@ -2475,13 +2475,13 @@ TEST_F(ExpressionBuilderTest, ObjectPartitionFilteredGroupIdsOrderCacheHit) {
 
   // Create PackerSets with same elements but potentially different insertion
   // order
-  PackerSet<entities::GroupId> filtered1;
-  filtered1.insert(job(0));
-  filtered1.insert(job(1));
+  auto filtered1 = std::make_shared<PackerSet<entities::GroupId>>();
+  filtered1->insert(job(0));
+  filtered1->insert(job(1));
 
-  PackerSet<entities::GroupId> filtered2;
-  filtered2.insert(job(1)); // Insert in reverse order
-  filtered2.insert(job(0));
+  auto filtered2 = std::make_shared<PackerSet<entities::GroupId>>();
+  filtered2->insert(job(1)); // Insert in reverse order
+  filtered2->insert(job(0));
 
   auto& builder = expressionBuilder();
   auto expr1 = builder.getObjectPartition(
@@ -2494,8 +2494,8 @@ TEST_F(ExpressionBuilderTest, ObjectPartitionFilteredGroupIdsOrderCacheHit) {
   EXPECT_EQ(expr1.get(), expr2.get());
 
   // Different filtered groups should produce different expressions
-  PackerSet<entities::GroupId> filtered3;
-  filtered3.insert(job(0));
+  auto filtered3 = std::make_shared<PackerSet<entities::GroupId>>();
+  filtered3->insert(job(0));
 
   auto expr3 = builder.getObjectPartition(
       emptyGroupLimits, cpu(), job(), false, std::nullopt, filtered3);
@@ -2504,7 +2504,7 @@ TEST_F(ExpressionBuilderTest, ObjectPartitionFilteredGroupIdsOrderCacheHit) {
 
   // Test with no filter vs with filter
   auto expr4 = builder.getObjectPartition(
-      emptyGroupLimits, cpu(), job(), false, std::nullopt, std::nullopt);
+      emptyGroupLimits, cpu(), job(), false, std::nullopt, nullptr);
 
   EXPECT_NE(expr1.get(), expr4.get());
 }

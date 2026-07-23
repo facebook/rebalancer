@@ -18,6 +18,7 @@
 #include "algopt/rebalancer/solver/expressions/Expression.h"
 #include "algopt/rebalancer/solver/expressions/ObjectLookup.h"
 #include "algopt/rebalancer/solver/expressions/ObjectLookupDynamic.h"
+#include "algopt/rebalancer/solver/expressions/ObjectPartition.h"
 #include "algopt/rebalancer/solver/expressions/ObjectPartitionLookup.h"
 #include "algopt/rebalancer/solver/expressions/ObjectVector.h"
 #include "algopt/rebalancer/solver/expressions/StableStayed.h"
@@ -130,12 +131,23 @@ std::shared_ptr<StableStayed> stable_stayed(
     const Assignment& initialAssignment);
 
 ExprPtr object_partition(
+    std::shared_ptr<const PartitionInfo> partitionInfo,
+    entities::DimensionId dimensionId,
+    PackerMap<entities::GroupId, double> groupLimits,
+    std::optional<PackerSet<entities::ScopeItemId>> scopeItemIds = std::nullopt,
+    PackerMap<entities::GroupId, double> groupCoefficients = {},
+    double defaultGroupLimit = 0.0,
+    double defaultGroupCoefficient = 1.0);
+
+// TODO: move call sites to the overload above and delete this.
+ExprPtr object_partition(
     entities::PartitionId partitionId,
     entities::DimensionId dimensionId,
     PackerMap<entities::GroupId, double> groupLimits,
     const entities::Universe& universe,
     std::optional<PackerSet<entities::ScopeItemId>> scopeItemIds = std::nullopt,
-    std::optional<PackerSet<entities::GroupId>> filteredGroupIds = std::nullopt,
+    std::shared_ptr<const PackerSet<entities::GroupId>> filteredGroupIds =
+        nullptr,
     PackerMap<entities::GroupId, double> groupCoefficients = {},
     double defaultGroupLimit = 0.0,
     double defaultGroupCoefficient = 1.0);

@@ -427,10 +427,9 @@ CO_TEST_F(ObjectPotentialsTest, ObjectPartitionLookup) {
   auto assignment = Assignment(universe.getContainers().getInitialAssignment());
 
   auto partition = std::make_shared<ObjectPartition>(
-      partition1Id,
+      std::make_shared<const PartitionInfo>(universe, partition1Id),
       objectCountDimId,
-      PackerMap<entities::GroupId, double>({{group1, 2}, {group2, 3}}),
-      universe);
+      PackerMap<entities::GroupId, double>({{group1, 2}, {group2, 3}}));
 
   ObjectPartitionLookup lookup(
       partition,

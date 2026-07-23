@@ -37,23 +37,64 @@ using entities::ObjectId;
 using entities::PartitionId;
 using entities::ScopeItemId;
 
-ObjectPartition::ObjectPartition(
+PartitionInfo::PartitionInfo(
+    const entities::Universe& universe,
     PartitionId partitionId,
+    std::shared_ptr<const PackerSet<GroupId>> filteredGroupIds)
+    : universe_(universe),
+      partitionId_(partitionId),
+      filteredGroupIds_(std::move(filteredGroupIds)) {
+  const auto& rawObjectIdToGroupIds =
+      universe_.getPartition(partitionId_).getObjectIdToGroupIdsPtr();
+  // No filter: share the partition's map instead of copying it.
+  if (!filteredGroupIds_) {
+    objectIdToGroupIds_ = rawObjectIdToGroupIds;
+    return;
+  }
+  entities::Map<ObjectId, std::vector<GroupId>> filtered;
+  for (const auto& [objectId, groupIds] : *rawObjectIdToGroupIds) {
+    std::vector<GroupId> kept;
+    std::ranges::copy_if(
+        groupIds, std::back_inserter(kept), [this](const auto& groupId) {
+          return filteredGroupIds_->contains(groupId);
+        });
+    if (!kept.empty()) {
+      filtered.emplace(objectId, std::move(kept));
+    }
+  }
+  objectIdToGroupIds_ =
+      std::make_shared<const entities::Map<ObjectId, std::vector<GroupId>>>(
+          std::move(filtered));
+}
+
+void PartitionInfo::forEachRelevantGroup(
+    folly::FunctionRef<void(GroupId)> fn) const {
+  if (filteredGroupIds_) {
+    for (const auto groupId : *filteredGroupIds_) {
+      fn(groupId);
+    }
+  } else {
+    for (const auto groupId :
+         universe_.getPartition(partitionId_).getGroupIds()) {
+      fn(groupId);
+    }
+  }
+}
+
+ObjectPartition::ObjectPartition(
+    std::shared_ptr<const PartitionInfo> partitionInfo,
     DimensionId dimensionId,
     PackerMap<GroupId, double> groupLimits,
-    const entities::Universe& universe,
     std::optional<PackerSet<ScopeItemId>> scopeItemIds,
-    std::optional<PackerSet<GroupId>> filteredGroupIds,
     PackerMap<GroupId, double> groupCoefficients,
     double defaultGroupLimit,
     double defaultGroupCoefficient)
-    : Expression(universe),
-      partitionId_(partitionId),
+    : Expression(partitionInfo->getUniverse()),
+      partitionInfo_(std::move(partitionInfo)),
       dimensionId_(dimensionId),
       groupLimits_(std::move(groupLimits)),
       defaultGroupLimit_(defaultGroupLimit),
       scopeItemIds_(std::move(scopeItemIds)),
-      filteredGroupIds_(std::move(filteredGroupIds)),
       groupCoefficients_(std::move(groupCoefficients)),
       defaultGroupCoefficient_(defaultGroupCoefficient) {
   auto& objectDimension = universe_->getObjects().getDimension(dimensionId_);
@@ -69,43 +110,21 @@ ObjectPartition::ObjectPartition(
 
   dimension_ = &objectDimension.at(0);
 
-  objectIdToGroupIds_ =
-      universe_->getPartition(partitionId_).getObjectIdToGroupIdsPtr();
-
-  if (filteredGroupIds_.has_value()) {
-    for (const auto& [groupId, _] : groupLimits_) {
-      if (!filteredGroupIds_->contains(groupId)) {
+  const auto checkGroupsRelevant = [&](const auto& groupToValue,
+                                       std::string_view name) {
+    for (const auto& [groupId, _] : groupToValue) {
+      if (!partitionInfo_->isRelevant(groupId)) {
         throw std::runtime_error(
-            "groupLimits contains group that is not in filteredGroupIds");
+            fmt::format(
+                "{} contains group that is not in filteredGroupIds", name));
       }
     }
-    for (const auto& [groupId, _] : groupCoefficients_) {
-      if (!filteredGroupIds_->contains(groupId)) {
-        throw std::runtime_error(
-            "groupCoefficients contains group that is not in filteredGroupIds");
-      }
-    }
-
-    // Only include the relevant groups if filteredGroupIds is passed in
-    entities::Map<entities::ObjectId, std::vector<entities::GroupId>>
-        filteredObjectIdToGroupIds;
-    for (const auto& [objectId, groupIds] : *objectIdToGroupIds_) {
-      std::vector<GroupId> filtered;
-      std::ranges::copy_if(
-          groupIds, std::back_inserter(filtered), [this](const auto& groupId) {
-            return filteredGroupIds_->contains(groupId);
-          });
-      if (!filtered.empty()) {
-        filteredObjectIdToGroupIds.emplace(objectId, std::move(filtered));
-      }
-    }
-    objectIdToGroupIds_ = std::make_shared<const entities::Map<
-        entities::ObjectId,
-        std::vector<entities::GroupId>>>(std::move(filteredObjectIdToGroupIds));
-  }
+  };
+  checkGroupsRelevant(groupLimits_, "groupLimits");
+  checkGroupsRelevant(groupCoefficients_, "groupCoefficients");
 
   // Compute group weights.
-  for (auto& [objectId, groupIds] : *objectIdToGroupIds_) {
+  for (auto& [objectId, groupIds] : partitionInfo_->getObjectIdToGroupIds()) {
     double maxObjectWeight = std::numeric_limits<double>::lowest();
     double minObjectWeight = std::numeric_limits<double>::max();
     if (scopeItemIds_.has_value() && !scopeItemIds_.value().empty()) {
@@ -174,13 +193,10 @@ const std::string_view& ObjectPartition::getType() const {
 
 void ObjectPartition::updateEquivalenceSets(
     EquivalenceSets& equivalenceSets) const {
-  if (filteredGroupIds_.has_value()) {
-    for (const auto groupId : *filteredGroupIds_) {
-      equivalenceSets.mappingMerge(partitionId_, groupId);
-    }
-  } else {
-    equivalenceSets.mappingMerge(partitionId_);
-  }
+  partitionInfo_->forEachRelevantGroup([&](const entities::GroupId groupId) {
+    equivalenceSets.mappingMerge(partitionInfo_->getPartitionId(), groupId);
+  });
+
   if (dimension_->isDynamic()) {
     for (const auto scopeItemId : *scopeItemIds_) {
       equivalenceSets.mappingMerge(dimensionId_, scopeItemId);
@@ -203,10 +219,11 @@ bool ObjectPartition::shouldComputeBounds() const {
 std::string ObjectPartition::innerDigest(size_t maxChildren) const {
   std::stringstream ss;
   ss << "[obj: groups]";
-  for (const auto& [idx, entry] : folly::enumerate(*objectIdToGroupIds_)) {
+  const auto& objectIdToGroupIds = partitionInfo_->getObjectIdToGroupIds();
+  for (const auto [idx, entry] : folly::enumerate(objectIdToGroupIds)) {
     const auto& [objectId, groupIds] = entry;
     if (idx >= maxChildren) {
-      ss << "... " << objectIdToGroupIds_->size() - maxChildren << " more";
+      ss << "... " << objectIdToGroupIds.size() - maxChildren << " more";
       break;
     }
     ss << " ";
@@ -251,7 +268,7 @@ ExpressionProperties ObjectPartition::getProperties() const {
 }
 
 double ObjectPartition::getGroupLimit(GroupId groupId) const {
-  if (filteredGroupIds_.has_value() && !filteredGroupIds_->contains(groupId)) {
+  if (!partitionInfo_->isRelevant(groupId)) {
     throw std::runtime_error(
         fmt::format(
             "Cannot get limit for group {} which is not in filteredGroupIds",
@@ -261,7 +278,7 @@ double ObjectPartition::getGroupLimit(GroupId groupId) const {
 }
 
 double ObjectPartition::getGroupCoefficient(GroupId groupId) const {
-  if (filteredGroupIds_.has_value() && !filteredGroupIds_->contains(groupId)) {
+  if (!partitionInfo_->isRelevant(groupId)) {
     throw std::runtime_error(
         fmt::format(
             "Cannot get coefficient for group {} which is not in filteredGroupIds",
@@ -300,12 +317,13 @@ ObjectPartition::getGroupToMaxAndMinNormalizedDeviationsFromLimit() const {
 
 const std::vector<GroupId>& ObjectPartition::getObjectGroups(
     ObjectId objectId) const {
-  return folly::get_ref_default(*objectIdToGroupIds_, objectId, kEmptyGroups);
+  return folly::get_ref_default(
+      partitionInfo_->getObjectIdToGroupIds(), objectId, kEmptyGroups);
 }
 
 const PackerMap<ObjectId, std::vector<GroupId>>&
 ObjectPartition::getObjectGroups() const {
-  return *objectIdToGroupIds_;
+  return partitionInfo_->getObjectIdToGroupIds();
 }
 
 // Sometimes we can more efficiently calculate when operating on
@@ -319,7 +337,8 @@ ObjectPartition::getEquivSetGroups(const EquivalenceSets& equivalenceSets) {
   return equivSetGroups_.getSavedOrCompute([&] {
     PackerMap<GroupId, PackerMap<EquivalenceSetId, int>> equivSetGroups;
     PackerMap<GroupId, int> membershipCounts;
-    for (const auto& [object, groups] : *objectIdToGroupIds_) {
+    for (const auto& [object, groups] :
+         partitionInfo_->getObjectIdToGroupIds()) {
       membershipCounts.clear();
       for (const auto& group : groups) {
         membershipCounts[group]++;
@@ -358,7 +377,7 @@ const PackerMap<GroupId, double>& ObjectPartition::getGroupPositiveLimits()
 }
 
 const entities::PartitionId ObjectPartition::getPartitionId() const {
-  return partitionId_;
+  return partitionInfo_->getPartitionId();
 }
 
 const entities::DimensionId ObjectPartition::getDimensionId() const {

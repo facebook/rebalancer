@@ -210,7 +210,8 @@ CapacityWithGroupPresenceSpecBuilder::constraints(
     case interface::CapacityWithGroupPresenceUsageIntent::PER_SCOPE_ITEM: {
       // Aggregation groups are only needed by (and computed for) the optimized
       // path.
-      std::optional<entities::Set<entities::GroupId>> aggregationGroupIds;
+      std::shared_ptr<const entities::Set<entities::GroupId>>
+          aggregationGroupIds;
       if (shouldUseOptimizedPath()) {
         aggregationGroupIds = buildAggregationGroupIds(expressionBuilder);
       }
@@ -226,8 +227,8 @@ CapacityWithGroupPresenceSpecBuilder::constraints(
 folly::coro::Task<std::vector<ConstraintInfo>>
 CapacityWithGroupPresenceSpecBuilder::scopeItemConstraints(
     ExpressionBuilder& expressionBuilder,
-    const std::optional<entities::Set<entities::GroupId>>& aggregationGroupIds)
-    const {
+    const std::shared_ptr<const entities::Set<entities::GroupId>>&
+        aggregationGroupIds) const {
   const auto& scopeItemIds = getRelevantMainScopeItemIds();
   std::vector<ConstraintInfo> constraints;
   constraints.reserve(scopeItemIds.size());
@@ -362,19 +363,19 @@ folly::coro::Task<CapacityWithGroupPresenceSpecBuilder::UtilExprs>
 CapacityWithGroupPresenceSpecBuilder::getScopeItemUtil(
     entities::ScopeItemId mainScopeItemId,
     ExpressionBuilder& expressionBuilder,
-    const std::optional<entities::Set<entities::GroupId>>& aggregationGroupIds)
-    const {
+    const std::shared_ptr<const entities::Set<entities::GroupId>>&
+        aggregationGroupIds) const {
   if (shouldUseOptimizedPath()) {
-    if (!aggregationGroupIds.has_value() || aggregationGroupIds->empty()) {
+    if (!aggregationGroupIds || aggregationGroupIds->empty()) {
       co_return zeroUtilExprs();
     }
     const auto& dimension =
         universe_->getObjects().getDimension(dimensionId_).only();
     co_return dimension.isDynamic()
         ? buildOptimizedScopeItemUtilExprForDynamicDimension(
-              mainScopeItemId, expressionBuilder, *aggregationGroupIds)
+              mainScopeItemId, expressionBuilder, aggregationGroupIds)
         : buildOptimizedScopeItemUtilExprForStaticDimension(
-              mainScopeItemId, expressionBuilder, *aggregationGroupIds);
+              mainScopeItemId, expressionBuilder, aggregationGroupIds);
   }
 
   auto utilExprs = zeroUtilExprs();
@@ -398,7 +399,7 @@ bool CapacityWithGroupPresenceSpecBuilder::shouldUseOptimizedPath() const {
   return needsContinuousExpressions_ && !dimension.isRoutingConfigBased();
 }
 
-entities::Set<entities::GroupId>
+std::shared_ptr<const entities::Set<entities::GroupId>>
 CapacityWithGroupPresenceSpecBuilder::buildAggregationGroupIds(
     ExpressionBuilder& expressionBuilder) const {
   entities::Set<entities::GroupId> aggregationGroupIds;
@@ -407,7 +408,8 @@ CapacityWithGroupPresenceSpecBuilder::buildAggregationGroupIds(
         mainPartitionId_, aggregationPartitionId_, mainGroupId);
     aggregationGroupIds.insert(nestedGroupIds.begin(), nestedGroupIds.end());
   }
-  return aggregationGroupIds;
+  return std::make_shared<const entities::Set<entities::GroupId>>(
+      std::move(aggregationGroupIds));
 }
 
 CapacityWithGroupPresenceSpecBuilder::UtilExprs
@@ -463,7 +465,8 @@ CapacityWithGroupPresenceSpecBuilder::
     buildOptimizedScopeItemUtilExprForStaticDimension(
         const entities::ScopeItemId& mainScopeItemId,
         ExpressionBuilder& expressionBuilder,
-        const entities::Set<entities::GroupId>& aggregationGroupIds) const {
+        const std::shared_ptr<const entities::Set<entities::GroupId>>&
+            aggregationGroupIds) const {
   auto utilExprs = zeroUtilExprs();
   auto objectPartition = expressionBuilder.getObjectPartition(
       /*groupLimits=*/{},
@@ -491,7 +494,8 @@ CapacityWithGroupPresenceSpecBuilder::
     buildOptimizedScopeItemUtilExprForDynamicDimension(
         const entities::ScopeItemId& mainScopeItemId,
         ExpressionBuilder& expressionBuilder,
-        const entities::Set<entities::GroupId>& aggregationGroupIds) const {
+        const std::shared_ptr<const entities::Set<entities::GroupId>>&
+            aggregationGroupIds) const {
   auto utilExprs = zeroUtilExprs();
 
   for (const auto& aggregationScopeItemId : expressionBuilder.getNestedImage(

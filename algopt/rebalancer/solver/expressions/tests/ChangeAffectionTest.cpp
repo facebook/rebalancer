@@ -226,10 +226,10 @@ CO_TEST_F(ChangeAffectionTestCustom, ObjectPartition) {
   buildUniverse();
 
   const ObjectPartition objectPartition(
-      partitionId("partition1"),
+      std::make_shared<const PartitionInfo>(
+          getUniverse(), partitionId("partition1")),
       objectCountDimensionId,
-      entities::Map<entities::GroupId, double>{},
-      getUniverse());
+      entities::Map<entities::GroupId, double>{});
   const AffectedByChangeDecisionData data(1, 1);
   EXPECT_FALSE(objectPartition.getDirectlyAffectedContainers().exists());
   EXPECT_TRUE(objectPartition.isAffectedByChange(data) == std::nullopt);
@@ -253,10 +253,10 @@ CO_TEST_F(ChangeAffectionTestCustom, ObjectPartitionLookup) {
       scopeItemId(containerScopeId, "container1");
 
   auto partition = std::make_shared<ObjectPartition>(
-      partitionId("partition1"),
+      std::make_shared<const PartitionInfo>(
+          universe, partitionId("partition1")),
       objectCountDimensionId,
-      entities::Map<entities::GroupId, double>{},
-      universe);
+      entities::Map<entities::GroupId, double>{});
 
   const ObjectPartitionLookup objectPartitionLookup(
       partition,

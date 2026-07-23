@@ -20,6 +20,8 @@
 #include "algopt/rebalancer/solver/utils/BoundConstraints.h"
 #include "algopt/rebalancer/solver/utils/Util.h"
 
+#include <folly/Function.h>
+
 namespace facebook::rebalancer {
 
 template <class Value>
@@ -27,16 +29,52 @@ using ThreadSafeContainer = materializer::SingleEntryCache<Value>;
 
 class Change;
 
+// The groups each object belongs to in one partition, optionally limited to a
+// chosen set of groups.
+class PartitionInfo {
+ public:
+  PartitionInfo(
+      const entities::Universe& universe,
+      entities::PartitionId partitionId,
+      std::shared_ptr<const PackerSet<entities::GroupId>> filteredGroupIds =
+          nullptr);
+
+  entities::PartitionId getPartitionId() const {
+    return partitionId_;
+  }
+
+  const entities::Universe& getUniverse() const {
+    return universe_;
+  }
+
+  bool isRelevant(entities::GroupId groupId) const {
+    return !filteredGroupIds_ || filteredGroupIds_->contains(groupId);
+  }
+
+  void forEachRelevantGroup(
+      folly::FunctionRef<void(entities::GroupId)> fn) const;
+
+  const entities::Map<entities::ObjectId, std::vector<entities::GroupId>>&
+  getObjectIdToGroupIds() const {
+    return *objectIdToGroupIds_;
+  }
+
+ private:
+  const entities::Universe& universe_;
+  entities::PartitionId partitionId_;
+  std::shared_ptr<const PackerSet<entities::GroupId>> filteredGroupIds_;
+  std::shared_ptr<
+      const entities::Map<entities::ObjectId, std::vector<entities::GroupId>>>
+      objectIdToGroupIds_;
+};
+
 class ObjectPartition : public Expression {
  public:
   ObjectPartition(
-      entities::PartitionId partitionId,
+      std::shared_ptr<const PartitionInfo> partitionInfo,
       entities::DimensionId dimensionId,
       PackerMap<entities::GroupId, double> groupLimits,
-      const entities::Universe& universe,
       std::optional<PackerSet<entities::ScopeItemId>> scopeItemIds =
-          std::nullopt,
-      std::optional<PackerSet<entities::GroupId>> filteredGroupIds =
           std::nullopt,
       PackerMap<entities::GroupId, double> groupCoefficients = {},
       double defaultGroupLimit = 0.0,
@@ -105,7 +143,7 @@ class ObjectPartition : public Expression {
       const BoundConstraints& bc) const override;
 
  private:
-  entities::PartitionId partitionId_;
+  std::shared_ptr<const PartitionInfo> partitionInfo_;
   entities::DimensionId dimensionId_;
 
   // Maps a groupId to its limit. Use param 'defaultGroupLimit' to set a default
@@ -120,8 +158,6 @@ class ObjectPartition : public Expression {
   // retrieved from the scope image of the ObjectPartitionLookup and dimension
   // scopes.
   std::optional<PackerSet<entities::ScopeItemId>> scopeItemIds_;
-
-  std::optional<PackerSet<entities::GroupId>> filteredGroupIds_;
 
   // Maps a groupId to its limit for the subset of groups whch have a negative
   // limit.
@@ -155,10 +191,6 @@ class ObjectPartition : public Expression {
           entities::EquivalenceSetId /* equiv set */,
           int /* object in equiv set */>>>
       equivSetGroups_;
-
-  std::shared_ptr<
-      const entities::Map<entities::ObjectId, std::vector<entities::GroupId>>>
-      objectIdToGroupIds_;
 
   const entities::ObjectScalarDimension* dimension_;
 };

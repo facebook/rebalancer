@@ -475,22 +475,39 @@ std::shared_ptr<StableStayed> stable_stayed(
 }
 
 ExprPtr object_partition(
+    std::shared_ptr<const PartitionInfo> partitionInfo,
+    entities::DimensionId dimensionId,
+    PackerMap<entities::GroupId, double> groupLimits,
+    std::optional<PackerSet<entities::ScopeItemId>> scopeItemIds,
+    PackerMap<entities::GroupId, double> groupCoefficients,
+    double defaultGroupLimit,
+    double defaultGroupCoefficient) {
+  return make_shared<ObjectPartition>(
+      std::move(partitionInfo),
+      dimensionId,
+      std::move(groupLimits),
+      std::move(scopeItemIds),
+      std::move(groupCoefficients),
+      defaultGroupLimit,
+      defaultGroupCoefficient);
+}
+
+ExprPtr object_partition(
     entities::PartitionId partitionId,
     entities::DimensionId dimensionId,
     PackerMap<entities::GroupId, double> groupLimits,
     const entities::Universe& universe,
     std::optional<PackerSet<entities::ScopeItemId>> scopeItemIds,
-    std::optional<PackerSet<entities::GroupId>> filteredGroupIds,
+    std::shared_ptr<const PackerSet<entities::GroupId>> filteredGroupIds,
     PackerMap<entities::GroupId, double> groupCoefficients,
     double defaultGroupLimit,
     double defaultGroupCoefficient) {
-  return make_shared<ObjectPartition>(
-      partitionId,
+  return object_partition(
+      std::make_shared<const PartitionInfo>(
+          universe, partitionId, std::move(filteredGroupIds)),
       dimensionId,
       std::move(groupLimits),
-      universe,
       std::move(scopeItemIds),
-      std::move(filteredGroupIds),
       std::move(groupCoefficients),
       defaultGroupLimit,
       defaultGroupCoefficient);

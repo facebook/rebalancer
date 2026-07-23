@@ -56,7 +56,7 @@ ExprPtr GroupDiversitySpecBuilder::buildLookup(
       partitionId_,
       /*normalizeByGroupSize=*/false,
       scopeParams,
-      /*filteredGroupIds=*/std::nullopt,
+      /*filteredGroupIds=*/nullptr,
       /*defaultGroupCoefficient=*/coefficient);
   return expressionBuilder.getObjectPartitionLookup(
       UtilMetric::AFTER,

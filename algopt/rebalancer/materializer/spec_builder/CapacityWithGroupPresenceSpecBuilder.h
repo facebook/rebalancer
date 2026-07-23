@@ -69,7 +69,7 @@ class CapacityWithGroupPresenceSpecBuilder : public SpecBuilder {
   // non-optimized fallback.
   folly::coro::Task<std::vector<ConstraintInfo>> scopeItemConstraints(
       ExpressionBuilder& expressionBuilder,
-      const std::optional<entities::Set<entities::GroupId>>&
+      const std::shared_ptr<const entities::Set<entities::GroupId>>&
           aggregationGroupIds) const;
 
   folly::coro::Task<std::vector<ConstraintInfo>> groupAndScopeItemConstraints(
@@ -91,7 +91,7 @@ class CapacityWithGroupPresenceSpecBuilder : public SpecBuilder {
   folly::coro::Task<UtilExprs> getScopeItemUtil(
       entities::ScopeItemId mainScopeItemId,
       ExpressionBuilder& expressionBuilder,
-      const std::optional<entities::Set<entities::GroupId>>&
+      const std::shared_ptr<const entities::Set<entities::GroupId>>&
           aggregationGroupIds) const;
 
   bool shouldUseOptimizedPath() const;
@@ -99,15 +99,17 @@ class CapacityWithGroupPresenceSpecBuilder : public SpecBuilder {
   UtilExprs buildOptimizedScopeItemUtilExprForStaticDimension(
       const entities::ScopeItemId& mainScopeItemId,
       ExpressionBuilder& expressionBuilder,
-      const entities::Set<entities::GroupId>& aggregationGroupIds) const;
+      const std::shared_ptr<const entities::Set<entities::GroupId>>&
+          aggregationGroupIds) const;
 
   UtilExprs buildOptimizedScopeItemUtilExprForDynamicDimension(
       const entities::ScopeItemId& mainScopeItemId,
       ExpressionBuilder& expressionBuilder,
-      const entities::Set<entities::GroupId>& aggregationGroupIds) const;
+      const std::shared_ptr<const entities::Set<entities::GroupId>>&
+          aggregationGroupIds) const;
 
-  entities::Set<entities::GroupId> buildAggregationGroupIds(
-      ExpressionBuilder& expressionBuilder) const;
+  std::shared_ptr<const entities::Set<entities::GroupId>>
+  buildAggregationGroupIds(ExpressionBuilder& expressionBuilder) const;
 
   UtilExprs createGroupUtilExpr(
       ExprPtr objectPartition,
