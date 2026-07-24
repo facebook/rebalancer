@@ -27,7 +27,7 @@ its binary into memory, say), even when those tasks use little of the dimension.
 | `intent` | enum | No | `PER_SCOPE_ITEM` | Limit per scope item, or per (group, scope item) (see [Intent](#intent)). |
 | `aggregationPartition` | string | No | = `partition` | Finer partition aggregated up to `partition`; used only with the per-(group, scope item) intent (see [Intent](#intent)). |
 | `groupUtilMultipliers` | list | No | `[]` | Multipliers (`GroupUtilMultiplier`) applied to a group's contribution (see [Multipliers](#multipliers)). |
-| `definition` | enum | No | `AFTER` | Which utilization to bound: the final assignment (`AFTER`) or the transient peak during moves (`DURING`) (see [Definition](#definition)). |
+| `definition` | enum | No | `AFTER` | Which utilization to bound: the final assignment (`AFTER`), the transient peak during moves (`DURING`), or both (`DURING_AND_AFTER`) (see [Definition](#definition)). |
 
 ## Example
 
@@ -154,10 +154,13 @@ bound applies to, exactly as in [CapacitySpec](capacity):
 |------------|---------|
 | `AFTER` (default) | Utilization of the final assignment. |
 | `DURING` | Transient peak while moves are in flight (`during = after + initial - stayed`): an object counts toward a scope item if it is there either initially or finally. A scope item that is over its limit cannot be brought under it merely by moving objects out, since they still count during the transition. |
+| `DURING_AND_AFTER` | Enforces the bound on both the transient (`DURING`) and final (`AFTER`) utilizations — two constraints per scope item. Unlike `DURING` alone, the `AFTER` leg can still be driven toward the bound (e.g. by evicting objects) even though the `DURING` leg stays broken. |
 
-The `DURING` definition is intended for use as a **constraint**, not a goal: it
-tracks a transient peak that the solver usually cannot reduce, so as a goal it
-contributes a mostly-fixed offset rather than a useful gradient.
+A pure `DURING` definition is intended for use as a **constraint**, not a goal:
+it tracks a transient peak that the solver usually cannot reduce, so as a goal
+it contributes a mostly-fixed offset rather than a useful gradient.
+`DURING_AND_AFTER` is fine as a goal, since its `AFTER` leg can still be driven
+down (e.g. by evicting objects) even while the `DURING` leg stays fixed.
 
 ## Goal vs. constraint
 

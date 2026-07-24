@@ -142,6 +142,8 @@ std::vector<UtilMetric> getUtilMetrics(
       return {UtilMetric::AFTER};
     case interface::CapacityWithGroupPresenceDefinition::DURING:
       return {UtilMetric::DURING};
+    case interface::CapacityWithGroupPresenceDefinition::DURING_AND_AFTER:
+      return {UtilMetric::DURING, UtilMetric::AFTER};
   }
   throw std::runtime_error(
       "Unknown CapacityWithGroupPresenceDefinition: " +

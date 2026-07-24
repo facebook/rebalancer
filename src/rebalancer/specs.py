@@ -111,7 +111,7 @@ CapacityWithGroupPresenceBound = Literal["MAX", "MIN"]
 CapacityWithGroupPresenceUsageIntent = Literal[
     "PER_SCOPE_ITEM", "PER_GROUP_AND_SCOPE_ITEM"
 ]
-CapacityWithGroupPresenceDefinition = Literal["AFTER", "DURING"]
+CapacityWithGroupPresenceDefinition = Literal["AFTER", "DURING", "DURING_AND_AFTER"]
 GroupUtilMultiplierTarget = Literal["PRESENCE_WEIGHT", "UTILIZATION", "COMMON"]
 
 # Types.thrift (algopt_common/thrift)

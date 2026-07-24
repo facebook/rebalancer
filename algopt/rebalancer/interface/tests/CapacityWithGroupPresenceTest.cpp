@@ -755,6 +755,132 @@ TEST_P(
   }
 }
 
+// End-to-end: DURING_AND_AFTER enforces both the transient (DURING) and final
+// (AFTER) states, for both intents. The AFTER leg still evicts region1's
+// tenant1 objects, but the DURING leg cannot be fixed by eviction (objects
+// initially in a scope item always count toward its DURING utilization), so the
+// constraint stays broken -- for both solver types.
+TEST_P(CapacityWithGroupPresenceTest, MaxConstraintDuringAndAfter) {
+  for (const auto intent :
+       {CapacityWithGroupPresenceUsageIntent::PER_SCOPE_ITEM,
+        CapacityWithGroupPresenceUsageIntent::PER_GROUP_AND_SCOPE_ITEM}) {
+    setUpProblem();
+
+    addCapacityWithGroupPresenceSpec(
+        SpecParams{
+            .isConstraint = true,
+            .intent = intent,
+            .definition =
+                CapacityWithGroupPresenceDefinition::DURING_AND_AFTER});
+
+    const auto solution = solver->solve();
+    const auto initialObjectiveValue =
+        *solution.initialGlobalObjective()->goals()->at(0).value();
+    const auto finalObjectiveValue =
+        *solution.finalGlobalObjective()->goals()->at(0).value();
+
+    // Both DURING and AFTER are broken at region1 initially. The AFTER leg is
+    // fixed by eviction, so the objective drops to the irreducible DURING
+    // violation -- the same exact value for both solvers (invalidState offset
+    // 10000 + violation). Local search's initial objective additionally carries
+    // the (ungated) AFTER continuous penalty that the optimal solver omits, so
+    // the initial value is solver-specific but deterministic.
+    const bool perScopeItem =
+        intent == CapacityWithGroupPresenceUsageIntent::PER_SCOPE_ITEM;
+    EXPECT_NEAR(perScopeItem ? 10300.0 : 10100.0, finalObjectiveValue, 1e-8);
+    if (getSolverAlgoType() == LOCALSEARCH) {
+      EXPECT_NEAR(
+          perScopeItem ? 20608.457446808512 : 20208.282674772039,
+          initialObjectiveValue,
+          1e-8);
+    } else {
+      EXPECT_NEAR(
+          perScopeItem ? 20600.0 : 20200.0, initialObjectiveValue, 1e-8);
+    }
+
+    // The AFTER leg still rewards evicting region1's tenant1 objects -- any one
+    // remaining forces the (per-group or aggregate) AFTER utilization to
+    // tenant1's presence floor of 3 > limit 2 -- so the solver moves all of
+    // them out of region1 even though the DURING leg keeps the constraint
+    // broken.
+    const auto& finalAssignment = *solution.assignment();
+    for (const std::string& object :
+         {"trafficObject1", "trafficObject5", "trafficObject9"}) {
+      const auto& host = finalAssignment.at(object);
+      EXPECT_FALSE(host == "host1" || host == "host2")
+          << object << " (intent " << static_cast<int>(intent)
+          << ") should have been evicted from region1 but is on " << host;
+    }
+  }
+}
+
+// End-to-end goal path (goalCoro -> constraints) with DURING_AND_AFTER. The
+// AFTER leg can be improved by evicting region1's tenant1 objects while the
+// DURING leg stays broken, so the goal value drops but never reaches zero.
+TEST_P(CapacityWithGroupPresenceTest, DuringAndAfterAsGoal) {
+  setUpProblem();
+
+  addCapacityWithGroupPresenceSpec(
+      SpecParams{
+          .isConstraint = false,
+          .definition = CapacityWithGroupPresenceDefinition::DURING_AND_AFTER});
+
+  const auto solution = solver->solve();
+  const auto initialObjectiveValue =
+      *solution.initialGlobalObjective()->goals()->at(0).value();
+  const auto finalObjectiveValue =
+      *solution.finalGlobalObjective()->goals()->at(0).value();
+
+  // The AFTER leg improves (region1 tenant1 evicted) so the goal drops to the
+  // irreducible DURING violation of 3 (same for both solvers); it never reaches
+  // zero. Local search's initial goal additionally carries the AFTER continuous
+  // penalty the optimal solver omits, so the initial value is solver-specific.
+  EXPECT_NEAR(3.0, finalObjectiveValue, 1e-8);
+  if (getSolverAlgoType() == LOCALSEARCH) {
+    EXPECT_NEAR(6.084574468085, initialObjectiveValue, 1e-8);
+  } else {
+    EXPECT_NEAR(6.0, initialObjectiveValue, 1e-8);
+  }
+}
+
+// End-to-end DURING_AND_AFTER with a finer aggregation scope (rack) than the
+// main scope (region). With a static dimension the DURING leg takes the
+// optimized path (aggregating the initial-during objects across region1's two
+// rack scope items); with a dynamic dimension whose scope differs from the
+// aggregation scope it falls back to the unoptimized path. Either way the AFTER
+// leg still evicts tenantA out of region1.
+TEST_P(CapacityWithGroupPresenceTest, DuringAndAfterWithAggregationScope) {
+  for (const bool dynamicDimension : {false, true}) {
+    setUpAggregationScopeProblem(dynamicDimension);
+    addAggregationScopeSpec(
+        CapacityWithGroupPresenceDefinition::DURING_AND_AFTER);
+
+    const auto solution = solver->solve();
+    const auto initialObjectiveValue =
+        *solution.initialGlobalObjective()->goals()->at(0).value();
+    const auto finalObjectiveValue =
+        *solution.finalGlobalObjective()->goals()->at(0).value();
+    // The AFTER leg evicts tenantA from region1, so the objective drops to the
+    // irreducible DURING violation of 10300 (same for both solvers and both
+    // dimension kinds). Local search's initial objective additionally carries
+    // the AFTER continuous penalty the optimal solver omits.
+    EXPECT_NEAR(10300.0, finalObjectiveValue, 1e-8);
+    if (getSolverAlgoType() == LOCALSEARCH) {
+      EXPECT_NEAR(20633.333333333336, initialObjectiveValue, 1e-8);
+    } else {
+      EXPECT_NEAR(20600.0, initialObjectiveValue, 1e-8);
+    }
+
+    const auto& finalAssignment = *solution.assignment();
+    for (const std::string& object : {"a1", "a2"}) {
+      const auto& host = finalAssignment.at(object);
+      EXPECT_FALSE(host == "host1" || host == "host2")
+          << object << " (dynamicDimension=" << dynamicDimension
+          << ") should have been evicted from region1 but is on " << host;
+    }
+  }
+}
+
 TEST_P(CapacityWithGroupPresenceTest, MaxConstraintLocalSearchWithMultipliers) {
   setUpProblem();
 

@@ -1244,6 +1244,7 @@ enum CapacityWithGroupPresenceUsageIntent {
 enum CapacityWithGroupPresenceDefinition {
   AFTER = 1,
   DURING = 2,
+  DURING_AND_AFTER = 3,
 }
 
 // Controls the formula used for the continuous penalty expression in
