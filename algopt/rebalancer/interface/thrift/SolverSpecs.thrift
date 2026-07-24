@@ -177,7 +177,25 @@ struct MinCycleObjectiveImprovementConfig {
   1: Types.Threshold defaultThreshold;
 }
 
-@thrift.ReserveIds{ids = [9, 14, 15, 21, 22, 23, 27, 37, 38]} // deprecated fields
+// Configuration for the learned (GNN) move-legality heuristic (rebalancer-net).
+// When set on the AssignmentProblem, the solver loads the exported TorchScript
+// model from `modelPath`, scores (object, container) move legality on the
+// initial graph, and marks pairs whose predicted probability is below
+// `pruneThreshold` as invalid -- pruning them before native move evaluation.
+// The filter is enabled by the presence of this spec; leave it unset to disable.
+@thrift.ReserveIds{ids = [3]} // 3: bool enabled -- removed in favor of presence-based toggling
+struct LearnedMoveFilterSpec {
+  // Local filesystem path to the exported TorchScript model produced by
+  // rebalancer_net/training:export_model.
+  1: string modelPath;
+  // Prune (object, container) candidate moves whose predicted probability is
+  // below this threshold. Higher is more conservative: fewer moves pruned, lower
+  // risk of dropping a legal improving move (recall), but a smaller eval saving.
+  2: double pruneThreshold = 0.5;
+}
+
+// 54: learnedHeuristicSpec -- moved to AssignmentProblem.learnedMoveFilterSpec
+@thrift.ReserveIds{ids = [9, 14, 15, 21, 22, 23, 27, 37, 38, 54]} // deprecated fields
 struct LocalSearchSolverSpec {
   1: optional i32 allowedPlateauTime;
   2: i32 constrainedBoundsCheckMs;

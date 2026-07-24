@@ -17,6 +17,7 @@ package "meta.com/algopt/rebalancer"
 include "algopt/rebalancer/solver/if/packer.thrift"
 include "configerator/structs/thrift_explorer/annotations.thrift" as thrift_explorer
 include "algopt/rebalancer/interface/thrift/Types.thrift"
+include "algopt/rebalancer/interface/thrift/SolverSpecs.thrift"
 include "algopt/rebalancer/entities/thrift/Entities.thrift"
 include "thrift/annotation/thrift.thrift"
 
@@ -55,6 +56,13 @@ struct AssignmentProblem {
   // evaluations, but consumes extra memory proportional to the number of
   // invalid (object, container) pairs.
   24: bool enableInvalidMoveFilter = false;
+
+  // Learned (GNN) move-legality heuristic config (rebalancer-net). When set, the
+  // solver loads the exported TorchScript model and prunes predicted-illegal
+  // candidate moves before native evaluation. Presence of the spec enables the
+  // filter; leave it unset to disable. Enabled via
+  // ProblemSolver::enableLearnedMoveFilter(), mirroring enableInvalidMoveFilter.
+  25: optional SolverSpecs.LearnedMoveFilterSpec learnedMoveFilterSpec;
 
   // this field is used internally to add specific labels to the rebalancer_run_info scuba table; mainly used when running experiments to test changes
   1024: optional string scubaLoggingLabel;
