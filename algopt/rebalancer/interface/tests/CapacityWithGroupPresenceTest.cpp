@@ -86,7 +86,7 @@ class CapacityWithGroupPresenceTest
             {"region2", {"host3", "host4", "host5"}}});
 
     // set dynamicObjectDimension
-    const folly::F14FastMap<std::string, double> baseObjectToValue = {
+    baseObjectToValue = {
         {"trafficObject1", 0.85},
         {"trafficObject2", 0.4},
         {"trafficObject3", 0.6},
@@ -175,6 +175,8 @@ class CapacityWithGroupPresenceTest
     std::optional<std::string> aggregationPartition = std::nullopt;
     bool roundUp = true;
     std::string name = "capacityWithGroupPresence";
+    CapacityWithGroupPresenceDefinition definition =
+        CapacityWithGroupPresenceDefinition::AFTER;
   };
   void addCapacityWithGroupPresenceSpec(const SpecParams& specParams) {
     CapacityWithGroupPresenceSpec spec;
@@ -184,6 +186,7 @@ class CapacityWithGroupPresenceTest
     spec.scope() = "region";
     spec.roundUpGroupUtilOnScopeItem() = specParams.roundUp;
     spec.bound() = specParams.bound;
+    spec.definition() = specParams.definition;
     spec.multiplierList() = specParams.multipliers;
     spec.groupUtilMultipliers() = specParams.groupUtilMultipliers;
     spec.intent() = specParams.intent;
@@ -222,8 +225,109 @@ class CapacityWithGroupPresenceTest
     }
   }
 
+  void setUpAggregationScopeProblem(bool dynamicDimension) {
+    solver =
+        initializeTestProblemSolver({.executorThreadCount = getThreadCount()});
+    solver->setObjectName("trafficObject");
+    solver->setContainerName("host");
+
+    solver->setAssignment(
+        std::vector<std::pair<std::string, std::vector<std::string>>>{
+            {"host1", {"a1"}},
+            {"host2", {"a2"}},
+            {"host3", {"b1"}},
+            {"host4", {}},
+        });
+
+    solver->addScope(
+        "region",
+        std::vector<std::pair<std::string, std::vector<std::string>>>{
+            {"region1", {"host1", "host2"}}, {"region2", {"host3"}}});
+    solver->addScope(
+        "rack",
+        std::vector<std::pair<std::string, std::vector<std::string>>>{
+            {"rack1", {"host1"}},
+            {"rack2", {"host2"}},
+            {"rack3", {"host3"}},
+            {"rack4", {"host4"}}});
+
+    const folly::F14FastMap<std::string, double> objectToValue = {
+        {"a1", 2}, {"a2", 2}, {"b1", 2}};
+    if (dynamicDimension) {
+      std::map<std::string, folly::F14FastMap<std::string, double>>
+          scopeItemToObjectToValue;
+      scopeItemToObjectToValue["region1"] = objectToValue;
+      scopeItemToObjectToValue["region2"] = objectToValue;
+      solver->addDynamicObjectDimension(
+          "val", "region", scopeItemToObjectToValue, 1.0);
+    } else {
+      solver->addObjectDimension("val", objectToValue);
+    }
+
+    solver->addPartition(
+        "tenant",
+        std::map<std::string, std::vector<std::string>>{
+            {"tenantA", {"a1", "a2"}}, {"tenantB", {"b1"}}});
+
+    switch (getSolverAlgoType()) {
+      case OPTIMAL: {
+        auto optimalSpec = OptimalSolverSpec{};
+        optimalSpec.solverPackage() = getSolverPackage();
+        solver->addSolver(optimalSpec);
+        break;
+      }
+      case LOCALSEARCH:
+        auto spec = LocalSearchSolverSpec();
+        spec.moveTypeList() = {
+            ProblemSolver::makeMoveTypeSpec(SingleMoveTypeSpec{})};
+        solver->addSolver(spec);
+        break;
+    }
+  }
+
+  void addAggregationScopeSpec(
+      CapacityWithGroupPresenceDefinition definition,
+      std::vector<interface::Limit> multipliers = {}) {
+    CapacityWithGroupPresenceSpec spec;
+    spec.dimension() = "val";
+    spec.partition() = "tenant";
+    spec.scope() = "region";
+    spec.aggregationScope() = "rack";
+    spec.roundUpGroupUtilOnScopeItem() = true;
+    spec.bound() = CapacityWithGroupPresenceBound::MAX;
+    spec.definition() = definition;
+    spec.multiplierList() = std::move(multipliers);
+
+    auto& capacityLimits = *spec.scopeItemToLimit();
+    capacityLimits.type() = interface::LimitType::ABSOLUTE;
+    capacityLimits.globalLimit() = 10;
+    capacityLimits.scopeItemLimits() = {{"region1", 1}};
+
+    auto& groupToPresenceWeight = *spec.groupToPresenceWeight();
+    groupToPresenceWeight.type() = interface::LimitType::ABSOLUTE;
+    groupToPresenceWeight.globalLimit() = 0;
+
+    solver->addConstraint(spec);
+  }
+
+  // Region1 has host1 and host2.
+  template <typename AssignmentT>
+  double region1Util(const AssignmentT& assignment) const {
+    double util = 0.0;
+    for (const auto& [_, objects] : tenantToTrafficObjects) {
+      for (const auto& obj : objects) {
+        const auto& host = assignment.at(obj);
+        if (host == "host1" || host == "host2") {
+          util += baseObjectToValue.at(obj);
+        }
+      }
+    }
+    return util;
+  }
+
   std::unique_ptr<ProblemSolver> solver;
   std::map<std::string, std::vector<std::string>> tenantToTrafficObjects;
+  folly::F14FastMap<std::string, double> baseObjectToValue;
 };
 
 INSTANTIATE_TEST_CASE_P(
@@ -505,6 +609,150 @@ TEST_P(
   // The floor is satisfiable (max aggregate = ceil(3.98) + ceil(1.995) = 6), so
   // the solver drives the violation -- and the objective -- to 0.
   EXPECT_NEAR(0.0, finalObjectiveValue, 1e-8);
+}
+
+// End-to-end: the DURING definition bounds only the transient peak. Because
+// objects initially in a scope item always count toward its DURING utilization,
+// region1's violation cannot be resolved by moving them out, so (unlike AFTER)
+// the constraint stays broken and the solver has no improving move. At the
+// initial assignment DURING == AFTER, so the initial objective matches
+// MaxConstraint.
+TEST_P(CapacityWithGroupPresenceTest, MaxConstraintDuring) {
+  setUpProblem();
+
+  addCapacityWithGroupPresenceSpec(
+      SpecParams{
+          .isConstraint = true,
+          .definition = CapacityWithGroupPresenceDefinition::DURING});
+
+  const auto solution = solver->solve();
+  const auto initialObjectiveValue =
+      *solution.initialGlobalObjective()->goals()->at(0).value();
+  const auto finalObjectiveValue =
+      *solution.finalGlobalObjective()->goals()->at(0).value();
+
+  // At t=0 every region is at its DURING floor (all objects are always-present
+  // during objects), so the continuous penalty is gated to zero -- leaving just
+  // the constraint violation (region1: util 5 - limit 2 = 3). This matches the
+  // OPTIMAL value, which never has a penalty term.
+  EXPECT_NEAR(10300.0, initialObjectiveValue, 1e-8);
+  // region1's DURING utilization is locked by its initial objects (moving them
+  // out cannot reduce it, and the presence-weight floor always applies), so the
+  // violation is irreducible: there is no improving move and the optimal
+  // objective equals the initial one -- the same exact value for both solvers.
+  EXPECT_NEAR(10300.0, finalObjectiveValue, 1e-8);
+
+  // Solver behavior: because moving region1's objects out cannot reduce the
+  // DURING utilization, there is no improving move, so under local search the
+  // solver leaves them in region1. (Under OPTIMAL the placement is non-unique
+  // since DURING is invariant to where these objects end up, so we only assert
+  // placement for local search.)
+  if (getSolverAlgoType() == LOCALSEARCH) {
+    const auto& finalAssignment = *solution.assignment();
+    for (const std::string& object :
+         {"trafficObject1",
+          "trafficObject5",
+          "trafficObject9",
+          "trafficObject8"}) {
+      const auto& host = finalAssignment.at(object);
+      EXPECT_TRUE(host == "host1" || host == "host2")
+          << object << " unexpectedly left region1 to " << host;
+    }
+  }
+}
+
+// The optimized (static dimension) and unoptimized-fallback (dynamic dimension
+// whose scope differs from the aggregation scope) DURING paths must compute the
+// same objective -- including the continuous penalty, which both paths gate to
+// zero at the DURING floor. The dynamic-dimension leg also exercises the
+// fallback guard (ObjectPartitionLookup rejects initialDuringObjects when a
+// dynamic dimension's scope differs from the lookup scope), which would throw
+// during materialization if it regressed. The multiplier variant additionally
+// checks the during-floor's applyWeights scaling. Only local search exercises
+// the optimized path (the optimal solver uses the unoptimized path for both).
+TEST_P(CapacityWithGroupPresenceTest, DuringOptimizedAndUnoptimizedAgree) {
+  if (getSolverAlgoType() != LOCALSEARCH) {
+    GTEST_SKIP() << "optimized path is only used by local search";
+  }
+
+  interface::Limit multiplier;
+  multiplier.type() = interface::LimitType::ABSOLUTE;
+  multiplier.globalLimit() = 1.5;
+
+  for (const std::vector<interface::Limit>& multipliers :
+       {std::vector<interface::Limit>{},
+        std::vector<interface::Limit>{multiplier}}) {
+    setUpAggregationScopeProblem(/*dynamicDimension=*/false);
+    addAggregationScopeSpec(
+        CapacityWithGroupPresenceDefinition::DURING, multipliers);
+    const auto optimizedInitial =
+        *solver->solve().initialGlobalObjective()->goals()->at(0).value();
+
+    setUpAggregationScopeProblem(/*dynamicDimension=*/true);
+    addAggregationScopeSpec(
+        CapacityWithGroupPresenceDefinition::DURING, multipliers);
+    const auto unoptimizedInitial =
+        *solver->solve().initialGlobalObjective()->goals()->at(0).value();
+
+    EXPECT_NEAR(optimizedInitial, unoptimizedInitial, 1e-8);
+  }
+}
+
+// End-to-end MIN + DURING on the fused PER_SCOPE_ITEM path. A MAX cap of 2.5
+// and a MIN floor of 3.0 on region1 are jointly INFEASIBLE under AFTER (util
+// cannot be both <= 2.5 and >= 3.0). Under DURING they are feasible: region1's
+// initial objects (aggregate util 3.18) always count toward its DURING
+// utilization, so the floor stays satisfied no matter where they move, while
+// the solver is free to shed AFTER utilization below the cap. This exercises
+// the MIN bound and the during-floor together in the
+// ObjectPartitionLookupWithMinPresence node.
+TEST_P(
+    CapacityWithGroupPresenceTest,
+    MinConstraintDuringDecouplesFloorFromCap) {
+  setUpProblem();
+
+  Limit noPresence;
+  noPresence.type() = interface::LimitType::ABSOLUTE;
+  noPresence.globalLimit() = 0;
+
+  // Eviction pressure: a hard MAX cap of 2.5 on region1's aggregate
+  // utilization.
+  Limit maxCap;
+  maxCap.type() = interface::LimitType::ABSOLUTE;
+  maxCap.globalLimit() = 100; // effectively no cap on region2
+  maxCap.scopeItemLimits() = {{"region1", 2.5}};
+  addCapacityWithGroupPresenceSpec(
+      SpecParams{
+          .isConstraint = true,
+          .bound = CapacityWithGroupPresenceBound::MAX,
+          .groupToPresenceWeight = noPresence,
+          .capacityLimits = maxCap,
+          .roundUp = false,
+          .name = "regionMaxCap"});
+
+  // A MIN floor of 3.0 on region1, evaluated with the DURING definition.
+  Limit minFloor;
+  minFloor.type() = interface::LimitType::ABSOLUTE;
+  minFloor.globalLimit() = 0;
+  minFloor.scopeItemLimits() = {{"region1", 3.0}};
+  addCapacityWithGroupPresenceSpec(
+      SpecParams{
+          .isConstraint = true,
+          .bound = CapacityWithGroupPresenceBound::MIN,
+          .groupToPresenceWeight = noPresence,
+          .capacityLimits = minFloor,
+          .roundUp = false,
+          .name = "regionMinDuringFloor",
+          .definition = CapacityWithGroupPresenceDefinition::DURING});
+
+  const auto solution = solver->solve();
+
+  EXPECT_NEAR(3.18, region1Util(*solution.initialAssignment()), 1e-8);
+  if (getSolverAlgoType() == LOCALSEARCH) {
+    EXPECT_NEAR(2.18, region1Util(*solution.assignment()), 1e-8);
+  } else {
+    EXPECT_NEAR(0.0, region1Util(*solution.assignment()), 1e-8);
+  }
 }
 
 TEST_P(CapacityWithGroupPresenceTest, MaxConstraintLocalSearchWithMultipliers) {

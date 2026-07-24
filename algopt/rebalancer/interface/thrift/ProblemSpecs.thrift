@@ -1241,6 +1241,11 @@ enum CapacityWithGroupPresenceUsageIntent {
   PER_GROUP_AND_SCOPE_ITEM = 2,
 }
 
+enum CapacityWithGroupPresenceDefinition {
+  AFTER = 1,
+  DURING = 2,
+}
+
 // Controls the formula used for the continuous penalty expression in
 // CapacityWithGroupPresenceSpec when using local search.
 enum ContinuousPenaltyType {
@@ -1364,6 +1369,8 @@ struct CapacityWithGroupPresenceSpec {
   // always honored, even when its actual utilization is 0. Empty means no such
   // groups.
   19: map<string, list<string>> scopeItemToAlwaysPresentGroups;
+
+  20: CapacityWithGroupPresenceDefinition definition = CapacityWithGroupPresenceDefinition.AFTER;
 }
 
 struct DiversifyWithinScopeItemSpec {

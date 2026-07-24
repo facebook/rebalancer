@@ -27,6 +27,7 @@ its binary into memory, say), even when those tasks use little of the dimension.
 | `intent` | enum | No | `PER_SCOPE_ITEM` | Limit per scope item, or per (group, scope item) (see [Intent](#intent)). |
 | `aggregationPartition` | string | No | = `partition` | Finer partition aggregated up to `partition`; used only with the per-(group, scope item) intent (see [Intent](#intent)). |
 | `groupUtilMultipliers` | list | No | `[]` | Multipliers (`GroupUtilMultiplier`) applied to a group's contribution (see [Multipliers](#multipliers)). |
+| `definition` | enum | No | `AFTER` | Which utilization to bound: the final assignment (`AFTER`) or the transient peak during moves (`DURING`) (see [Definition](#definition)). |
 
 ## Example
 
@@ -144,6 +145,20 @@ group's within a scope item):
 | `MAX` (default) | That utilization must not exceed `scopeItemToLimit`. |
 | `MIN` | That utilization must be at least `scopeItemToLimit`. |
 
+## Definition
+
+`definition` (`CapacityWithGroupPresenceDefinition`) selects which utilization the
+bound applies to, exactly as in [CapacitySpec](capacity):
+
+| Definition | Meaning |
+|------------|---------|
+| `AFTER` (default) | Utilization of the final assignment. |
+| `DURING` | Transient peak while moves are in flight (`during = after + initial - stayed`): an object counts toward a scope item if it is there either initially or finally. A scope item that is over its limit cannot be brought under it merely by moving objects out, since they still count during the transition. |
+
+The `DURING` definition is intended for use as a **constraint**, not a goal: it
+tracks a transient peak that the solver usually cannot reduce, so as a goal it
+contributes a mostly-fixed offset rather than a useful gradient.
+
 ## Goal vs. constraint
 
 **As a constraint**, the bound is enforced. If the initial assignment already
@@ -213,6 +228,6 @@ only these) or `itemsBlacklist` (consider all but these):
 
 ## Source
 
-- Thrift definition: [`interface/thrift/ProblemSpecs.thrift`](https://github.com/facebook/rebalancer/blob/main/algopt/rebalancer/interface/thrift/ProblemSpecs.thrift) (`CapacityWithGroupPresenceSpec`, `CapacityWithGroupPresenceBound`, `CapacityWithGroupPresenceUsageIntent`)
+- Thrift definition: [`interface/thrift/ProblemSpecs.thrift`](https://github.com/facebook/rebalancer/blob/main/algopt/rebalancer/interface/thrift/ProblemSpecs.thrift) (`CapacityWithGroupPresenceSpec`, `CapacityWithGroupPresenceBound`, `CapacityWithGroupPresenceUsageIntent`, `CapacityWithGroupPresenceDefinition`)
 - SpecBuilder: [`materializer/spec_builder/CapacityWithGroupPresenceSpecBuilder.cpp`](https://github.com/facebook/rebalancer/blob/main/algopt/rebalancer/materializer/spec_builder/CapacityWithGroupPresenceSpecBuilder.cpp)---the code that defines this spec's behavior
 - Tests and runnable examples: [`interface/tests/CapacityWithGroupPresenceTest.cpp`](https://github.com/facebook/rebalancer/blob/main/algopt/rebalancer/interface/tests/CapacityWithGroupPresenceTest.cpp)---the unit tests the snippets on this page are drawn from

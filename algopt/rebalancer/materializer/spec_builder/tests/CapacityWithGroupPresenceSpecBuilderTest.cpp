@@ -740,6 +740,73 @@ CO_TEST_P(
       initialExpected, spec, universe, builder, initial);
 }
 
+// DURING definition: verifies exact constraint/penalty/goal values. DURING
+// counts each scope item's initial objects wherever they move, so (a) at the
+// initial assignment DURING == AFTER for the constraint but the continuous
+// penalty is gated to zero (every group sits exactly at its DURING floor), and
+// (b) moving a during object out of region1 to a region-less host leaves every
+// value unchanged -- the constraint cannot be reduced and the penalty stays
+// gated. Same setup as WithRoundUpAndMaxBound, so the AFTER penalties there are
+// the non-zero contrast to the zeros here.
+CO_TEST_P(CapacityWithGroupPresenceSpecBuilderTest, DuringDefinitionMaxBound) {
+  interface::CapacityWithGroupPresenceSpec spec;
+  spec.dimension() = "replicaCount";
+  spec.partition() = "tenantTrafficObjects";
+  spec.scope() = "region";
+  spec.roundUpGroupUtilOnScopeItem() = true;
+  spec.intent() = GetParam();
+  spec.definition() = interface::CapacityWithGroupPresenceDefinition::DURING;
+
+  auto& scopeItemLimits = *spec.scopeItemToLimit();
+  scopeItemLimits.type() = interface::LimitType::ABSOLUTE;
+  scopeItemLimits.globalLimit() = 5;
+  scopeItemLimits.scopeItemLimits() = {{"region1", 2}};
+
+  auto& groupToPresenceWeight = *spec.groupToPresenceWeight();
+  groupToPresenceWeight.globalLimit() = 2;
+  groupToPresenceWeight.groupLimits() = {{"tenant1-trafficObjects", 3}};
+
+  const auto universe = buildUniverse();
+  auto& builder = expressionBuilder();
+
+  ExpectedInfo expected;
+  switch (GetParam()) {
+    case interface::CapacityWithGroupPresenceUsageIntent::PER_SCOPE_ITEM:
+      // region1: tenant1 ceil(max(3.18,3))=4 + tenant2 max(1,2)=2 - limit 2 = 4
+      // region2: tenant1 max(ceil(1.5),3)=3 + tenant2 ceil(max(1.995,2))=2 - 5
+      expected.constraintAndPenaltyValues = {
+          {.constraintValue = 4.0, .penaltyValue = 0.0},
+          {.constraintValue = 0.0, .penaltyValue = 0.0},
+      };
+      expected.goalValue = 4.0;
+      break;
+    case interface::CapacityWithGroupPresenceUsageIntent::
+        PER_GROUP_AND_SCOPE_ITEM:
+      expected.constraintAndPenaltyValues = {
+          {.constraintValue = 2.0, .penaltyValue = 0.0}, // (tenant1,region1)
+          {.constraintValue = 0.0, .penaltyValue = 0.0}, // (tenant2,region1)
+          {.constraintValue = -2.0, .penaltyValue = 0.0}, // (tenant1,region2)
+          {.constraintValue = -3.0, .penaltyValue = 0.0}, // (tenant2,region2)
+      };
+      expected.goalValue = 2.0;
+      break;
+  }
+
+  // Initial assignment: DURING == AFTER for the constraint, penalty gated to 0.
+  VERIFY_CONSTRAINT_COMPONENTS_AND_GOAL_VALUES(
+      expected, spec, universe, builder, deltaFromInitial({}));
+
+  // Move trafficObject1 (tenant1, initially in region1) to host6, which is in
+  // no region: it leaves region1's AFTER set but still counts toward region1's
+  // DURING utilization, so every constraint/penalty/goal value is unchanged.
+  VERIFY_CONSTRAINT_COMPONENTS_AND_GOAL_VALUES(
+      expected,
+      spec,
+      universe,
+      builder,
+      deltaFromInitial({{"trafficObject1", "host6"}}));
+}
+
 // Fused-path (optimized PER_SCOPE_ITEM) counterpart of the per-group MIN gate.
 // The per-scope-item penalty is built by ObjectPartitionLookupWithMinPresence,
 // which sums each group's upper-bound complement internally and gates each one
@@ -2036,7 +2103,7 @@ TEST_P(CapacityWithGroupPresenceSpecBuilderTest, Description) {
         universe, spec, true);
     EXPECT_EQ(
         fmt::format(
-            "Capacity with group presence {} w.r.t. dimension 'replicaCount', partition 'tenantTrafficObjects' (aggregationPartition 'tenantTrafficObjects'), scope 'region' (aggregationScope 'region'), bound 'MAX', roundUp = true",
+            "Capacity with group presence {} (AFTER) w.r.t. dimension 'replicaCount', partition 'tenantTrafficObjects' (aggregationPartition 'tenantTrafficObjects'), scope 'region' (aggregationScope 'region'), bound 'MAX', roundUp = true",
             apache::thrift::util::enumNameSafe(GetParam())),
         specBuilder.description());
   }
@@ -2069,7 +2136,7 @@ TEST_P(CapacityWithGroupPresenceSpecBuilderTest, Description) {
         universe, spec, true);
     EXPECT_EQ(
         fmt::format(
-            "Capacity with group presence {} w.r.t. dimension 'replicaCount', partition 'tenantGroups' (aggregationPartition '{}'), scope 'region' (aggregationScope 'host'), bound 'MAX', roundUp = true",
+            "Capacity with group presence {} (AFTER) w.r.t. dimension 'replicaCount', partition 'tenantGroups' (aggregationPartition '{}'), scope 'region' (aggregationScope 'host'), bound 'MAX', roundUp = true",
             apache::thrift::util::enumNameSafe(GetParam()),
             aggregationPartition),
         specBuilder.description());
@@ -2094,6 +2161,7 @@ TEST_P(CapacityWithGroupPresenceSpecBuilderTest, SpecInfo) {
       .scope = "region",
       .partition = "tenantTrafficObjects",
       .dimension = "replicaCount",
+      .definition = "AFTER",
       .limitType = "ABSOLUTE"};
   EXPECT_EQ(expectedSpecInfo, specBuilder.getSpecInfo());
 }

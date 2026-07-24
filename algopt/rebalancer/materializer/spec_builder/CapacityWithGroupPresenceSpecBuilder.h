@@ -15,10 +15,13 @@
 #pragma once
 
 #include "algopt/rebalancer/materializer/spec_builder/SpecBuilder.h"
+#include "algopt/rebalancer/materializer/utils/Descriptor.h"
 #include "algopt/rebalancer/materializer/utils/LimitWrapper.h"
 
 #include <folly/container/F14Map.h>
 #include <folly/container/F14Set.h>
+
+#include <vector>
 
 namespace facebook::rebalancer::materializer {
 /**
@@ -66,9 +69,11 @@ class CapacityWithGroupPresenceSpecBuilder : public SpecBuilder {
 
   // Builds one constraint per scope item.
   folly::coro::Task<std::vector<ConstraintInfo>> scopeItemConstraints(
+      UtilMetric metric,
       ExpressionBuilder& expressionBuilder) const;
 
   folly::coro::Task<std::vector<ConstraintInfo>> groupAndScopeItemConstraints(
+      UtilMetric metric,
       ExpressionBuilder& expressionBuilder) const;
 
   ExprPtr getConstraintExpr(
@@ -85,20 +90,23 @@ class CapacityWithGroupPresenceSpecBuilder : public SpecBuilder {
   static void addUtilExprs(UtilExprs& acc, UtilExprs contribution);
 
   folly::coro::Task<UtilExprs> getScopeItemUtil(
+      UtilMetric metric,
       entities::ScopeItemId mainScopeItemId,
       ExpressionBuilder& expressionBuilder,
       const std::shared_ptr<const entities::Set<entities::GroupId>>&
           aggregationGroupIds) const;
 
-  bool shouldUseOptimizedPath() const;
+  bool shouldUseOptimizedPath(UtilMetric metric) const;
 
   UtilExprs buildOptimizedScopeItemUtilExprForStaticDimension(
+      UtilMetric metric,
       const entities::ScopeItemId& mainScopeItemId,
       ExpressionBuilder& expressionBuilder,
       const std::shared_ptr<const entities::Set<entities::GroupId>>&
           aggregationGroupIds) const;
 
   UtilExprs buildOptimizedScopeItemUtilExprForDynamicDimension(
+      UtilMetric metric,
       const entities::ScopeItemId& mainScopeItemId,
       ExpressionBuilder& expressionBuilder,
       const std::shared_ptr<const entities::Set<entities::GroupId>>&
@@ -108,16 +116,19 @@ class CapacityWithGroupPresenceSpecBuilder : public SpecBuilder {
   buildAggregationGroupIds(ExpressionBuilder& expressionBuilder) const;
 
   UtilExprs createGroupUtilExpr(
+      UtilMetric metric,
       ExprPtr objectPartition,
       entities::ScopeItemId aggregationScopeItemId,
       const Assignment& initialAssignment) const;
 
   folly::coro::Task<UtilExprs> getGroupUtilInMainScopeItem(
+      UtilMetric metric,
       entities::GroupId mainGroupId,
       entities::ScopeItemId mainScopeItemId,
       ExpressionBuilder& expressionBuilder) const;
 
   folly::coro::Task<UtilExprs> getGroupUtilContributionToScopeItemUtil(
+      UtilMetric metric,
       entities::GroupId aggregationGroupId,
       entities::ScopeItemId aggregationScopeItemId,
       ExpressionBuilder& expressionBuilder) const;
@@ -154,6 +165,14 @@ class CapacityWithGroupPresenceSpecBuilder : public SpecBuilder {
   const std::shared_ptr<const MinPresenceConfig> minPresenceConfig_;
   const double penaltyBound_;
   const size_t totalObjectCount_;
+  // True when the dimension is dynamic and defined on a scope that differs from
+  // the aggregation scope. In that case ObjectPartitionLookup cannot represent
+  // DURING (via initialDuringObjects), so DURING falls back to the unoptimized
+  // path.
+  const bool dimensionScopeDiffersFromAggScope_;
+  // The utilization metrics this spec enforces, derived from its (fixed)
+  // definition and computed once at construction (see getUtilMetrics()).
+  const std::vector<UtilMetric> utilMetrics_;
 };
 
 } // namespace facebook::rebalancer::materializer

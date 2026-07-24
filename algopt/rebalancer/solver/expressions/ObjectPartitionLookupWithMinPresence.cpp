@@ -78,7 +78,9 @@ GroupUtils computeGroupUtils(
     double weight,
     const entities::GroupId& groupId,
     const entities::ScopeItemId& scopeItemId,
-    const Precision& precision) {
+    const Precision& precision,
+    // The group's initial utilization. This will be baseline for DURING.
+    double initialDuringUtil = 0.0) {
   // Apply multipliers which targets to actual util.
   const auto actualUtil = data.applyWeights(
       weight,
@@ -110,10 +112,23 @@ GroupUtils computeGroupUtils(
 
   GroupUtils groupUtils;
   groupUtils.finalUtil = std::max(minContributionToUtil, actualUtil);
-  // LowerBound(finalUtil) >= minContributionToUtil when groupAlwaysPresent, and
-  // is at least 0 otherwise.
-  groupUtils.lowerBoundForGate =
-      groupAlwaysPresent ? minContributionToUtil : 0.0;
+  if (precision.isStrictlyGtZero(initialDuringUtil)) {
+    initialDuringUtil = data.applyWeights(
+        initialDuringUtil,
+        groupId,
+        scopeItemId,
+        {interface::GroupUtilMultiplierTarget::UTILIZATION,
+         interface::GroupUtilMultiplierTarget::COMMON},
+        precision,
+        data.roundUpGroupUtilOnScopeItem);
+    groupUtils.lowerBoundForGate =
+        std::max(minContributionToUtil, initialDuringUtil);
+  } else {
+    // LowerBound(finalUtil) >= minContributionToUtil when groupAlwaysPresent,
+    // and is at least 0 otherwise.
+    groupUtils.lowerBoundForGate =
+        groupAlwaysPresent ? minContributionToUtil : 0.0;
+  }
   if (data.makeContinuousPenaltyTerm) {
     double unweightedPenalty = weight;
     const auto extraAdditivePenalty =
@@ -141,16 +156,24 @@ template <>
 double ObjectPartitionLookup<ObjectPartitionLookupWithMinPresencePolicy>::
     getGroupPenalty(double weight, entities::GroupId groupId) const {
   const auto& data = getData();
-  const auto current =
-      computeGroupUtils(data, weight, groupId, scopeItemId_, getPrecision());
+  const auto [duringPositiveWeight, duringNegativeWeight] = folly::get_default(
+      groupToDuringObjectsTotalPositiveAndNegativeWeights_,
+      groupId,
+      std::make_pair(0.0, 0.0));
+  const auto current = computeGroupUtils(
+      data,
+      weight,
+      groupId,
+      scopeItemId_,
+      getPrecision(),
+      /*initialDuringUtil=*/duringPositiveWeight + duringNegativeWeight);
 
   if (data.makeContinuousPenaltyTerm) {
     switch (bound_) {
       case Bound::MAX:
         // Only apply a non-zero continuous penalty while finalUtil can still
         // move in the constraint-fixing direction, i.e. finalUtil >
-        // lowerBound(U). (MIN uses the upper-bound gate instead; see
-        // getGroupPenalty.)
+        // lowerBound(U). (MIN uses the upper-bound gate instead.)
         return getPrecision().isstrictlyGreater(
                    current.finalUtil, current.lowerBoundForGate)
             ? current.ungatedContinuousPenalty

@@ -111,6 +111,7 @@ CapacityWithGroupPresenceBound = Literal["MAX", "MIN"]
 CapacityWithGroupPresenceUsageIntent = Literal[
     "PER_SCOPE_ITEM", "PER_GROUP_AND_SCOPE_ITEM"
 ]
+CapacityWithGroupPresenceDefinition = Literal["AFTER", "DURING"]
 GroupUtilMultiplierTarget = Literal["PRESENCE_WEIGHT", "UTILIZATION", "COMMON"]
 
 # Types.thrift (algopt_common/thrift)
@@ -814,6 +815,7 @@ class CapacityWithGroupPresenceSpec(TypedDict, total=False):
     intent: CapacityWithGroupPresenceUsageIntent  # default "PER_SCOPE_ITEM"
     aggregationPartition: str
     groupUtilMultipliers: list[GroupUtilMultiplier]
+    definition: CapacityWithGroupPresenceDefinition  # default "AFTER"
 
 
 class DiversifyWithinScopeItemSpec(TypedDict, total=False):

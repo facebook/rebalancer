@@ -144,7 +144,8 @@ class ObjectPartitionLookupWithMinPresenceTest : public ExpressionTestsBase {
       ObjectPartitionLookup<ObjectPartitionLookupWithMinPresencePolicy>::Bound
           bound = ObjectPartitionLookup<
               ObjectPartitionLookupWithMinPresencePolicy>::Bound::MAX,
-      std::optional<double> defaultGroupLimitOverride = std::nullopt) const {
+      std::optional<double> defaultGroupLimitOverride = std::nullopt,
+      const PackerSet<entities::ObjectId>& initialDuringObjects = {}) const {
     auto objectPartition = object_partition(
         std::make_shared<const PartitionInfo>(
             universe,
@@ -174,7 +175,7 @@ class ObjectPartitionLookupWithMinPresenceTest : public ExpressionTestsBase {
                 universe,
                 assignment,
                 /*groupLimitOverrides=*/{},
-                /*initialDuringObjects=*/{},
+                initialDuringObjects,
                 defaultGroupLimitOverride,
                 /*penaltyTransform=*/
                 ObjectPartitionLookupPenaltyTransform::IDENTITY,
@@ -275,6 +276,56 @@ CO_TEST_F(
           objectPartitionLookup, changes2, assignment, lpAssertOptions),
       1e-8);
   EXPECT_NEAR(5.0, objectPartitionLookup->value, 1e-8);
+}
+
+// DURING at the node level: initialDuringObjects are always counted, so moving
+// one out of the scope item does not reduce the utilization -- the direct
+// contrast to UtilWithNoRoundUpOrMultipliers above, where moving object1 out
+// drops the util from 5.18 to 5.0. region1's initial objects are object1/5/9
+// (group1) and object8 (group2).
+CO_TEST_F(
+    ObjectPartitionLookupWithMinPresenceTest,
+    DuringUtilCountsInitialObjectsWhenMovedOut) {
+  co_await setUpUniverse();
+  const auto& universe = getUniverse();
+  auto assignment = getInitialAssignment(universe);
+
+  auto objectPartitionLookup = makeObjectPartitionLookupWithMinPresence(
+      universe,
+      /*aggregationScopeItemId=*/region(1),
+      /*groupIds=*/{group(1), group(2)},
+      /*multiplierList=*/{},
+      /*makeContinuousPenaltyTerm=*/false,
+      /*roundUpGroupUtilOnScopeItem=*/false,
+      /*scopeItemToAlwaysPresentGroups=*/{},
+      /*bound=*/
+      ObjectPartitionLookup<
+          ObjectPartitionLookupWithMinPresencePolicy>::Bound::MAX,
+      /*defaultGroupLimitOverride=*/std::nullopt,
+      /*initialDuringObjects=*/{object(1), object(5), object(9), object(8)});
+
+  const LpAssertOptions lpAssertOptions = {
+      .exceptionForLpExpr =
+          "LP expressions are not yet implemented for ObjectPartitionWithMinPresence"};
+
+  // Initial: group1 util = max(1.85+0.13+1.2, 3.0) = 3.18; group2 = max(1.0,
+  // 2.0) = 2.0; total = 5.18 (same as AFTER at t=0).
+  EXPECT_NEAR(
+      5.18, apply(objectPartitionLookup, assignment, lpAssertOptions), 1e-8);
+
+  // Move object1 (group1) out of region1. Under AFTER this drops group1 util to
+  // max(0.13+1.2, 3.0)=3.0 and the total to 5.0. Under DURING, object1 is an
+  // initialDuringObject and is still counted, so the util stays 5.18.
+  const auto changes = ObjectToNewContainer{{object(1), container(3)}};
+  EXPECT_NEAR(
+      5.18,
+      evaluate(objectPartitionLookup, changes, assignment, lpAssertOptions),
+      1e-8);
+  EXPECT_NEAR(
+      5.18,
+      applyChanges(objectPartitionLookup, changes, assignment, lpAssertOptions),
+      1e-8);
+  EXPECT_NEAR(5.18, objectPartitionLookup->value, 1e-8);
 }
 
 CO_TEST_F(

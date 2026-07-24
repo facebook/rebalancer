@@ -135,6 +135,19 @@ std::shared_ptr<const MinPresenceConfig> buildMinPresenceConfig(
           *spec.scopeItemToAlwaysPresentGroups())});
 }
 
+std::vector<UtilMetric> getUtilMetrics(
+    const interface::CapacityWithGroupPresenceDefinition& definition) {
+  switch (definition) {
+    case interface::CapacityWithGroupPresenceDefinition::AFTER:
+      return {UtilMetric::AFTER};
+    case interface::CapacityWithGroupPresenceDefinition::DURING:
+      return {UtilMetric::DURING};
+  }
+  throw std::runtime_error(
+      "Unknown CapacityWithGroupPresenceDefinition: " +
+      std::to_string(static_cast<int>(definition)));
+}
+
 } // namespace
 
 CapacityWithGroupPresenceSpecBuilder::CapacityWithGroupPresenceSpecBuilder(
@@ -186,7 +199,11 @@ CapacityWithGroupPresenceSpecBuilder::CapacityWithGroupPresenceSpecBuilder(
           count += mainPartition_.getObjectIds(groupId).size();
         }
         return count;
-      }()) {
+      }()),
+      dimensionScopeDiffersFromAggScope_(
+          dimension_.isDynamic() &&
+          dimension_.getScopeId() != aggregationScopeId_),
+      utilMetrics_(getUtilMetrics(*spec_.definition())) {
   auto throwMsg = [&](const std::string& reason) {
     throw std::runtime_error(
         fmt::format(
@@ -222,29 +239,46 @@ folly::coro::Task<ExprPtr> CapacityWithGroupPresenceSpecBuilder::goalCoro(
 folly::coro::Task<std::vector<ConstraintInfo>>
 CapacityWithGroupPresenceSpecBuilder::constraints(
     ExpressionBuilder& expressionBuilder) const {
-  switch (*spec_.intent()) {
-    case interface::CapacityWithGroupPresenceUsageIntent::PER_SCOPE_ITEM:
-      co_return co_await scopeItemConstraints(expressionBuilder);
-    case interface::CapacityWithGroupPresenceUsageIntent::
-        PER_GROUP_AND_SCOPE_ITEM:
-      co_return co_await groupAndScopeItemConstraints(expressionBuilder);
+  std::vector<ConstraintInfo> allConstraints;
+  const auto appendToResult =
+      [&](std::vector<ConstraintInfo> metricConstraints) {
+        allConstraints.insert(
+            allConstraints.end(),
+            std::make_move_iterator(metricConstraints.begin()),
+            std::make_move_iterator(metricConstraints.end()));
+      };
+
+  for (const auto metric : utilMetrics_) {
+    switch (*spec_.intent()) {
+      case interface::CapacityWithGroupPresenceUsageIntent::PER_SCOPE_ITEM:
+        appendToResult(
+            co_await scopeItemConstraints(metric, expressionBuilder));
+        break;
+      case interface::CapacityWithGroupPresenceUsageIntent::
+          PER_GROUP_AND_SCOPE_ITEM:
+        appendToResult(
+            co_await groupAndScopeItemConstraints(metric, expressionBuilder));
+        break;
+    }
   }
+  co_return allConstraints;
 }
 
 folly::coro::Task<std::vector<ConstraintInfo>>
 CapacityWithGroupPresenceSpecBuilder::scopeItemConstraints(
+    UtilMetric metric,
     ExpressionBuilder& expressionBuilder) const {
   const auto& scopeItemIds = getRelevantMainScopeItemIds();
   // Aggregation groups are only needed by (and computed for) the optimized
   // path.
-  const auto aggregationGroupIds = shouldUseOptimizedPath()
+  const auto aggregationGroupIds = shouldUseOptimizedPath(metric)
       ? buildAggregationGroupIds(expressionBuilder)
       : nullptr;
   std::vector<ConstraintInfo> constraints;
   constraints.reserve(scopeItemIds.size());
   for (auto mainScopeItemId : scopeItemIds) {
     auto scopeItemUtil = co_await getScopeItemUtil(
-        mainScopeItemId, expressionBuilder, aggregationGroupIds);
+        metric, mainScopeItemId, expressionBuilder, aggregationGroupIds);
     auto constraintExpr = getConstraintExpr(
         mainScopeItemId, /*mainGroupIdOpt=*/std::nullopt, scopeItemUtil.util);
     auto additionalPenaltyExpr = getAdditionalPenaltyExpr(
@@ -327,12 +361,13 @@ ExprPtr CapacityWithGroupPresenceSpecBuilder::getAdditionalPenaltyExpr(
 
 folly::coro::Task<std::vector<ConstraintInfo>>
 CapacityWithGroupPresenceSpecBuilder::groupAndScopeItemConstraints(
+    UtilMetric metric,
     ExpressionBuilder& expressionBuilder) const {
   const auto& scopeItemIds = getRelevantMainScopeItemIds();
   const auto& mainGroupIds = getRelevantMainGroupIds();
   const auto numGroups = mainGroupIds.size();
   const auto totalPairs = scopeItemIds.size() * numGroups;
-  const auto optimized = shouldUseOptimizedPath();
+  const auto optimized = shouldUseOptimizedPath(metric);
 
   std::vector<ConstraintInfo> constraints(totalPairs, ConstraintInfo{nullptr});
   co_await CoroUtils::runEachTaskBatched<size_t>(
@@ -344,12 +379,13 @@ CapacityWithGroupPresenceSpecBuilder::groupAndScopeItemConstraints(
         // groups and ObjectPartitionLookupWithMinPresence expressions
         const auto groupScopeItemUtil = optimized
             ? co_await getScopeItemUtil(
+                  metric,
                   mainScopeItemId,
                   expressionBuilder,
                   expressionBuilder.getNestedImage(
                       mainPartitionId_, aggregationPartitionId_, mainGroupId))
             : co_await getGroupUtilInMainScopeItem(
-                  mainGroupId, mainScopeItemId, expressionBuilder);
+                  metric, mainGroupId, mainScopeItemId, expressionBuilder);
 
         auto constraintExpr = getConstraintExpr(
             mainScopeItemId, mainGroupId, groupScopeItemUtil.util);
@@ -382,11 +418,12 @@ void CapacityWithGroupPresenceSpecBuilder::addUtilExprs(
 
 folly::coro::Task<CapacityWithGroupPresenceSpecBuilder::UtilExprs>
 CapacityWithGroupPresenceSpecBuilder::getScopeItemUtil(
+    UtilMetric metric,
     entities::ScopeItemId mainScopeItemId,
     ExpressionBuilder& expressionBuilder,
     const std::shared_ptr<const entities::Set<entities::GroupId>>&
         aggregationGroupIds) const {
-  if (shouldUseOptimizedPath()) {
+  if (shouldUseOptimizedPath(metric)) {
     if (!aggregationGroupIds || aggregationGroupIds->empty()) {
       co_return zeroUtilExprs();
     }
@@ -394,9 +431,9 @@ CapacityWithGroupPresenceSpecBuilder::getScopeItemUtil(
         universe_->getObjects().getDimension(dimensionId_).only();
     co_return dimension.isDynamic()
         ? buildOptimizedScopeItemUtilExprForDynamicDimension(
-              mainScopeItemId, expressionBuilder, aggregationGroupIds)
+              metric, mainScopeItemId, expressionBuilder, aggregationGroupIds)
         : buildOptimizedScopeItemUtilExprForStaticDimension(
-              mainScopeItemId, expressionBuilder, aggregationGroupIds);
+              metric, mainScopeItemId, expressionBuilder, aggregationGroupIds);
   }
 
   auto utilExprs = zeroUtilExprs();
@@ -404,20 +441,30 @@ CapacityWithGroupPresenceSpecBuilder::getScopeItemUtil(
     addUtilExprs(
         utilExprs,
         co_await getGroupUtilInMainScopeItem(
-            mainGroupId, mainScopeItemId, expressionBuilder));
+            metric, mainGroupId, mainScopeItemId, expressionBuilder));
   }
 
   co_return utilExprs;
 }
 
-bool CapacityWithGroupPresenceSpecBuilder::shouldUseOptimizedPath() const {
+bool CapacityWithGroupPresenceSpecBuilder::shouldUseOptimizedPath(
+    UtilMetric metric) const {
   const auto& dimension =
       universe_->getObjects().getDimension(dimensionId_).only();
 
   // Don't use the optimized expression if:
   // - we are using optimal solver
   // - the dimension is routing-config based
-  return needsContinuousExpressions_ && !dimension.isRoutingConfigBased();
+  if (!needsContinuousExpressions_ || dimension.isRoutingConfigBased()) {
+    return false;
+  }
+  // ObjectPartitionLookup cannot represent DURING (via initialDuringObjects)
+  // when a dynamic dimension is defined on a scope differing from the
+  // aggregation scope, so fall back to the unoptimized path in that case.
+  if (metric == UtilMetric::DURING && dimensionScopeDiffersFromAggScope_) {
+    return false;
+  }
+  return true;
 }
 
 std::shared_ptr<const entities::Set<entities::GroupId>>
@@ -435,9 +482,20 @@ CapacityWithGroupPresenceSpecBuilder::buildAggregationGroupIds(
 
 CapacityWithGroupPresenceSpecBuilder::UtilExprs
 CapacityWithGroupPresenceSpecBuilder::createGroupUtilExpr(
+    UtilMetric metric,
     ExprPtr objectPartition,
     entities::ScopeItemId aggregationScopeItemId,
     const Assignment& initialAssignment) const {
+  PackerSet<entities::ObjectId> initialDuringObjects;
+  if (metric == UtilMetric::DURING) {
+    for (auto containerId : universe_->getScope(aggregationScopeId_)
+                                .getContainerIds(aggregationScopeItemId)) {
+      for (auto objectId :
+           universe_->getContainers().getInitialObjectIds(containerId)) {
+        initialDuringObjects.insert(objectId);
+      }
+    }
+  }
   // The constraint lookup and its penalty lookup are two reads of the SAME
   // objectPartition, so it is captured by reference and intentionally not moved
   // -- both makeLookup() calls must share it. (Don't add std::move here.)
@@ -451,7 +509,7 @@ CapacityWithGroupPresenceSpecBuilder::createGroupUtilExpr(
         *universe_,
         initialAssignment,
         /*groupLimitOverrides=*/PackerMap<entities::GroupId, double>{},
-        /*initialDuringObjects=*/PackerSet<entities::ObjectId>{},
+        initialDuringObjects,
         /*defaultGroupLimitOverride=*/std::nullopt,
         /*penaltyTransform=*/
         ObjectPartitionLookupPenaltyTransform::IDENTITY,
@@ -481,6 +539,7 @@ CapacityWithGroupPresenceSpecBuilder::createGroupUtilExpr(
 CapacityWithGroupPresenceSpecBuilder::UtilExprs
 CapacityWithGroupPresenceSpecBuilder::
     buildOptimizedScopeItemUtilExprForStaticDimension(
+        UtilMetric metric,
         const entities::ScopeItemId& mainScopeItemId,
         ExpressionBuilder& expressionBuilder,
         const std::shared_ptr<const entities::Set<entities::GroupId>>&
@@ -499,6 +558,7 @@ CapacityWithGroupPresenceSpecBuilder::
     addUtilExprs(
         utilExprs,
         createGroupUtilExpr(
+            metric,
             objectPartition,
             aggregationScopeItemId,
             expressionBuilder.getInitialAssignment()));
@@ -510,6 +570,7 @@ CapacityWithGroupPresenceSpecBuilder::
 CapacityWithGroupPresenceSpecBuilder::UtilExprs
 CapacityWithGroupPresenceSpecBuilder::
     buildOptimizedScopeItemUtilExprForDynamicDimension(
+        UtilMetric metric,
         const entities::ScopeItemId& mainScopeItemId,
         ExpressionBuilder& expressionBuilder,
         const std::shared_ptr<const entities::Set<entities::GroupId>>&
@@ -531,6 +592,7 @@ CapacityWithGroupPresenceSpecBuilder::
     addUtilExprs(
         utilExprs,
         createGroupUtilExpr(
+            metric,
             std::move(objectPartition),
             aggregationScopeItemId,
             expressionBuilder.getInitialAssignment()));
@@ -541,6 +603,7 @@ CapacityWithGroupPresenceSpecBuilder::
 
 folly::coro::Task<CapacityWithGroupPresenceSpecBuilder::UtilExprs>
 CapacityWithGroupPresenceSpecBuilder::getGroupUtilInMainScopeItem(
+    UtilMetric metric,
     entities::GroupId mainGroupId,
     entities::ScopeItemId mainScopeItemId,
     ExpressionBuilder& expressionBuilder) const {
@@ -555,7 +618,10 @@ CapacityWithGroupPresenceSpecBuilder::getGroupUtilInMainScopeItem(
       addUtilExprs(
           utilExprs,
           co_await getGroupUtilContributionToScopeItemUtil(
-              aggregationGroupId, aggregationScopeItemId, expressionBuilder));
+              metric,
+              aggregationGroupId,
+              aggregationScopeItemId,
+              expressionBuilder));
     }
   }
   co_return utilExprs;
@@ -563,11 +629,12 @@ CapacityWithGroupPresenceSpecBuilder::getGroupUtilInMainScopeItem(
 
 folly::coro::Task<CapacityWithGroupPresenceSpecBuilder::UtilExprs>
 CapacityWithGroupPresenceSpecBuilder::getGroupUtilContributionToScopeItemUtil(
+    UtilMetric metric,
     entities::GroupId aggregationGroupId,
     entities::ScopeItemId aggregationScopeItemId,
     ExpressionBuilder& expressionBuilder) const {
   auto actualGroupUtilInScopeItem = co_await expressionBuilder.getAbsoluteUtil(
-      UtilMetric::AFTER,
+      metric,
       dimensionId_,
       aggregationScopeId_,
       aggregationScopeItemId,
@@ -703,8 +770,9 @@ bool CapacityWithGroupPresenceSpecBuilder::isGroupAlwaysPresent(
 
 std::string CapacityWithGroupPresenceSpecBuilder::description() const {
   return fmt::format(
-      "Capacity with group presence {} w.r.t. dimension '{}', partition '{}' (aggregationPartition '{}'), scope '{}' (aggregationScope '{}'), bound '{}', roundUp = {}",
+      "Capacity with group presence {} ({}) w.r.t. dimension '{}', partition '{}' (aggregationPartition '{}'), scope '{}' (aggregationScope '{}'), bound '{}', roundUp = {}",
       apache::thrift::util::enumNameSafe(*spec_.intent()),
+      apache::thrift::util::enumNameSafe(*spec_.definition()),
       *spec_.dimension(),
       *spec_.partition(),
       spec_.aggregationPartition().value_or(*spec_.partition()),
@@ -720,6 +788,7 @@ SpecParameters CapacityWithGroupPresenceSpecBuilder::getSpecInfo() const {
   info.scope = *spec_.scope();
   info.partition = *spec_.partition();
   info.dimension = *spec_.dimension();
+  info.definition = apache::thrift::util::enumNameSafe(*spec_.definition());
   info.limitType =
       apache::thrift::util::enumNameSafe(*spec_.scopeItemToLimit()->type());
   return info;
