@@ -12,13 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+@hack.NamePrefix{prefix = "rebalancer_packer_"}
+@hack.LegacyOmitPrefixInNameString
 package "meta.com/algopt/rebalancer"
 
+namespace hack ""
+
 namespace cpp2 facebook.rebalancer
-namespace php rebalancer_packer
 namespace py3 rebalancer.packer
 
 include "algopt/rebalancer/interface/thrift/SolverSpecs.thrift"
+include "thrift/annotation/hack.thrift"
 
 enum SolverType {
   LOCAL_SEARCH = 0,

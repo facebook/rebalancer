@@ -12,16 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+@hack.NamePrefix{prefix = "rebalancer_interface_"}
+@hack.LegacyOmitPrefixInNameString
 package "meta.com/algopt/rebalancer/fix_me"
+
+namespace hack ""
 
 include "algopt/rebalancer/interface/thrift/Metrics.thrift"
 include "thrift/annotation/cpp.thrift"
 include "thrift/annotation/python.thrift"
 cpp_include "folly/container/F14Map.h"
 include "thrift/annotation/thrift.thrift"
+include "thrift/annotation/hack.thrift"
 
 namespace cpp2 facebook.rebalancer.interface
-namespace php rebalancer_interface
 namespace py rebalancer.interface.thrift.Types
 namespace py3 rebalancer.interface.thrift
 

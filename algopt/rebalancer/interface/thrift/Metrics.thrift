@@ -12,16 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+@hack.NamePrefix{prefix = "rebalancer_interface_thrift_"}
+@hack.LegacyOmitPrefixInNameString
 package "meta.com/algopt/rebalancer"
+
+namespace hack ""
 
 include "algopt/rebalancer/interface/thrift/ProblemSpecs.thrift"
 include "thrift/annotation/cpp.thrift"
 include "thrift/annotation/thrift.thrift"
+include "thrift/annotation/hack.thrift"
 
 namespace cpp2 facebook.rebalancer.interface.thrift
 namespace py rebalancer.interface.thrift.Types
 namespace py3 rebalancer.interface.thrift
-namespace php rebalancer_interface_thrift
 
 enum MetricCollectionType {
   SCOPE_ITEM_UTILIZATION_VALUES = 0,

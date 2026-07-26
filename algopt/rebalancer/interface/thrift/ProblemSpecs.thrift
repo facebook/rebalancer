@@ -12,14 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+@hack.NamePrefix{prefix = "rebalancer_interface_thrift_"}
+@hack.LegacyOmitPrefixInNameString
 package "meta.com/algopt/rebalancer"
+
+namespace hack ""
 
 include "thrift/annotation/thrift.thrift"
 include "thrift/annotation/cpp.thrift"
+include "thrift/annotation/hack.thrift"
 
 namespace cpp2 facebook.rebalancer.interface
 namespace py3 rebalancer.interface.thrift.v2
-namespace php rebalancer_interface_thrift
 namespace rust problem_solver_types
 
 // WARNING: these types are part of a transition away from SWIG and are not

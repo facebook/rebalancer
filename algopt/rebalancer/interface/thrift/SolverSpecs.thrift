@@ -12,19 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+@hack.NamePrefix{prefix = "rebalancer_interface_thrift_"}
+@hack.LegacyOmitPrefixInNameString
 package "meta.com/algopt/rebalancer"
+
+namespace hack ""
 
 include "thrift/annotation/thrift.thrift"
 include "thrift/annotation/cpp.thrift"
 include "algopt/rebalancer/algopt_common/thrift/Types.thrift"
 // @fb-only: include "configerator/structs/tupperware/ras/resourcepools.thrift"
+include "thrift/annotation/hack.thrift"
 
 cpp_include "folly/container/F14Map.h"
 cpp_include "folly/container/F14Set.h"
 
 namespace cpp2 facebook.rebalancer.interface
 namespace py3 rebalancer.interface.thrift.v2
-namespace php rebalancer_interface_thrift
 
 @cpp.Type{template = "folly::F14FastSet"}
 typedef set<string> StringSet

@@ -22,7 +22,6 @@ include "algopt/rebalancer/entities/thrift/Entities.thrift"
 include "thrift/annotation/thrift.thrift"
 
 namespace cpp2 facebook.rebalancer.interface
-namespace php rebalancer_interface
 namespace py3 rebalancer.interface.thrift
 
 @thrift.ReserveIds{ids = [4, 9, 11, 18]}

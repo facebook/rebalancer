@@ -12,11 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+include "thrift/annotation/hack.thrift"
+
+@hack.NamePrefix{prefix = "algopt_lp_"}
+@hack.LegacyOmitPrefixInNameString
 package "meta.com/algopt/rebalancer"
+
+namespace hack ""
 
 namespace cpp2 facebook.algopt.lp.thrift
 namespace py3 algopt.lp.thrift
-namespace php algopt_lp
 namespace py algopt.lp.thrift.problem
 
 enum ProblemStatus {

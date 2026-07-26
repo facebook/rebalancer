@@ -12,11 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+include "thrift/annotation/hack.thrift"
+
+@hack.NamePrefix{prefix = "facebook_algopt_common_thrift_"}
+@hack.LegacyOmitPrefixInNameString
+@hack.ConstantsClass{name = "facebook_algopt_common_thrift_CONSTANTS"}
 package "meta.com/algopt/rebalancer"
+
+namespace hack ""
 
 namespace cpp2 facebook.algopt.common.thrift
 namespace py3 facebook.algopt.common.thrift
-namespace php facebook.algopt.common.thrift
 namespace py facebook.algopt.common.thrift.Types
 
 enum Intent {
