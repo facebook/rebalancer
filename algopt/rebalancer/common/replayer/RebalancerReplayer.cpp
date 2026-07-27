@@ -56,6 +56,14 @@ static void disableStdout(AssignmentProblem& problem) {
   }
 }
 
+void RebalancerReplayer::clearSolverLogFile(AssignmentProblem& problem) {
+  for (auto& solver : *problem.strategy()->solvers()) {
+    if (solver.getType() == SolverT::Type::rasHybridSolverSpec) {
+      solver.mutable_rasHybridSolverSpec().solverLogFile() = "";
+    }
+  }
+}
+
 interface::AssignmentProblem RebalancerReplayer::downloadFromManifold(
     const std::string& runId) {
 #ifndef REBALANCER_OSS_BUILD
@@ -70,6 +78,7 @@ AssignmentSolution RebalancerReplayer::replay(
     AssignmentProblem&& problem,
     std::optional<std::string> loggingLabel) {
   disableStdout(problem);
+  clearSolverLogFile(problem);
   std::shared_ptr<RebalancerLog> logger;
   if (loggingLabel) {
     problem.enableScubaLogger() = true;

@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include "algopt/rebalancer/common/log/RebalancerLog.h"
+#include "algopt/rebalancer/common/replayer/RebalancerReplayer.h"
 #include "algopt/rebalancer/common/UuidGenerator.h"
 #include "algopt/rebalancer/entities/Universe.h"
 #include "algopt/rebalancer/interface/Constants.h"
@@ -377,6 +378,7 @@ static void possiblyModifySolverSpec(AssignmentProblem& problem) {
         }
     }
   }
+  RebalancerReplayer::clearSolverLogFile(problem);
 }
 
 static void possiblyModifyProblem(AssignmentProblem& problem) {

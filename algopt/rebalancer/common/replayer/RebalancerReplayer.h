@@ -31,6 +31,11 @@ class RebalancerReplayer {
   static facebook::rebalancer::interface::AssignmentSolution replay(
       interface::AssignmentProblem&& problem,
       std::optional<std::string> loggingLabel = std::nullopt);
+
+  // A persisted instance carries RasHybridSolverSpec.solverLogFile pointing at
+  // a temp path which does not exist on a replay/benchmark host. Clearing it to
+  // avoid failures from writing logs.
+  static void clearSolverLogFile(interface::AssignmentProblem& problem);
 };
 
 } // namespace rebalancer
