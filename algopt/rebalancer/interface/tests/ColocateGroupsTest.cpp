@@ -19,6 +19,7 @@
 #include <folly/container/irange.h>
 #include <folly/Portability.h>
 #include <folly/Random.h>
+#include <folly/String.h>
 #include <gtest/gtest.h>
 
 #include <map>

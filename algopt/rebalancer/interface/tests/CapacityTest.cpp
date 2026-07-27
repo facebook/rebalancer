@@ -16,6 +16,7 @@
 #include "algopt/rebalancer/tests/SolverTestUtils.h"
 
 #include <folly/container/irange.h>
+#include <folly/String.h>
 #include <gtest/gtest.h>
 
 #include <map>
