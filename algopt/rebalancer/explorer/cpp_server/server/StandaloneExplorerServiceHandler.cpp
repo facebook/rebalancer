@@ -53,7 +53,7 @@ folly::coro::Task<std::unique_ptr<SandboxStatusResponse>>
 StandaloneExplorerServiceHandler::co_getSandboxStatus(
     std::unique_ptr<Handle> handle) {
   auto response = std::make_unique<SandboxStatusResponse>();
-  response->status() = co_await store_.getStatus(*handle->manifoldId());
+  response->status() = store_.getStatus<SandboxStatus>(*handle->manifoldId());
   co_return response;
 }
 

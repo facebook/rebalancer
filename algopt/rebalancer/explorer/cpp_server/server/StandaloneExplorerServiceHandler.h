@@ -51,7 +51,7 @@ class StandaloneExplorerServiceHandler : public RebalancerExplorerHandlerBase {
  private:
   std::string host_;
   int32_t port_;
-  SandboxStore<FileSandboxFactory, SandboxStatus, ModelServer> store_;
+  SandboxStore<FileSandboxFactory, ModelServer> store_;
 };
 
 } // namespace facebook::rebalancer::explorer
