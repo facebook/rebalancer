@@ -1539,3 +1539,572 @@ TEST_P(ColocateGroupsLocalSearchTest, OverlappingGroups_TransitiveColocation) {
       "[TransitiveColocation] taskD is on {} (separate component)",
       hostD);
 }
+
+TEST_P(ColocateGroupsLocalSearchTest, MultiReplicaFootprintEquality) {
+  // Core feasibility check for SECONDARY-only colocation:
+  // ColocateGroupsSpec(MAX, globalLimit=N) over ALL replicas of the group,
+  // combined with a per-shard spread (GroupCountSpec MAX globalLimit=1 = at
+  // most one replica of a shard per host), should force all shards onto the
+  // SAME N hosts with exactly one replica of each shard per host (identical
+  // footprints). 3 shards x 3 replicas, single-move local search.
+  auto solver =
+      initializeTestProblemSolver({.executorThreadCount = GetParam()});
+  solver->setObjectName("task");
+  solver->setContainerName("host");
+
+  // 9 replicas scattered across 5 hosts. Spread holds per shard, but the three
+  // shards' footprints differ, so the group spans 5 hosts (colocation
+  // violated).
+  const std::map<std::string, std::vector<std::string>> initialAssignment = {
+      {"host0", {"s0_0"}},
+      {"host1", {"s0_1", "s1_0"}},
+      {"host2", {"s0_2", "s1_1", "s2_0"}},
+      {"host3", {"s1_2", "s2_1"}},
+      {"host4", {"s2_2"}},
+  };
+  solver->setAssignment(initialAssignment);
+
+  // Partition by shard: each abstract shard -> its 3 replicas.
+  const std::map<std::string, std::vector<std::string>> byShard = {
+      {"s0", {"s0_0", "s0_1", "s0_2"}},
+      {"s1", {"s1_0", "s1_1", "s1_2"}},
+      {"s2", {"s2_0", "s2_1", "s2_2"}},
+  };
+  solver->addPartition("byShard", byShard);
+
+  // One colocation group containing all 9 replicas.
+  const std::map<std::string, std::vector<std::string>> colocationGroup = {
+      {"group0",
+       {"s0_0",
+        "s0_1",
+        "s0_2",
+        "s1_0",
+        "s1_1",
+        "s1_2",
+        "s2_0",
+        "s2_1",
+        "s2_2"}},
+  };
+  solver->addPartition("group", colocationGroup);
+
+  // Spread (exclusion): at most one replica of a shard per host.
+  GroupCountSpec spreadSpec;
+  spreadSpec.name() = "replica_spread";
+  spreadSpec.scope() = "host";
+  spreadSpec.partitionName() = "byShard";
+  spreadSpec.bound() = GroupCountSpecBound::MAX;
+  spreadSpec.limit()->globalLimit() = 1;
+  solver->addConstraint(spreadSpec);
+
+  // Colocation: the group occupies at most N=3 hosts.
+  ColocateGroupsSpec colocateGroupsSpec;
+  colocateGroupsSpec.name() = "footprint_colocation";
+  colocateGroupsSpec.scope() = "host";
+  colocateGroupsSpec.partitionName() = "group";
+  colocateGroupsSpec.bound() = ColocateGroupsSpecBound::MAX;
+  colocateGroupsSpec.limits()->globalLimit() = 3;
+  solver->addConstraint(colocateGroupsSpec);
+
+  // Single-move local search (matches make-before-break one-at-a-time moves).
+  LocalSearchSolverSpec localSearchSolverSpec;
+  localSearchSolverSpec.moveTypeList()->push_back(
+      ProblemSolver::makeMoveTypeSpec(SingleMoveTypeSpec()));
+  LocalSearchStageSolverSpec localSearchStageSolverSpec;
+  LocalSearchStageSpec stageSpec;
+  stageSpec.name() = "only stage";
+  stageSpec.solverSpec() = std::move(localSearchSolverSpec);
+  stageSpec.begin() = 0;
+  stageSpec.end() = 1;
+  localSearchStageSolverSpec.stageSpecs()->push_back(stageSpec);
+  solver->addSolver(localSearchStageSolverSpec);
+
+  const auto solution = solver->solve();
+  const auto& assignment = *solution.assignment();
+
+  // Compute each shard's footprint and per-host shard counts.
+  std::map<std::string, std::set<std::string>> shardToHosts;
+  std::map<std::string, std::map<std::string, int>> hostToShardCounts;
+  for (const auto& [task, host] : assignment) {
+    const auto shard = task.substr(0, task.find('_'));
+    shardToHosts[shard].insert(host);
+    hostToShardCounts[host][shard]++;
+    XLOGF(INFO, "[FootprintEquality] {} -> {}", task, host);
+  }
+
+  // Each shard is spread across exactly 3 distinct hosts.
+  EXPECT_EQ(3, shardToHosts["s0"].size());
+  EXPECT_EQ(3, shardToHosts["s1"].size());
+  EXPECT_EQ(3, shardToHosts["s2"].size());
+
+  // Identical footprints across all three shards.
+  EXPECT_EQ(shardToHosts["s0"], shardToHosts["s1"])
+      << "Expected s0 and s1 to occupy the same set of hosts";
+  EXPECT_EQ(shardToHosts["s1"], shardToHosts["s2"])
+      << "Expected s1 and s2 to occupy the same set of hosts";
+
+  // Each occupied host holds exactly one replica of each of the 3 shards.
+  for (const auto& [host, shardCounts] : hostToShardCounts) {
+    EXPECT_EQ(3, shardCounts.size())
+        << "host " << host
+        << " should hold one replica of each of the 3 shards";
+    for (const auto& [shard, count] : shardCounts) {
+      EXPECT_EQ(1, count) << "host " << host << " has " << count
+                          << " replicas of shard " << shard;
+    }
+  }
+}
+
+TEST_P(ColocateGroupsLocalSearchTest, MultiReplicaFailoverCoPlacement) {
+  // Failover shape: 2 of the 3 footprint hosts survive (each holds a full
+  // {s0,s1,s2} set); the 3rd host "died", so each shard has one replacement
+  // replica that starts unassigned -- modeled on a zero-weighted placeholder
+  // host, exactly like SM's FAKE_SOURCE. The colocation constraint must place
+  // all 3 replacements on the SAME new host (restoring identical footprints),
+  // not scatter them across 3 different hosts.
+  auto solver =
+      initializeTestProblemSolver({.executorThreadCount = GetParam()});
+  solver->setObjectName("task");
+  solver->setContainerName("host");
+
+  const std::map<std::string, std::vector<std::string>> initialAssignment = {
+      {"host_a", {"s0_0", "s1_0", "s2_0"}}, // surviving footprint host
+      {"host_b", {"s0_1", "s1_1", "s2_1"}}, // surviving footprint host
+      {"FAKE", {"s0_2", "s1_2", "s2_2"}}, // replacements, not yet placed
+      {"host_c", {}},
+      {"host_d", {}},
+      {"host_e", {}},
+  };
+  solver->setAssignment(initialAssignment);
+
+  const std::map<std::string, std::vector<std::string>> byShard = {
+      {"s0", {"s0_0", "s0_1", "s0_2"}},
+      {"s1", {"s1_0", "s1_1", "s1_2"}},
+      {"s2", {"s2_0", "s2_1", "s2_2"}},
+  };
+  solver->addPartition("byShard", byShard);
+
+  const std::map<std::string, std::vector<std::string>> colocationGroup = {
+      {"group0",
+       {"s0_0",
+        "s0_1",
+        "s0_2",
+        "s1_0",
+        "s1_1",
+        "s1_2",
+        "s2_0",
+        "s2_1",
+        "s2_2"}},
+  };
+  solver->addPartition("group", colocationGroup);
+
+  // Spread: at most one replica of a shard per host.
+  GroupCountSpec spreadSpec;
+  spreadSpec.name() = "replica_spread";
+  spreadSpec.scope() = "host";
+  spreadSpec.partitionName() = "byShard";
+  spreadSpec.bound() = GroupCountSpecBound::MAX;
+  spreadSpec.limit()->globalLimit() = 1;
+  solver->addConstraint(spreadSpec);
+
+  // Colocation: group on <= 3 hosts. The placeholder is zero-weighted, so
+  // unplaced replicas don't count until the solver puts them on a real host.
+  ColocateGroupsSpec colocateGroupsSpec;
+  colocateGroupsSpec.name() = "footprint_colocation";
+  colocateGroupsSpec.scope() = "host";
+  colocateGroupsSpec.partitionName() = "group";
+  colocateGroupsSpec.bound() = ColocateGroupsSpecBound::MAX;
+  colocateGroupsSpec.limits()->globalLimit() = 3;
+  colocateGroupsSpec.scopeItemWeights()["FAKE"] = 0;
+  solver->addConstraint(colocateGroupsSpec);
+
+  // Drive the replacements off the placeholder (models "must be allocated").
+  ToFreeSpec toFreeSpec;
+  toFreeSpec.name() = "place_replacements";
+  toFreeSpec.containers() = {"FAKE"};
+  solver->addGoal(toFreeSpec);
+
+  LocalSearchSolverSpec localSearchSolverSpec;
+  localSearchSolverSpec.moveTypeList()->push_back(
+      ProblemSolver::makeMoveTypeSpec(SingleMoveTypeSpec()));
+  LocalSearchStageSolverSpec localSearchStageSolverSpec;
+  LocalSearchStageSpec stageSpec;
+  stageSpec.name() = "only stage";
+  stageSpec.solverSpec() = std::move(localSearchSolverSpec);
+  stageSpec.begin() = 0;
+  stageSpec.end() = 1;
+  localSearchStageSolverSpec.stageSpecs()->push_back(stageSpec);
+  solver->addSolver(localSearchStageSolverSpec);
+
+  const auto solution = solver->solve();
+  const auto& assignment = *solution.assignment();
+
+  std::map<std::string, std::set<std::string>> shardToHosts;
+  for (const auto& [task, host] : assignment) {
+    EXPECT_NE("FAKE", host) << task << " left unplaced on the placeholder host";
+    shardToHosts[task.substr(0, task.find('_'))].insert(host);
+  }
+
+  // All 3 replacements co-place on one host => identical footprints of size 3.
+  EXPECT_EQ(3, shardToHosts["s0"].size());
+  EXPECT_EQ(shardToHosts["s0"], shardToHosts["s1"])
+      << "Expected s0 and s1 footprints to match";
+  EXPECT_EQ(shardToHosts["s1"], shardToHosts["s2"])
+      << "Expected s1 and s2 footprints to match";
+}
+
+TEST_P(ColocateGroupsLocalSearchTest, MultiReplicaThrottledConvergence) {
+  // Throttling concern: with a HARD constraint and a small per-round move cap,
+  // does colocation converge, or stall? This caps each solve to ONE move
+  // (LocalSearchSolverSpec.stopAfterMoves) and re-solves round by round -- like
+  // SM's per-round LB throttle -- asserting the group's footprint never
+  // regresses and reaches N. I.e. the constraint makes incremental progress
+  // rather than getting stuck.
+  const int threads = GetParam();
+
+  // 3 shards x 3 replicas scattered across 5 hosts (footprints unequal).
+  std::map<std::string, std::string> placement = {
+      {"s0_0", "host0"},
+      {"s0_1", "host1"},
+      {"s0_2", "host2"},
+      {"s1_0", "host1"},
+      {"s1_1", "host2"},
+      {"s1_2", "host3"},
+      {"s2_0", "host2"},
+      {"s2_1", "host3"},
+      {"s2_2", "host4"},
+  };
+  const std::vector<std::string> hosts = {
+      "host0", "host1", "host2", "host3", "host4", "host5"};
+  const std::map<std::string, std::vector<std::string>> byShard = {
+      {"s0", {"s0_0", "s0_1", "s0_2"}},
+      {"s1", {"s1_0", "s1_1", "s1_2"}},
+      {"s2", {"s2_0", "s2_1", "s2_2"}},
+  };
+  const std::map<std::string, std::vector<std::string>> colocationGroup = {
+      {"group0",
+       {"s0_0",
+        "s0_1",
+        "s0_2",
+        "s1_0",
+        "s1_1",
+        "s1_2",
+        "s2_0",
+        "s2_1",
+        "s2_2"}},
+  };
+
+  const auto occupancy = [](const std::map<std::string, std::string>& p) {
+    std::set<std::string> servers;
+    for (const auto& [task, host] : p) {
+      servers.insert(host);
+    }
+    return servers.size();
+  };
+
+  // One throttled LB round: at most one move, then return the new assignment.
+  const auto solveOneCappedRound =
+      [&](const std::map<std::string, std::string>& current) {
+        auto solver =
+            initializeTestProblemSolver({.executorThreadCount = threads});
+        solver->setObjectName("task");
+        solver->setContainerName("host");
+
+        std::map<std::string, std::vector<std::string>> hostToTasks;
+        for (const auto& host : hosts) {
+          hostToTasks[host]; // make empty hosts available as targets
+        }
+        for (const auto& [task, host] : current) {
+          hostToTasks[host].push_back(task);
+        }
+        solver->setAssignment(hostToTasks);
+        solver->addPartition("byShard", byShard);
+        solver->addPartition("group", colocationGroup);
+
+        GroupCountSpec spreadSpec;
+        spreadSpec.name() = "replica_spread";
+        spreadSpec.scope() = "host";
+        spreadSpec.partitionName() = "byShard";
+        spreadSpec.bound() = GroupCountSpecBound::MAX;
+        spreadSpec.limit()->globalLimit() = 1;
+        solver->addConstraint(spreadSpec);
+
+        ColocateGroupsSpec colocateGroupsSpec;
+        colocateGroupsSpec.name() = "footprint_colocation";
+        colocateGroupsSpec.scope() = "host";
+        colocateGroupsSpec.partitionName() = "group";
+        colocateGroupsSpec.bound() = ColocateGroupsSpecBound::MAX;
+        colocateGroupsSpec.limits()->globalLimit() = 3;
+        solver->addConstraint(colocateGroupsSpec);
+
+        LocalSearchSolverSpec localSearchSolverSpec;
+        localSearchSolverSpec.moveTypeList()->push_back(
+            ProblemSolver::makeMoveTypeSpec(SingleMoveTypeSpec()));
+        localSearchSolverSpec.stopAfterMoves() = 1; // throttle: 1 move/round
+        solver->addSolver(localSearchSolverSpec);
+
+        auto solution = solver->solve();
+        std::map<std::string, std::string> result;
+        for (const auto& [task, host] : *solution.assignment()) {
+          result[task] = host;
+        }
+        return result;
+      };
+
+  size_t prevOccupancy = occupancy(placement);
+  ASSERT_GT(prevOccupancy, 3u) << "should start violated (apart)";
+
+  constexpr int kMaxRounds = 20;
+  int round = 0;
+  for (; round < kMaxRounds && occupancy(placement) > 3; ++round) {
+    placement = solveOneCappedRound(placement);
+    EXPECT_LE(occupancy(placement), prevOccupancy)
+        << "footprint regressed at round " << round;
+    prevOccupancy = occupancy(placement);
+  }
+
+  EXPECT_EQ(3u, occupancy(placement))
+      << "did not converge under throttling -- stuck at "
+      << occupancy(placement) << " hosts after " << round << " rounds";
+}
+
+TEST_P(
+    ColocateGroupsLocalSearchTest,
+    MultiReplicaDrainWithColocateGroupsMoveType) {
+  // Drain scenario. Shards s0,s1,s2 (one colocation group, 3 replicas each) are
+  // colocated on host0/host1/host2 -- one replica of each per host. host0 is
+  // put under drain via a ToFreeSpec goal.
+  //
+  // A single-move rebalance CANNOT relocate a live colocated group: the first
+  // partial move pushes the group onto a 4th host, which the globalLimit=3
+  // colocation constraint rejects (see the stuck baseline below). The
+  // COLOCATE_GROUPS move type relocates the whole host0 slice {s0_0,s1_0,s2_0}
+  // to a spare host as ONE atomic MoveSet, so the group jumps directly from
+  // {host0,host1,host2} to {host1,host2,spare} without ever passing through a
+  // 4-host (split) state.
+  auto solver =
+      initializeTestProblemSolver({.executorThreadCount = GetParam()});
+  solver->setObjectName("task");
+  solver->setContainerName("host");
+
+  const std::map<std::string, std::vector<std::string>> initialAssignment = {
+      {"host0",
+       {"s0_0", "s1_0", "s2_0"}}, // draining host: a full colocated slice
+      {"host1", {"s0_1", "s1_1", "s2_1"}},
+      {"host2", {"s0_2", "s1_2", "s2_2"}},
+      {"host3", {}}, // spare
+      {"host4", {}}, // spare
+  };
+  solver->setAssignment(initialAssignment);
+
+  // Fine partition (one group per shard) -- used by BOTH the spread constraint
+  // and the COLOCATE_GROUPS move type's relatedGroups.
+  const std::map<std::string, std::vector<std::string>> byShard = {
+      {"s0", {"s0_0", "s0_1", "s0_2"}},
+      {"s1", {"s1_0", "s1_1", "s1_2"}},
+      {"s2", {"s2_0", "s2_1", "s2_2"}},
+  };
+  solver->addPartition("byShard", byShard);
+
+  // Coarse partition (all 9 replicas in one group) -- used by the colocation
+  // constraint.
+  const std::map<std::string, std::vector<std::string>> colocationGroup = {
+      {"group0",
+       {"s0_0",
+        "s0_1",
+        "s0_2",
+        "s1_0",
+        "s1_1",
+        "s1_2",
+        "s2_0",
+        "s2_1",
+        "s2_2"}},
+  };
+  solver->addPartition("group", colocationGroup);
+
+  // Spread: at most one replica of a shard per host.
+  GroupCountSpec spreadSpec;
+  spreadSpec.name() = "replica_spread";
+  spreadSpec.scope() = "host";
+  spreadSpec.partitionName() = "byShard";
+  spreadSpec.bound() = GroupCountSpecBound::MAX;
+  spreadSpec.limit()->globalLimit() = 1;
+  solver->addConstraint(spreadSpec);
+
+  // Colocation: the group occupies at most N=3 hosts (hard constraint).
+  ColocateGroupsSpec colocateGroupsSpec;
+  colocateGroupsSpec.name() = "footprint_colocation";
+  colocateGroupsSpec.scope() = "host";
+  colocateGroupsSpec.partitionName() = "group";
+  colocateGroupsSpec.bound() = ColocateGroupsSpecBound::MAX;
+  colocateGroupsSpec.limits()->globalLimit() = 3;
+  solver->addConstraint(colocateGroupsSpec);
+
+  // Drain host0 (drain is modeled as a goal, as in SM's DrainProblemBuilder).
+  ToFreeSpec drainSpec;
+  drainSpec.name() = "drain_host0";
+  drainSpec.containers() = {"host0"};
+  solver->addGoal(drainSpec);
+
+  // The drain move type: relate the three shards so their host0 slice co-moves.
+  ColocateGroupsMoveTypeSpec colocateMove;
+  colocateMove.partitionName() =
+      "byShard"; // fine partition: one group per shard
+  colocateMove.colocationScopeName() = "host";
+  ColocateGroupsMoveTypeRelatedGroupsInfo relatedGroupsInfo;
+  relatedGroupsInfo.relatedGroups() =
+      folly::F14FastSet<std::string>{"s0", "s1", "s2"};
+  colocateMove.relatedGroupsList() = {relatedGroupsInfo};
+
+  // SINGLE (as in production) + COLOCATE_GROUPS (the drain mechanism under
+  // test).
+  LocalSearchSolverSpec localSearchSolverSpec;
+  localSearchSolverSpec.moveTypeList()->push_back(
+      ProblemSolver::makeMoveTypeSpec(SingleMoveTypeSpec()));
+  localSearchSolverSpec.moveTypeList()->push_back(
+      ProblemSolver::makeMoveTypeSpec(std::move(colocateMove)));
+  solver->addSolver(localSearchSolverSpec);
+
+  const auto solution = solver->solve();
+  const auto& assignment = *solution.assignment();
+
+  std::map<std::string, std::set<std::string>> shardToHosts;
+  std::map<std::string, std::map<std::string, int>> hostToShardCounts;
+  for (const auto& [task, host] : assignment) {
+    const auto shard = task.substr(0, task.find('_'));
+    shardToHosts[shard].insert(host);
+    hostToShardCounts[host][shard]++;
+    XLOGF(INFO, "[Drain] {} -> {}", task, host);
+  }
+
+  // Drain succeeded: nothing left on host0.
+  EXPECT_EQ(0u, hostToShardCounts.count("host0"))
+      << "host0 should be fully drained";
+
+  // Colocation preserved: each shard on exactly 3 hosts with identical
+  // footprints (the slice relocated as a unit, never split).
+  EXPECT_EQ(3, shardToHosts["s0"].size());
+  EXPECT_EQ(shardToHosts["s0"], shardToHosts["s1"]);
+  EXPECT_EQ(shardToHosts["s1"], shardToHosts["s2"]);
+
+  // Each occupied host holds exactly one replica of each of the 3 shards.
+  for (const auto& [host, shardCounts] : hostToShardCounts) {
+    EXPECT_EQ(3, shardCounts.size())
+        << "host " << host << " should hold one replica of each shard";
+    for (const auto& [shard, count] : shardCounts) {
+      EXPECT_EQ(1, count) << "host " << host << " has " << count
+                          << " replicas of " << shard;
+    }
+  }
+}
+
+TEST_P(
+    ColocateGroupsLocalSearchTest,
+    MultiReplicaDrainAtomicMoveOvershootsThrottle) {
+  // Throttle interaction. The COLOCATE_GROUPS move relocates a 3-shard
+  // colocated slice as ONE atomic MoveSet. `stopAfterMoves` is a POST-apply
+  // floor counted in individual object moves, so a budget of 2 (below the group
+  // size of 3) does NOT chop the 3-move set: the whole set is applied
+  // (overshooting the cap to 3) and the solve stops afterwards. A move budget
+  // can only stop the search BETWEEN move sets, never partway through one, so
+  // the group is never split.
+  auto solver =
+      initializeTestProblemSolver({.executorThreadCount = GetParam()});
+  solver->setObjectName("task");
+  solver->setContainerName("host");
+
+  const std::map<std::string, std::vector<std::string>> initialAssignment = {
+      {"host0",
+       {"s0_0", "s1_0", "s2_0"}}, // draining host: a full colocated slice
+      {"host1", {"s0_1", "s1_1", "s2_1"}},
+      {"host2", {"s0_2", "s1_2", "s2_2"}},
+      {"host3", {}}, // spare
+      {"host4", {}}, // spare
+  };
+  solver->setAssignment(initialAssignment);
+
+  const std::map<std::string, std::vector<std::string>> byShard = {
+      {"s0", {"s0_0", "s0_1", "s0_2"}},
+      {"s1", {"s1_0", "s1_1", "s1_2"}},
+      {"s2", {"s2_0", "s2_1", "s2_2"}},
+  };
+  solver->addPartition("byShard", byShard);
+
+  const std::map<std::string, std::vector<std::string>> colocationGroup = {
+      {"group0",
+       {"s0_0",
+        "s0_1",
+        "s0_2",
+        "s1_0",
+        "s1_1",
+        "s1_2",
+        "s2_0",
+        "s2_1",
+        "s2_2"}},
+  };
+  solver->addPartition("group", colocationGroup);
+
+  GroupCountSpec spreadSpec;
+  spreadSpec.name() = "replica_spread";
+  spreadSpec.scope() = "host";
+  spreadSpec.partitionName() = "byShard";
+  spreadSpec.bound() = GroupCountSpecBound::MAX;
+  spreadSpec.limit()->globalLimit() = 1;
+  solver->addConstraint(spreadSpec);
+
+  ColocateGroupsSpec colocateGroupsSpec;
+  colocateGroupsSpec.name() = "footprint_colocation";
+  colocateGroupsSpec.scope() = "host";
+  colocateGroupsSpec.partitionName() = "group";
+  colocateGroupsSpec.bound() = ColocateGroupsSpecBound::MAX;
+  colocateGroupsSpec.limits()->globalLimit() = 3;
+  solver->addConstraint(colocateGroupsSpec);
+
+  ToFreeSpec drainSpec;
+  drainSpec.name() = "drain_host0";
+  drainSpec.containers() = {"host0"};
+  solver->addGoal(drainSpec);
+
+  ColocateGroupsMoveTypeSpec colocateMove;
+  colocateMove.partitionName() = "byShard";
+  colocateMove.colocationScopeName() = "host";
+  ColocateGroupsMoveTypeRelatedGroupsInfo relatedGroupsInfo;
+  relatedGroupsInfo.relatedGroups() =
+      folly::F14FastSet<std::string>{"s0", "s1", "s2"};
+  colocateMove.relatedGroupsList() = {relatedGroupsInfo};
+
+  // Move budget of 2, below the colocation group size of 3.
+  LocalSearchSolverSpec localSearchSolverSpec;
+  localSearchSolverSpec.moveTypeList()->push_back(
+      ProblemSolver::makeMoveTypeSpec(SingleMoveTypeSpec()));
+  localSearchSolverSpec.moveTypeList()->push_back(
+      ProblemSolver::makeMoveTypeSpec(std::move(colocateMove)));
+  localSearchSolverSpec.stopAfterMoves() = 2;
+  solver->addSolver(localSearchSolverSpec);
+
+  const auto solution = solver->solve();
+  const auto& assignment = *solution.assignment();
+
+  std::map<std::string, std::set<std::string>> shardToHosts;
+  std::map<std::string, std::map<std::string, int>> hostToShardCounts;
+  for (const auto& [task, host] : assignment) {
+    const auto shard = task.substr(0, task.find('_'));
+    shardToHosts[shard].insert(host);
+    hostToShardCounts[host][shard]++;
+  }
+
+  // Overshoot, not truncation: the whole 3-move slice relocated despite the
+  // budget of 2, so host0 is fully drained.
+  EXPECT_EQ(0u, hostToShardCounts.count("host0"))
+      << "atomic group move should apply fully (overshoot the budget), not "
+         "leave a partial slice on host0";
+
+  // Never split: footprints stay equal and size 3, one replica of each per
+  // host.
+  EXPECT_EQ(3, shardToHosts["s0"].size());
+  EXPECT_EQ(shardToHosts["s0"], shardToHosts["s1"]);
+  EXPECT_EQ(shardToHosts["s1"], shardToHosts["s2"]);
+  for (const auto& [host, shardCounts] : hostToShardCounts) {
+    EXPECT_EQ(3, shardCounts.size())
+        << "host " << host << " should hold one replica of each shard";
+  }
+}
