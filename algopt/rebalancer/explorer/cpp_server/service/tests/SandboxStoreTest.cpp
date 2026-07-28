@@ -11,8 +11,10 @@
 #include <chrono>
 #include <cstdint>
 #include <limits>
+#include <memory>
 #include <string>
 #include <thread>
+#include <utility>
 #include <vector>
 
 namespace facebook::rebalancer::explorer {
@@ -20,6 +22,11 @@ namespace facebook::rebalancer::explorer {
 struct FakeSandbox {};
 
 enum class FakeSandboxStatus { NOT_LOADED, LOADING, LOADED };
+
+class SandboxLoadError : public std::runtime_error {
+ public:
+  using std::runtime_error::runtime_error;
+};
 
 class FakeSandboxFactory {
  public:
@@ -59,8 +66,83 @@ class FakeSandboxFactory {
   static inline std::atomic<int> totalLoads_{0};
 };
 
-using TestSandboxStore =
-    SandboxStore<FakeSandboxFactory, FakeSandboxStatus, FakeSandbox>;
+using TestSandboxStore = SandboxStore<FakeSandboxFactory, FakeSandbox>;
+
+class FailingSandboxFactory {
+ public:
+  static folly::coro::Task<std::shared_ptr<FakeSandbox>> create(std::string) {
+    totalLoads_.fetch_add(1);
+    throw SandboxLoadError("test sandbox load failed");
+    co_return nullptr;
+  }
+
+  static void reset() {
+    totalLoads_.store(0);
+  }
+
+  static int totalLoads() {
+    return totalLoads_.load();
+  }
+
+ private:
+  static inline std::atomic<int> totalLoads_{0};
+};
+
+using FailingSandboxStore = SandboxStore<FailingSandboxFactory, FakeSandbox>;
+
+class DelayedFailingSandboxFactory {
+ public:
+  static folly::coro::Task<std::shared_ptr<FakeSandbox>> create(std::string) {
+    co_await folly::coro::sleep(std::chrono::milliseconds(300));
+    throw SandboxLoadError("delayed sandbox load failed");
+  }
+};
+
+using DelayedFailingSandboxStore =
+    SandboxStore<DelayedFailingSandboxFactory, FakeSandbox>;
+
+class FailOnceSandboxFactory {
+ public:
+  static folly::coro::Task<std::shared_ptr<FakeSandbox>> create(std::string) {
+    if (totalLoads_.fetch_add(1) == 0) {
+      throw std::runtime_error("first load failed");
+    }
+    co_return std::make_shared<FakeSandbox>();
+  }
+
+  static void reset() {
+    totalLoads_.store(0);
+  }
+
+  static int totalLoads() {
+    return totalLoads_.load();
+  }
+
+ private:
+  static inline std::atomic<int> totalLoads_{0};
+};
+
+using FailOnceSandboxStore = SandboxStore<FailOnceSandboxFactory, FakeSandbox>;
+
+using CompoundKey = std::pair<std::string, std::string>;
+
+class StatefulCompoundKeyFactory {
+ public:
+  explicit StatefulCompoundKeyFactory(
+      std::shared_ptr<std::atomic<int>> totalLoads)
+      : totalLoads_(std::move(totalLoads)) {}
+
+  folly::coro::Task<std::shared_ptr<FakeSandbox>> create(CompoundKey) {
+    totalLoads_->fetch_add(1);
+    co_return std::make_shared<FakeSandbox>();
+  }
+
+ private:
+  std::shared_ptr<std::atomic<int>> totalLoads_;
+};
+
+using CompoundKeySandboxStore =
+    SandboxStore<StatefulCompoundKeyFactory, FakeSandbox, CompoundKey>;
 
 constexpr int kMaxConcurrentLoads = 2;
 
@@ -79,26 +161,33 @@ bool waitUntil(Predicate done) {
   return done();
 }
 
-bool waitUntilLoaded(TestSandboxStore& store, const std::string& id) {
+template <typename Store>
+bool waitUntilLoaded(Store& store, const std::string& id) {
   return waitUntil([&]() {
-    return folly::coro::blockingWait(store.getStatus(id)) ==
+    return store.template getStatus<FakeSandboxStatus>(id) ==
         FakeSandboxStatus::LOADED;
   });
 }
 
-FakeSandboxStatus statusOf(TestSandboxStore& store, const std::string& id) {
-  return folly::coro::blockingWait(store.getStatus(id));
+template <typename Store>
+FakeSandboxStatus statusOf(Store& store, const std::string& id) {
+  return store.template getStatus<FakeSandboxStatus>(id);
 }
 
 // Short TTL expires within tests; long TTL does not.
 constexpr auto kShortTtl = std::chrono::milliseconds(20);
 constexpr auto kLongTtl = std::chrono::seconds(10);
 constexpr auto kPastShortTtl = std::chrono::milliseconds(100);
+constexpr auto kDelayedLoadTtl = std::chrono::milliseconds(100);
+constexpr auto kPastDelayedLoadTtl = std::chrono::milliseconds(200);
 
 // Drive eviction without waiting for the background sweep.
-void sleepThenSweep(TestSandboxStore& store) {
+template <typename Store>
+void sleepThenSweep(
+    Store& store,
+    std::chrono::milliseconds delay = kPastShortTtl) {
   // @lint-ignore CLANGTIDY facebook-hte-BadCall-sleep_for
-  std::this_thread::sleep_for(kPastShortTtl);
+  std::this_thread::sleep_for(delay);
   store.dropInactiveSandboxesForTesting();
 }
 
@@ -114,8 +203,7 @@ TEST(SandboxStoreTest, CapsConcurrentLoads) {
 
   const bool allLoaded = waitUntil([&]() {
     for (const auto& id : ids) {
-      if (folly::coro::blockingWait(store.getStatus(id)) !=
-          FakeSandboxStatus::LOADED) {
+      if (store.getStatus<FakeSandboxStatus>(id) != FakeSandboxStatus::LOADED) {
         return false;
       }
     }
@@ -138,12 +226,79 @@ TEST(SandboxStoreTest, DedupesConcurrentLoadsOfSameId) {
   }
 
   const bool loaded = waitUntil([&]() {
-    return folly::coro::blockingWait(store.getStatus("sandbox_x")) ==
+    return store.getStatus<FakeSandboxStatus>("sandbox_x") ==
         FakeSandboxStatus::LOADED;
   });
 
   ASSERT_TRUE(loaded);
   EXPECT_EQ(1, FakeSandboxFactory::totalLoads());
+}
+
+TEST(SandboxStoreTest, GetOrLoadAwaitsExistingLoad) {
+  FakeSandboxFactory::resetCounters();
+  TestSandboxStore store;
+
+  store.startLoadSandbox("sandbox_x");
+  const auto sandbox =
+      folly::coro::blockingWait(store.getOrLoadSandbox("sandbox_x"));
+
+  EXPECT_NE(nullptr, sandbox);
+  EXPECT_EQ(1, FakeSandboxFactory::totalLoads());
+  EXPECT_EQ(FakeSandboxStatus::LOADED, statusOf(store, "sandbox_x"));
+}
+
+TEST(SandboxStoreTest, SupportsInjectedFactoryAndCompoundKey) {
+  auto totalLoads = std::make_shared<std::atomic<int>>(0);
+  auto executor = std::make_shared<folly::CPUThreadPoolExecutor>(1);
+  CompoundKeySandboxStore store(
+      StatefulCompoundKeyFactory{totalLoads}, {}, executor);
+  const CompoundKey key{"loader", "key"};
+
+  const auto sandbox = folly::coro::blockingWait(store.getOrLoadSandbox(key));
+
+  EXPECT_NE(nullptr, sandbox);
+  EXPECT_EQ(1, totalLoads->load());
+  const auto status = store.getLoadStatus(key);
+  ASSERT_TRUE(status.has_value());
+  EXPECT_EQ(SandboxLoadState::LOADED, status->state);
+}
+
+TEST(SandboxStoreTest, RetainsFailureForAwaitingConsumers) {
+  FailingSandboxFactory::reset();
+  FailingSandboxStore store(
+      FailingSandboxFactory{},
+      SandboxStoreOptions{.retainFailedSandboxes = true});
+
+  EXPECT_THROW(
+      folly::coro::blockingWait(store.getOrLoadSandbox("sandbox_x")),
+      SandboxLoadError);
+
+  const auto status = store.getLoadStatus("sandbox_x");
+  ASSERT_TRUE(status.has_value());
+  EXPECT_EQ(SandboxLoadState::FAILED, status->state);
+  EXPECT_EQ("test sandbox load failed", status->errorMessage);
+  EXPECT_EQ(1, store.getSandboxCounts().failed);
+
+  EXPECT_THROW(
+      folly::coro::blockingWait(store.getOrLoadSandbox("sandbox_x")),
+      SandboxLoadError);
+  EXPECT_EQ(1, FailingSandboxFactory::totalLoads());
+}
+
+TEST(SandboxStoreTest, LegacyStartLoadRetriesAfterFailure) {
+  FailOnceSandboxFactory::reset();
+  FailOnceSandboxStore store;
+
+  store.startLoadSandbox("sandbox_x");
+  ASSERT_TRUE(
+      waitUntil([]() { return FailOnceSandboxFactory::totalLoads() == 1; }));
+  ASSERT_TRUE(waitUntil([&]() {
+    return statusOf(store, "sandbox_x") == FakeSandboxStatus::NOT_LOADED;
+  }));
+
+  store.startLoadSandbox("sandbox_x");
+  ASSERT_TRUE(waitUntilLoaded(store, "sandbox_x"));
+  EXPECT_EQ(2, FailOnceSandboxFactory::totalLoads());
 }
 
 TEST(SandboxStoreTest, InactiveSandboxTtlFromRequestParsesRequestTtl) {
@@ -181,6 +336,30 @@ TEST(SandboxStoreTest, EvictsUsingPerSandboxTtl) {
   // Only the short-TTL sandbox expired.
   EXPECT_EQ(FakeSandboxStatus::NOT_LOADED, statusOf(store, "short"));
   EXPECT_EQ(FakeSandboxStatus::LOADED, statusOf(store, "long"));
+}
+
+TEST(SandboxStoreTest, IdleTtlStartsAfterLoadFailure) {
+  DelayedFailingSandboxStore store(
+      DelayedFailingSandboxFactory{},
+      SandboxStoreOptions{
+          .inactiveSandboxTimeout = kDelayedLoadTtl,
+          .retainFailedSandboxes = true,
+          .evictLoadingSandboxes = false,
+      });
+
+  store.startLoadSandbox("sandbox_x");
+  sleepThenSweep(store, kPastDelayedLoadTtl);
+  EXPECT_EQ(FakeSandboxStatus::LOADING, statusOf(store, "sandbox_x"));
+
+  ASSERT_TRUE(waitUntil([&]() {
+    const auto status = store.getLoadStatus("sandbox_x");
+    return status && status->state == SandboxLoadState::FAILED;
+  }));
+  store.dropInactiveSandboxesForTesting();
+  ASSERT_TRUE(store.getLoadStatus("sandbox_x").has_value());
+
+  sleepThenSweep(store, kPastDelayedLoadTtl);
+  EXPECT_FALSE(store.getLoadStatus("sandbox_x").has_value());
 }
 
 TEST(SandboxStoreTest, TtlIsRaisedNotLowered) {
