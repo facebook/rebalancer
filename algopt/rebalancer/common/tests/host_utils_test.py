@@ -181,7 +181,9 @@ class TestHostUtils(testutil.BaseFacebookTestCase):
                 # pyre-fixme[6]: For 1st param expected `dict[str, str]` but got
                 #  `dict[str, Optional[str]]`.
                 serf_to_match={
+                    # pyrefly: ignore [bad-assignment]
                     "datacenter": None,
+                    # pyrefly: ignore [bad-assignment]
                     "cluster": None,
                     "pod": "pod2",
                     "suite": "suite2",
@@ -194,7 +196,9 @@ class TestHostUtils(testutil.BaseFacebookTestCase):
                 # pyre-fixme[6]: For 1st param expected `dict[str, str]` but got
                 #  `dict[str, Optional[str]]`.
                 serf_to_match={
+                    # pyrefly: ignore [bad-assignment]
                     "datacenter": None,
+                    # pyrefly: ignore [bad-assignment]
                     "cluster": None,
                     "pod": "pod3",
                     "suite": "suite3",
@@ -242,7 +246,9 @@ class TestHostUtils(testutil.BaseFacebookTestCase):
                 # pyre-fixme[6]: For 2nd param expected `dict[str, str]` but got
                 #  `dict[str, Optional[str]]`.
                 serf={
+                    # pyrefly: ignore [bad-assignment]
                     "cluster": None,
+                    # pyrefly: ignore [bad-assignment]
                     "datacenter": None,
                     "pod": "pod2",
                     "suite": "suite2",
