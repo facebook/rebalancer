@@ -458,7 +458,7 @@ void ProblemChecker::checkGroupCapacitySpec(const GroupCapacitySpec& spec) {
         *spec.scope(), *spec.contributionPartition(), *spec.contribution());
   }
   checkLimitForGroups(*spec.scope(), *spec.partitionName(), *spec.limit());
-  if (const auto bundleConfig = spec.bundleConfig()) {
+  if (auto bundleConfig = spec.bundleConfig()) {
     if (bundleConfig->type() != LimitType::ABSOLUTE) {
       throw std::runtime_error("only absolute limits supported");
     }
