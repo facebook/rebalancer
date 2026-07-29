@@ -196,6 +196,11 @@ struct LearnedMoveFilterSpec {
   // below this threshold. Higher is more conservative: fewer moves pruned, lower
   // risk of dropping a legal improving move (recall), but a smaller eval saving.
   2: double pruneThreshold = 0.5;
+  // If set, append one JSON line of inference metrics (timings + prune counts)
+  // per solve to this file, for offline plotting/analysis. Populated from a
+  // binary-level flag (e.g. the standalone solver) rather than a process-wide
+  // flag read inside the solver core. (id 3 is reserved: former `enabled` bool.)
+  4: optional string learnedMetricsJson;
 }
 
 // 54: learnedHeuristicSpec -- moved to AssignmentProblem.learnedMoveFilterSpec

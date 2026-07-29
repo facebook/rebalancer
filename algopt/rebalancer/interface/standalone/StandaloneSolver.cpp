@@ -157,11 +157,20 @@ DEFINE_double(
     0.5,
     "Prune (object, container) moves whose predicted probability is below this "
     "threshold. Only used when --learned_model_path is set.");
+DEFINE_string(
+    learned_metrics_json,
+    "",
+    "If set, append one JSON line of learned-filter inference metrics (timings "
+    "+ prune counts) per solve to this file, for offline plotting/analysis. "
+    "Passed to the solver via LearnedMoveFilterSpec, not a core global flag.");
 
 static interface::LearnedMoveFilterSpec makeLearnedMoveFilterSpecFromFlags() {
   interface::LearnedMoveFilterSpec spec;
   spec.modelPath() = FLAGS_learned_model_path;
   spec.pruneThreshold() = FLAGS_learned_prune_threshold;
+  if (!FLAGS_learned_metrics_json.empty()) {
+    spec.learnedMetricsJson() = FLAGS_learned_metrics_json;
+  }
   return spec;
 }
 
