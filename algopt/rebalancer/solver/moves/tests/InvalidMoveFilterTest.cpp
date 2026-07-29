@@ -88,4 +88,36 @@ TEST(InvalidMoveFilterTest, DuplicateMarkIsIdempotent) {
   EXPECT_TRUE(filter.isMarkedInvalid(ObjectId(1), ContainerId(3)));
 }
 
+TEST(InvalidMoveFilterTest, MergeFromUnionsBothFilters) {
+  InvalidMoveFilter a(/*numObjects=*/5, /*numContainers=*/5);
+  a.markInvalid(ObjectId(1), ContainerId(2));
+  a.markInvalid(ObjectId(3), ContainerId(4)); // shared with b
+
+  InvalidMoveFilter b(/*numObjects=*/5, /*numContainers=*/5);
+  b.markInvalid(ObjectId(0), ContainerId(0));
+  b.markInvalid(ObjectId(3), ContainerId(4)); // shared with a
+
+  a.mergeFrom(b);
+
+  // a's own pairs are kept.
+  EXPECT_TRUE(a.isMarkedInvalid(ObjectId(1), ContainerId(2)));
+  // b's pairs are added.
+  EXPECT_TRUE(a.isMarkedInvalid(ObjectId(0), ContainerId(0)));
+  // the shared pair stays invalid.
+  EXPECT_TRUE(a.isMarkedInvalid(ObjectId(3), ContainerId(4)));
+  // an unmarked pair stays valid.
+  EXPECT_FALSE(a.isMarkedInvalid(ObjectId(2), ContainerId(2)));
+}
+
+TEST(InvalidMoveFilterTest, MergeFromEmptyIsNoOp) {
+  InvalidMoveFilter a(/*numObjects=*/3, /*numContainers=*/3);
+  a.markInvalid(ObjectId(1), ContainerId(1));
+
+  const InvalidMoveFilter empty(/*numObjects=*/3, /*numContainers=*/3);
+  a.mergeFrom(empty);
+
+  EXPECT_TRUE(a.isMarkedInvalid(ObjectId(1), ContainerId(1)));
+  EXPECT_FALSE(a.isMarkedInvalid(ObjectId(0), ContainerId(0)));
+}
+
 } // namespace facebook::rebalancer::tests

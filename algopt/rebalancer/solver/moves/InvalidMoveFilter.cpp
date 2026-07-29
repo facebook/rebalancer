@@ -14,6 +14,10 @@
 
 #include "algopt/rebalancer/solver/moves/InvalidMoveFilter.h"
 
+#include <fmt/core.h>
+
+#include <stdexcept>
+
 namespace facebook::rebalancer {
 
 InvalidMoveFilter::InvalidMoveFilter(size_t numObjects, size_t numContainers)
@@ -27,6 +31,36 @@ void InvalidMoveFilter::markInvalid(
     row.emplace(numObjects_);
   }
   row->set(objectId.asIndex());
+  isEmpty_ = false;
+}
+
+void InvalidMoveFilter::mergeFrom(const InvalidMoveFilter& other) {
+  if (other.isEmpty_) {
+    return;
+  }
+  if (other.containerToInvalidObjects_.size() !=
+          containerToInvalidObjects_.size() ||
+      other.numObjects_ != numObjects_) {
+    throw std::invalid_argument(
+        fmt::format(
+            "InvalidMoveFilter::mergeFrom dimension mismatch: this={}c/{}o vs other={}c/{}o",
+            containerToInvalidObjects_.size(),
+            numObjects_,
+            other.containerToInvalidObjects_.size(),
+            other.numObjects_));
+  }
+  for (size_t c = 0; c < containerToInvalidObjects_.size(); ++c) {
+    const auto& otherRow = other.containerToInvalidObjects_[c];
+    if (!otherRow.has_value()) {
+      continue;
+    }
+    auto& row = containerToInvalidObjects_[c];
+    if (!row.has_value()) {
+      row.emplace(numObjects_);
+    }
+    otherRow->forEachSetBit(
+        [&](std::size_t objectIndex) { row->set(objectIndex); });
+  }
   isEmpty_ = false;
 }
 

@@ -76,7 +76,8 @@ interface::AssignmentProblem RebalancerReplayer::downloadFromManifold(
 
 AssignmentSolution RebalancerReplayer::replay(
     AssignmentProblem&& problem,
-    std::optional<std::string> loggingLabel) {
+    std::optional<std::string> loggingLabel,
+    std::shared_ptr<const InvalidMoveFilter> learnedInvalidMoveFilter) {
   disableStdout(problem);
   clearSolverLogFile(problem);
   std::shared_ptr<RebalancerLog> logger;
@@ -102,7 +103,8 @@ AssignmentSolution RebalancerReplayer::replay(
       executor,
       /*enableParallelizedNewMaterializer=*/true,
       universe,
-      logger);
+      logger,
+      std::move(learnedInvalidMoveFilter));
 }
 
 } // namespace facebook::rebalancer

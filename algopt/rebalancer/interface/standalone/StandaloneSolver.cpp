@@ -43,6 +43,7 @@
 
 #ifndef REBALANCER_OSS_BUILD
 #include "algopt/rebalancer/common/log/fb/ScubaLog.h"
+#include "algopt/rebalancer/fb/rebalancer_net/LearnedFilterHook.h"
 #include "algopt/rebalancer/interface/fb/Manifold.h"
 #include "algopt/rebalancer/interface/standalone/fb/perfmon/InstanceSelector.h"
 #else
@@ -145,6 +146,24 @@ DEFINE_double(
     precision_tolerance_relative,
     -1,
     "Override relative precision tolerance. If >= 0, sets universe.precisionTolerances.relative to this value.");
+
+DEFINE_string(
+    learned_model_path,
+    "",
+    "If set, enable the learned move-legality heuristic using the exported "
+    "TorchScript model at this local path (rebalancer-net).");
+DEFINE_double(
+    learned_prune_threshold,
+    0.5,
+    "Prune (object, container) moves whose predicted probability is below this "
+    "threshold. Only used when --learned_model_path is set.");
+
+static interface::LearnedMoveFilterSpec makeLearnedMoveFilterSpecFromFlags() {
+  interface::LearnedMoveFilterSpec spec;
+  spec.modelPath() = FLAGS_learned_model_path;
+  spec.pruneThreshold() = FLAGS_learned_prune_threshold;
+  return spec;
+}
 
 static std::optional<interface::ParallelExecutionConfig>
 makeParallelExecutionConfigFromFlags() {
@@ -392,6 +411,17 @@ static void possiblyModifyProblem(AssignmentProblem& problem) {
   if (!gflags::GetCommandLineFlagInfoOrDie("enable_invalid_move_filter")
            .is_default) {
     problem.enableInvalidMoveFilter() = FLAGS_enable_invalid_move_filter;
+  }
+
+  // Enable the learned move-legality heuristic (rebalancer-net) at the problem
+  // level if a model path is given; presence of the spec enables the filter.
+  if (!FLAGS_learned_model_path.empty()) {
+    problem.learnedMoveFilterSpec() = makeLearnedMoveFilterSpecFromFlags();
+    XLOGF(
+        INFO,
+        "Enabled learned move filter: model={}, pruneThreshold={}",
+        FLAGS_learned_model_path,
+        FLAGS_learned_prune_threshold);
   }
 
   if (!FLAGS_logging_label.empty()) {
@@ -659,13 +689,21 @@ static void runInstance(Bundle&& bundle) {
       "downloaded and modified the problem in {:.2f}s",
       timer.getSeconds());
 
+  // Build the learned move filter (no-op unless a model is configured); this is
+  // the only place torch enters the binary, keeping CoreSolver torch-free.
+  std::shared_ptr<const InvalidMoveFilter> learnedFilter;
+#ifndef REBALANCER_OSS_BUILD
+  learnedFilter = rebalancer_net::buildLearnedFilter(*universe, problem);
+#endif
+
   auto runCoreSolver = [&]() {
     auto solution = CoreSolver::solve(
         problem,
         executor,
         FLAGS_enable_new_parallelized_materializer,
         universe,
-        logger);
+        logger,
+        learnedFilter);
 
     treeProfiler.stop();
     CoreSolver::printAndLogHierachicalProfile(

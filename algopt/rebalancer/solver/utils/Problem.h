@@ -19,6 +19,7 @@
 #include "algopt/rebalancer/entities/Universe.h"
 #include "algopt/rebalancer/solver/expressions/Expression.h"
 #include "algopt/rebalancer/solver/expressions/Orchestrator.h"
+#include "algopt/rebalancer/solver/moves/InvalidMoveFilter.h"
 #include "algopt/rebalancer/solver/moves/MoveResult.h"
 #include "algopt/rebalancer/solver/moves/MoveStatsAggregator.h"
 #include "algopt/rebalancer/solver/solvers/LPStore.h"
@@ -34,6 +35,8 @@
 #include "algopt/rebalancer/solver/utils/Util.h"
 
 #include <folly/CppAttributes.h>
+
+#include <memory>
 
 namespace facebook::rebalancer {
 
@@ -258,6 +261,11 @@ class Problem {
 
   const std::shared_ptr<const MaterializedProblem> materializedProblem_;
   const InvalidMoveFilter* invalidMoveFilter_{nullptr};
+
+  // Owns the constraint-learned union filter when a learned filter is provided
+  // via ProblemConfigs; invalidMoveFilter_ points at it instead of the
+  // constraint-only filter in that case.
+  std::unique_ptr<InvalidMoveFilter> learnedFilter_;
 
   std::optional<SimilarContainers> similarContainers;
 

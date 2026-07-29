@@ -16,10 +16,14 @@
 
 #include "algopt/rebalancer/interface/thrift/gen-cpp2/AssignmentProblem_types.h"
 
+#include <memory>
+#include <optional>
 #include <string>
 
 namespace facebook {
 namespace rebalancer {
+
+class InvalidMoveFilter;
 
 class RebalancerReplayer {
  public:
@@ -27,10 +31,14 @@ class RebalancerReplayer {
   static interface::AssignmentProblem downloadFromManifold(
       const std::string& runId);
 
-  // Replays a problem given its local filename.
+  // Replays a problem given its local filename. `learnedInvalidMoveFilter`, if
+  // set, is forwarded to CoreSolver::solve (pre-built by the caller, keeping
+  // the replayer torch-free).
   static facebook::rebalancer::interface::AssignmentSolution replay(
       interface::AssignmentProblem&& problem,
-      std::optional<std::string> loggingLabel = std::nullopt);
+      std::optional<std::string> loggingLabel = std::nullopt,
+      std::shared_ptr<const InvalidMoveFilter> learnedInvalidMoveFilter =
+          nullptr);
 
   // A persisted instance carries RasHybridSolverSpec.solverLogFile pointing at
   // a temp path which does not exist on a replay/benchmark host. Clearing it to

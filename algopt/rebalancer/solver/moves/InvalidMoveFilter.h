@@ -31,6 +31,11 @@ class InvalidMoveFilter {
       entities::ObjectId objectId,
       entities::ContainerId containerId);
 
+  // Union `other` into this filter: afterwards a pair is invalid if it was
+  // invalid in either filter. Both must have the same object/container
+  // dimensions.
+  void mergeFrom(const InvalidMoveFilter& other);
+
   bool isMarkedInvalid(
       entities::ObjectId objectId,
       entities::ContainerId containerId) const {

@@ -210,7 +210,8 @@ AssignmentSolution CoreSolver::solve(
     std::shared_ptr<folly::ThreadPoolExecutor> executor,
     bool enableParallelizedNewMaterializer,
     std::shared_ptr<const entities::Universe> universe,
-    std::shared_ptr<RebalancerLog> logger) {
+    std::shared_ptr<RebalancerLog> logger,
+    std::shared_ptr<const InvalidMoveFilter> learnedInvalidMoveFilter) {
   if (problemSpec.runId()->empty()) {
     throw std::runtime_error(
         "Expect run_id to be set before calling CoreSolver::solve()");
@@ -241,7 +242,8 @@ AssignmentSolution CoreSolver::solve(
         executor,
         logger,
         enableParallelizedNewMaterializer,
-        universe);
+        universe,
+        std::move(learnedInvalidMoveFilter));
     if (logger) {
       logger->log(ExitStatusInfo{.hasException = false, .exceptionMsg = ""});
     }
@@ -274,7 +276,8 @@ AssignmentSolution CoreSolver::materializeAndSolve(
     std::shared_ptr<folly::ThreadPoolExecutor> executor,
     std::shared_ptr<RebalancerLog> logger,
     bool enableParallelizedNewMaterializer,
-    std::shared_ptr<const entities::Universe> universe) {
+    std::shared_ptr<const entities::Universe> universe,
+    std::shared_ptr<const InvalidMoveFilter> learnedInvalidMoveFilter) {
   Timer timer(true);
   // Set up loggers.
   auto memoryLogger = std::make_shared<InMemoryLog>();
@@ -326,6 +329,7 @@ AssignmentSolution CoreSolver::materializeAndSolve(
   // TODO: remove the concept of ProblemConfigs
   auto config = makeProblemConfig(
       problemSpec, multiLogger, executor, enableParallelizedNewMaterializer);
+  config.learnedInvalidMoveFilter = std::move(learnedInvalidMoveFilter);
 
   algopt::treeprof::EventRecorder initProblemEvent("Initialize Problem");
 

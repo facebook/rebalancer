@@ -24,6 +24,7 @@
 
 #include <folly/executors/ThreadPoolExecutor.h>
 
+#include <functional>
 #include <memory>
 
 namespace facebook {
@@ -32,12 +33,16 @@ namespace interface {
 
 class CoreSolver {
  public:
+  // Optional caller-built learned (GNN) move filter, unioned with the
+  // constraint filter; building it in the caller keeps CoreSolver torch-free.
   static AssignmentSolution solve(
       const AssignmentProblem& problemSpec,
       std::shared_ptr<folly::ThreadPoolExecutor> executor,
       bool enableParallelizedNewMaterializer,
       std::shared_ptr<const entities::Universe> universe,
-      std::shared_ptr<RebalancerLog> logger = nullptr);
+      std::shared_ptr<RebalancerLog> logger = nullptr,
+      std::shared_ptr<const InvalidMoveFilter> learnedInvalidMoveFilter =
+          nullptr);
 
   // TODO: make object ordering dimension a global setting of the problem.
   static std::optional<std::string> getObjectOrderingDimensionName(
@@ -54,7 +59,8 @@ class CoreSolver {
       std::shared_ptr<folly::ThreadPoolExecutor> executor,
       std::shared_ptr<RebalancerLog> logger,
       bool enableParallelizedNewMaterializer,
-      std::shared_ptr<const entities::Universe> universe);
+      std::shared_ptr<const entities::Universe> universe,
+      std::shared_ptr<const InvalidMoveFilter> learnedInvalidMoveFilter);
 
   static ProblemConfigs makeProblemConfig(
       const AssignmentProblem& problemSpec,

@@ -17,6 +17,7 @@ namespace "facebook::rebalancer::binding";
 include "algopt/rebalancer/interface/polyglot/async_manifold_upload_handle.ligen" as manifold;
 thrift_include "algopt/rebalancer/interface/thrift/ProblemSolver.thrift";
 thrift_include "algopt/rebalancer/interface/thrift/Types.thrift";
+thrift_include "algopt/rebalancer/interface/thrift/SolverSpecs.thrift";
 thrift_include "algopt/rebalancer/algopt_common/thrift/Types.thrift" as CommonTypes;
 @cpp_container_override("::folly::F14FastMap")
 typedef unordered_map<string, double> StringToDoubleMap;

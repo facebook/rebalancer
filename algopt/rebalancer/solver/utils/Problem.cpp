@@ -79,6 +79,19 @@ Problem::Problem(
     throw std::runtime_error("universe has not be been initialized in Problem");
   }
 
+  // Union the learned (GNN) filter, if provided, with the constraint-built one
+  // so a move is pruned when either marks it invalid. The constraint filter is
+  // exact, so it must not be discarded.
+  if (configs.learnedInvalidMoveFilter) {
+    learnedFilter_ =
+        std::make_unique<InvalidMoveFilter>(*configs.learnedInvalidMoveFilter);
+    if (const auto* constraintFilter =
+            materializedProblem_->invalidMoveFilter.get()) {
+      learnedFilter_->mergeFrom(*constraintFilter);
+    }
+    invalidMoveFilter_ = learnedFilter_.get();
+  }
+
   // setup initial assignment and initialize current assignment with it
   buildInitialAssignment();
   assignment = initial_assignment;
