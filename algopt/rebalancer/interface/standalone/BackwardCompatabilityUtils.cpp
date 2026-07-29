@@ -139,16 +139,16 @@ void populateScopedValuesFromLegacyValues(
     return;
   }
 
+  auto& legacyValues = *dyn.values();
   folly::F14FastMap<int, entities::thrift::ObjectValues> scopedValues;
-  // NOLINTNEXTLINE(facebook-hte-Deprecated)
-  scopedValues.reserve(dyn.values()->size());
-  for (auto& [scopeItemId, objectValues] : *dyn.values()) {
+  scopedValues.reserve(legacyValues.size());
+  for (auto& [scopeItemId, objectValues] : legacyValues) {
     entities::thrift::ObjectValues values;
     values.objectValues() = std::move(objectValues);
     scopedValues.emplace(scopeItemId, std::move(values));
   }
   dyn.scopedValues() = std::move(scopedValues);
-  dyn.values()->clear();
+  legacyValues.clear();
 }
 
 void remapIds(
