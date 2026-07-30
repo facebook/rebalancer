@@ -189,8 +189,9 @@ struct MinCycleObjectiveImprovementConfig {
 // The filter is enabled by the presence of this spec; leave it unset to disable.
 @thrift.ReserveIds{ids = [3]} // 3: bool enabled -- removed in favor of presence-based toggling
 struct LearnedMoveFilterSpec {
-  // Local filesystem path to the exported TorchScript model produced by
-  // rebalancer_net/training:export_model.
+  // The exported TorchScript model to load (produced by
+  // rebalancer_net/training:export_model): a `manifold://<bucket>/<key>` URI or
+  // a local filesystem path.
   1: string modelPath;
   // Prune (object, container) candidate moves whose predicted probability is
   // below this threshold. Higher is more conservative: fewer moves pruned, lower

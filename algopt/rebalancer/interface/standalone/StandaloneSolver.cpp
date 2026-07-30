@@ -150,8 +150,8 @@ DEFINE_double(
 DEFINE_string(
     learned_model_path,
     "",
-    "If set, enable the learned move-legality heuristic using the exported "
-    "TorchScript model at this local path (rebalancer-net).");
+    "If set, enable the learned move-legality heuristic (rebalancer-net) using "
+    "this model: a manifold://<bucket>/<key> URI or a local file path.");
 DEFINE_double(
     learned_prune_threshold,
     0.5,
