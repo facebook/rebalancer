@@ -375,6 +375,7 @@ class ProblemChecker {
   algopt::SetImpl<std::string> constraintNames_;
   algopt::MapImpl<std::string, algopt::SetImpl<std::string>>
       dimensionToEntityTypes;
+  algopt::MapImpl<std::string, std::string> dynamicObjectDimensionToScope_;
   algopt::MapImpl<std::string, EntityType> globalNameToType;
   algopt::SetImpl<std::string> routingConfigNames_;
   algopt::SetImpl<std::string> destinationsToExploreOptionNames_;
@@ -400,6 +401,7 @@ void ProblemChecker::addDynamicObjectDimension(
     }
   }
   addObjectDimension(dimensionName, ScopeItemToObjectToValue());
+  dynamicObjectDimensionToScope_.emplace(dimensionName, scope);
 }
 
 template <typename ScopeItemToGroupToValue>
@@ -419,6 +421,7 @@ void ProblemChecker::addDynamicObjectDimension(
     }
   }
   addObjectDimension(dimensionName, ScopeItemToGroupToValue());
+  dynamicObjectDimensionToScope_.emplace(dimensionName, scope);
 }
 
 template <typename ObjectToGroup>

@@ -21,6 +21,8 @@
 #include <folly/coro/GtestHelpers.h>
 #include <gtest/gtest.h>
 
+#include <utility>
+
 namespace facebook::rebalancer::packer::tests {
 
 class DestinationsToExploreGeneratorTest : public MoveTestBase {
@@ -47,6 +49,18 @@ class DestinationsToExploreGeneratorTest : public MoveTestBase {
 
     co_await addPartition(
         "job", {{"job1", {"object1", "object3"}}, {"job2", {"object2"}}});
+
+    // Per-object latency that varies by region (lower is better), used to
+    // exercise filter. Objects sit in region1 (except object2 in
+    // region2) per the initial assignment above.
+    co_await addDynamicObjectDimension(
+        "latency",
+        scopeId("region"),
+        {{"region1",
+          {{"object1", 10}, {"object2", 10}, {"object3", 5}, {"object4", 3}}},
+         {"region2",
+          {{"object1", 3}, {"object2", 20}, {"object3", 5}, {"object4", 10}}}},
+        /*defaultValue=*/0);
 
     const auto universe = buildUniverse();
 
@@ -75,6 +89,33 @@ class DestinationsToExploreGeneratorTest : public MoveTestBase {
     interface::MoveToCurrentScopeItemSpec spec;
     spec.scopeNameForExploringMovesToCurrentScopeItem() = "region";
 
+    return spec;
+  }
+
+  static interface::ObjectDimensionBasedFilter makeObjectDimensionBasedFilter(
+      const std::string& dimensionName) {
+    interface::ObjectDimensionBasedFilter filter;
+    filter.dimensionName() = dimensionName;
+    return filter;
+  }
+
+  static interface::ScopeItemFilter makeScopeItemFilter(
+      const interface::ObjectDimensionBasedFilter& dimensionFilter) {
+    interface::ScopeItemFilter scopeItemFilter;
+    scopeItemFilter.objectDimensionBased() = dimensionFilter;
+    return scopeItemFilter;
+  }
+
+  // A spec whose region-scoped defaultScopeItems is filtered by the given
+  // predicate.
+  static interface::MoveToScopeItemsSpec makeMoveToScopeItemsSpec(
+      const interface::ObjectDimensionBasedFilter& filter) {
+    interface::ScopeItemList defaultScopeItems;
+    defaultScopeItems.scopeName() = "region";
+    defaultScopeItems.filter() = makeScopeItemFilter(filter);
+
+    interface::MoveToScopeItemsSpec spec;
+    spec.defaultScopeItems() = std::move(defaultScopeItems);
     return spec;
   }
 };
@@ -166,9 +207,9 @@ CO_TEST_F(
   moveToScopeItemsSpec.defaultScopeItems() = defaultScopeItems;
 
   auto object1Destinations = destinationsGenerator.getAcceptingDestinations(
-      moveToScopeItemsSpec, object(1));
+      moveToScopeItemsSpec, container(1), object(1));
   auto object2Destinations = destinationsGenerator.getAcceptingDestinations(
-      moveToScopeItemsSpec, object(2));
+      moveToScopeItemsSpec, container(2), object(2));
 
   EXPECT_EQ(object1Destinations.size(), 2);
   EXPECT_EQ(object2Destinations.size(), 2);
@@ -223,9 +264,9 @@ CO_TEST_F(
   moveToScopeItemsSpec.objectToScopeItems() = {{"object2", scopeItemList}};
 
   auto object1Destinations = destinationsGenerator.getAcceptingDestinations(
-      moveToScopeItemsSpec, object(1));
+      moveToScopeItemsSpec, container(1), object(1));
   auto object2Destinations = destinationsGenerator.getAcceptingDestinations(
-      moveToScopeItemsSpec, object(2));
+      moveToScopeItemsSpec, container(2), object(2));
 
   EXPECT_EQ(object1Destinations.size(), 2);
   EXPECT_EQ(object2Destinations.size(), 1);
@@ -273,9 +314,9 @@ CO_TEST_F(
       {"object1", scopeItemList1}, {"object2", scopeItemList2}};
 
   auto object1Destinations = destinationsGenerator.getAcceptingDestinations(
-      moveToScopeItemsSpec, object(1));
+      moveToScopeItemsSpec, container(1), object(1));
   auto object2Destinations = destinationsGenerator.getAcceptingDestinations(
-      moveToScopeItemsSpec, object(2));
+      moveToScopeItemsSpec, container(2), object(2));
 
   EXPECT_EQ(object1Destinations.size(), 1);
   EXPECT_EQ(object2Destinations.size(), 1);
@@ -322,11 +363,11 @@ CO_TEST_F(
       {"object3", scopeItemList3}};
 
   auto object1Destinations = destinationsGenerator.getAcceptingDestinations(
-      moveToScopeItemsSpec, object(1));
+      moveToScopeItemsSpec, container(1), object(1));
   auto object2Destinations = destinationsGenerator.getAcceptingDestinations(
-      moveToScopeItemsSpec, object(2));
+      moveToScopeItemsSpec, container(2), object(2));
   auto object3Destinations = destinationsGenerator.getAcceptingDestinations(
-      moveToScopeItemsSpec, object(3));
+      moveToScopeItemsSpec, container(3), object(3));
 
   EXPECT_EQ(object1Destinations.size(), 0);
   EXPECT_EQ(object2Destinations.size(), 1);
@@ -369,11 +410,11 @@ CO_TEST_F(DestinationsToExploreGeneratorTest, groupToScopeItems) {
   moveToScopeItemsSpec.scopeItemsPerGroups() = groupToScopeItems;
 
   auto object1Destinations = destinationsGenerator.getAcceptingDestinations(
-      moveToScopeItemsSpec, object(1));
+      moveToScopeItemsSpec, container(1), object(1));
   auto object2Destinations = destinationsGenerator.getAcceptingDestinations(
-      moveToScopeItemsSpec, object(2));
+      moveToScopeItemsSpec, container(2), object(2));
   auto object3Destinations = destinationsGenerator.getAcceptingDestinations(
-      moveToScopeItemsSpec, object(3));
+      moveToScopeItemsSpec, container(3), object(3));
 
   EXPECT_EQ(object1Destinations.size(), 1);
   EXPECT_EQ(object2Destinations.size(), 1);
@@ -432,11 +473,11 @@ CO_TEST_F(
   moveToScopeItemsSpec.objectToScopeItems() = {{"object3", scopeItemList3}};
 
   auto object1Destinations = destinationsGenerator.getAcceptingDestinations(
-      moveToScopeItemsSpec, object(1));
+      moveToScopeItemsSpec, container(1), object(1));
   auto object2Destinations = destinationsGenerator.getAcceptingDestinations(
-      moveToScopeItemsSpec, object(2));
+      moveToScopeItemsSpec, container(2), object(2));
   auto object3Destinations = destinationsGenerator.getAcceptingDestinations(
-      moveToScopeItemsSpec, object(3));
+      moveToScopeItemsSpec, container(3), object(3));
 
   EXPECT_EQ(object1Destinations.size(), 1);
   EXPECT_EQ(object2Destinations.size(), 1);
@@ -471,8 +512,8 @@ CO_TEST_F(
   moveToScopeItemsSpec.defaultScopeItems() = defaultScopeItems;
   // objectToScopeItems is empty by default
 
-  auto containerDestinations =
-      destinationsGenerator.getAcceptingDestinations(moveToScopeItemsSpec);
+  auto containerDestinations = destinationsGenerator.getAcceptingDestinations(
+      moveToScopeItemsSpec, container(1));
 
   // Should return destinations for all scope items in the region
   EXPECT_EQ(containerDestinations.size(), 2);
@@ -493,7 +534,7 @@ CO_TEST_F(
 
 CO_TEST_F(
     DestinationsToExploreGeneratorTest,
-    getAcceptingDestinationsWithSpecOnlyThrowsWhenObjectToScopeItemsNotEmpty) {
+    getAcceptingDestinationsWithContainerIdOnlyThrowsWhenObjectToScopeItemsNotEmpty) {
   co_await setUpProblem(/*nonAcceptingContainerIndices=*/{3});
   auto& problem = getProblem();
   auto& destinationsGenerator = problem.getDestinationsGenerator();
@@ -512,8 +553,157 @@ CO_TEST_F(
 
   // throws because objectToScopeItems is not empty
   REBALANCER_EXPECT_RUNTIME_ERROR(
-      destinationsGenerator.getAcceptingDestinations(moveToScopeItemsSpec),
+      destinationsGenerator.getAcceptingDestinations(
+          moveToScopeItemsSpec, container(1)),
       "this function requires that objectToScopeItems is empty");
+}
+
+CO_TEST_F(
+    DestinationsToExploreGeneratorTest,
+    filterStrictlyBetterAndIncludeEqual) {
+  co_await setUpProblem();
+  auto& problem = getProblem();
+  auto& destinationsGenerator = problem.getDestinationsGenerator();
+
+  // Lower latency is better by default.
+  auto spec =
+      makeMoveToScopeItemsSpec(makeObjectDimensionBasedFilter("latency"));
+
+  // object1 sits in region1 (latency 10); only region2 (3) is strictly cheaper.
+  auto object1Destinations = destinationsGenerator.getAcceptingDestinations(
+      spec, container(1), object(1));
+  EXPECT_EQ(object1Destinations.size(), 1);
+  verifyContainersAreAsExpected(
+      std::set<entities::ContainerId>({container(2)}),
+      object1Destinations.at(0).get());
+
+  // object2 sits in region2 (latency 20); only region1 (10) is strictly
+  // cheaper.
+  auto object2Destinations = destinationsGenerator.getAcceptingDestinations(
+      spec, container(2), object(2));
+  EXPECT_EQ(object2Destinations.size(), 1);
+  verifyContainersAreAsExpected(
+      std::set<entities::ContainerId>(
+          {container(1), container(3), container(4)}),
+      object2Destinations.at(0).get());
+
+  // object3 sits in region1 (latency 5) and region2 is equal (5); nothing is
+  // strictly cheaper, but includeEqual explores both equal-latency regions.
+  auto object3Destinations = destinationsGenerator.getAcceptingDestinations(
+      spec, container(3), object(3));
+  EXPECT_EQ(object3Destinations.size(), 0);
+
+  auto equalFilter = makeObjectDimensionBasedFilter("latency");
+  equalFilter.includeEqual() = true;
+  auto object3WithEqual = destinationsGenerator.getAcceptingDestinations(
+      makeMoveToScopeItemsSpec(equalFilter), container(3), object(3));
+  EXPECT_EQ(object3WithEqual.size(), 2);
+}
+
+CO_TEST_F(DestinationsToExploreGeneratorTest, filterPreferHigher) {
+  co_await setUpProblem();
+  auto& problem = getProblem();
+  auto& destinationsGenerator = problem.getDestinationsGenerator();
+
+  auto filter = makeObjectDimensionBasedFilter("latency");
+  filter.preferLower() = false; // higher is better
+  auto spec = makeMoveToScopeItemsSpec(filter);
+
+  // object4 sits in region1 (latency 3); only region2 (10) is strictly higher.
+  auto object4Destinations = destinationsGenerator.getAcceptingDestinations(
+      spec, container(4), object(4));
+  EXPECT_EQ(object4Destinations.size(), 1);
+  verifyContainersAreAsExpected(
+      std::set<entities::ContainerId>({container(2)}),
+      object4Destinations.at(0).get());
+}
+
+CO_TEST_F(
+    DestinationsToExploreGeneratorTest,
+    filterRestrictsExplicitScopeItems) {
+  co_await setUpProblem();
+  auto& problem = getProblem();
+  auto& destinationsGenerator = problem.getDestinationsGenerator();
+
+  // object2 sits in region2 (latency 20); region1 (latency 10) is cheaper.
+  // Restricting the list to region2 leaves nothing cheaper to explore. Were
+  // the list ignored, filtering would fall back to the whole scope and
+  // surface region1, so an empty result proves the explicit list is honored.
+  interface::ScopeItemList currentRegionOnly;
+  currentRegionOnly.scopeName() = "region";
+  currentRegionOnly.scopeItems() = {"region2"};
+  currentRegionOnly.filter() =
+      makeScopeItemFilter(makeObjectDimensionBasedFilter("latency"));
+
+  interface::MoveToScopeItemsSpec spec;
+  spec.objectToScopeItems() = {{"object2", std::move(currentRegionOnly)}};
+
+  auto destinations = destinationsGenerator.getAcceptingDestinations(
+      spec, container(2), object(2));
+  EXPECT_EQ(destinations.size(), 0);
+}
+
+CO_TEST_F(
+    DestinationsToExploreGeneratorTest,
+    filterObjectNotInScopeExploresAll) {
+  co_await setUpProblem();
+  auto& problem = getProblem();
+  auto& destinationsGenerator = problem.getDestinationsGenerator();
+
+  auto spec =
+      makeMoveToScopeItemsSpec(makeObjectDimensionBasedFilter("latency"));
+
+  // container(5) is not in the region scope, so there is no current value to
+  // beat and all candidate regions are explored.
+  auto destinations = destinationsGenerator.getAcceptingDestinations(
+      spec, container(5), object(1));
+  EXPECT_EQ(destinations.size(), 2);
+}
+
+CO_TEST_F(DestinationsToExploreGeneratorTest, filterWithGroupToScopeItemList) {
+  co_await setUpProblem();
+  auto& problem = getProblem();
+  auto& destinationsGenerator = problem.getDestinationsGenerator();
+
+  // The group's scope item list carries the filter, so the group path must
+  // thread the moving object through to apply it.
+  interface::ScopeItemList filteredRegions;
+  filteredRegions.scopeName() = "region";
+  filteredRegions.filter() =
+      makeScopeItemFilter(makeObjectDimensionBasedFilter("latency"));
+
+  interface::GroupToScopeItemList groupToScopeItems;
+  groupToScopeItems.groupToScopeItemList() = {
+      {"job1", filteredRegions}, {"job2", std::move(filteredRegions)}};
+  groupToScopeItems.partitionName() = "job";
+
+  interface::MoveToScopeItemsSpec spec;
+  spec.scopeItemsPerGroups() = std::move(groupToScopeItems);
+
+  // object1 (job1) sits in region1 (latency 10); region2 (3) is strictly
+  // cheaper, so the group's filter keeps only region2.
+  auto object1Destinations = destinationsGenerator.getAcceptingDestinations(
+      spec, container(1), object(1));
+  EXPECT_EQ(object1Destinations.size(), 1);
+  verifyContainersAreAsExpected(
+      std::set<entities::ContainerId>({container(2)}),
+      object1Destinations.at(0).get());
+
+  // object3 shares job1's spec but sits in region1 (latency 5) with region2
+  // equal (5); filtering is per moving object, so nothing is strictly cheaper.
+  auto object3Destinations = destinationsGenerator.getAcceptingDestinations(
+      spec, container(3), object(3));
+  EXPECT_EQ(object3Destinations.size(), 0);
+
+  // object2 (job2) sits in region2 (latency 20); region1 (10) is strictly
+  // cheaper.
+  auto object2Destinations = destinationsGenerator.getAcceptingDestinations(
+      spec, container(2), object(2));
+  EXPECT_EQ(object2Destinations.size(), 1);
+  verifyContainersAreAsExpected(
+      std::set<entities::ContainerId>(
+          {container(1), container(3), container(4)}),
+      object2Destinations.at(0).get());
 }
 
 } // namespace facebook::rebalancer::packer::tests

@@ -1979,6 +1979,29 @@ void ProblemChecker::check(
       checkScopeItemExists(*scopeItemList.scopeName(), scopeItem);
     }
   }
+  if (scopeItemList.filter().has_value()) {
+    const auto& filter = *scopeItemList.filter();
+    switch (filter.getType()) {
+      case interface::ScopeItemFilter::Type::objectDimensionBased: {
+        const auto& dimensionName =
+            *filter.get_objectDimensionBased().dimensionName();
+        checkDimensionExists(dimensionName);
+        const auto& scopeName = *scopeItemList.scopeName();
+        const auto* dimensionScope =
+            folly::get_ptr(dynamicObjectDimensionToScope_, dimensionName);
+        if (dimensionScope == nullptr || *dimensionScope != scopeName) {
+          throw std::runtime_error(
+              fmt::format(
+                  "ObjectDimensionBasedFilter dimension '{}' is expected to be dynamic on scope '{}'",
+                  dimensionName,
+                  scopeName));
+        }
+        break;
+      }
+      case interface::ScopeItemFilter::Type::__EMPTY__:
+        throw std::runtime_error("ScopeItemFilter is not set");
+    }
+  }
 }
 
 void ProblemChecker::check(

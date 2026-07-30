@@ -118,7 +118,9 @@ MoveType::getDestinationsToExplore(
 
     case interface::DestinationsToExploreOptions::Type::moveToScopeItems: {
       return problem.getDestinationsGenerator().getAcceptingDestinations(
-          destinationsToExplore.get_moveToScopeItems(), hotObjectId);
+          destinationsToExplore.get_moveToScopeItems(),
+          hotContainerId,
+          hotObjectId);
     }
 
     case interface::DestinationsToExploreOptions::Type::

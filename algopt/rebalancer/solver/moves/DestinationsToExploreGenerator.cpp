@@ -16,6 +16,55 @@
 
 namespace facebook::rebalancer {
 
+namespace {
+// Keeps only the scope items that compare better than the moving object's
+// current one on a chosen dimension. See ScopeItemList.filter.
+class ObjectDimensionBasedFilter {
+ public:
+  ObjectDimensionBasedFilter(
+      const interface::ObjectDimensionBasedFilter& filter,
+      const entities::ObjectScalarDimension& dimension,
+      entities::ScopeId scopeId,
+      entities::ObjectId object,
+      std::optional<entities::ScopeItemId> currentScopeItem)
+      : filter_{filter},
+        dimension_{dimension},
+        scopeId_{scopeId},
+        object_{object} {
+    if (currentScopeItem.has_value()) {
+      currentValue_ = valueAt(*currentScopeItem);
+    }
+  }
+
+  bool includes(entities::ScopeItemId scopeItemId) const {
+    // An object outside the scope has no current value to beat, so keep all.
+    if (!currentValue_.has_value()) {
+      return true;
+    }
+    const auto candidate = valueAt(scopeItemId);
+    if (candidate == *currentValue_) {
+      return *filter_.includeEqual();
+    }
+    return *filter_.preferLower() ? candidate < *currentValue_
+                                  : candidate > *currentValue_;
+  }
+
+ private:
+  double valueAt(entities::ScopeItemId scopeItemId) const {
+    return dimension_.getValueSafe(
+        object_,
+        entities::ScopeScopeItemPair{
+            .scopeId = scopeId_, .scopeItemId = scopeItemId});
+  }
+
+  const interface::ObjectDimensionBasedFilter& filter_;
+  const entities::ObjectScalarDimension& dimension_;
+  entities::ScopeId scopeId_;
+  entities::ObjectId object_;
+  std::optional<double> currentValue_;
+};
+} // namespace
+
 DestinationsToExploreGenerator::DestinationsToExploreGenerator(
     const PackerSet<entities::ContainerId>& nonAcceptingContainers,
     const entities::Universe& universe)
@@ -36,7 +85,8 @@ DestinationsToExploreGenerator::getAcceptingDestinations(
     // in the given scope
     interface::ScopeItemList scopeItemList;
     scopeItemList.scopeName() = scopeName;
-    return getAcceptingContainersList(scopeItemList);
+    return getAcceptingContainersList(
+        scopeItemList, hotContainerId, /*hotObject=*/std::nullopt);
   }
 
   return ReferenceList<const std::vector<entities::ContainerId>>{
@@ -46,6 +96,7 @@ DestinationsToExploreGenerator::getAcceptingDestinations(
 ReferenceList<const std::vector<entities::ContainerId>>
 DestinationsToExploreGenerator::getAcceptingDestinations(
     const interface::MoveToScopeItemsSpec& moveToScopeItems,
+    const entities::ContainerId hotContainer,
     const entities::ObjectId hotObject) {
   auto& objectToScopeItems = *moveToScopeItems.objectToScopeItems();
   auto& hotObjectName = universe_.getEntityName(hotObject);
@@ -53,7 +104,8 @@ DestinationsToExploreGenerator::getAcceptingDestinations(
   // if an object is specified in objectToScopeItems, use that.
   auto scopeItemListPtr = folly::get_ptr(objectToScopeItems, hotObjectName);
   if (scopeItemListPtr) {
-    return getAcceptingContainersList(*scopeItemListPtr);
+    return getAcceptingContainersList(
+        *scopeItemListPtr, hotContainer, hotObject);
   }
 
   // if a group is specified in groupToScopeItems and hotObject belongs to that
@@ -81,43 +133,88 @@ DestinationsToExploreGenerator::getAcceptingDestinations(
           groupToScopeItem,
           universe_.getEntityName(onlyGroupId),
           defaultScopeItems);
-      return getAcceptingContainersList(scopeItemList);
+      return getAcceptingContainersList(scopeItemList, hotContainer, hotObject);
     }
   }
 
   // use defaultScopeItems if there is no specialization for hotObject
-  return getAcceptingContainersList(defaultScopeItems);
+  return getAcceptingContainersList(defaultScopeItems, hotContainer, hotObject);
 }
 
 ReferenceList<const std::vector<entities::ContainerId>>
 DestinationsToExploreGenerator::getAcceptingDestinations(
-    const interface::MoveToScopeItemsSpec& moveToScopeItems) {
+    const interface::MoveToScopeItemsSpec& moveToScopeItems,
+    const entities::ContainerId hotContainer) {
   if (!moveToScopeItems.objectToScopeItems()->empty()) {
     throw std::runtime_error(
         "this function requires that objectToScopeItems is empty");
   }
-  return getAcceptingContainersList(*moveToScopeItems.defaultScopeItems());
+  return getAcceptingContainersList(
+      *moveToScopeItems.defaultScopeItems(),
+      hotContainer,
+      /*hotObject=*/std::nullopt);
 }
 
 ReferenceList<const std::vector<entities::ContainerId>>
 DestinationsToExploreGenerator::getAcceptingContainersList(
-    const interface::ScopeItemList& scopeItemList) {
-  ReferenceList<const std::vector<entities::ContainerId>> destinations;
+    const interface::ScopeItemList& scopeItemList,
+    const entities::ContainerId hotContainer,
+    std::optional<entities::ObjectId> hotObject) {
   auto& scopeName = *scopeItemList.scopeName();
   auto scopeId = universe_.getScopeId(scopeName);
   auto& scope = universe_.getScope(scopeId);
-  if (scopeItemList.scopeItems().has_value()) {
-    auto& scopeItemNames = scopeItemList.scopeItems().value();
-    for (auto& scopeItemName : scopeItemNames) {
-      auto scopeItemId = universe_.getScopeItemId(scopeId, scopeItemName);
+
+  std::optional<ObjectDimensionBasedFilter> objectDimensionFilter;
+  if (scopeItemList.filter().has_value()) {
+    if (!hotObject.has_value()) {
+      throw std::runtime_error(
+          "ScopeItemList.filter requires the moving object, but this move type does not provide one");
+    }
+    const auto& filter = *scopeItemList.filter();
+    switch (filter.getType()) {
+      case interface::ScopeItemFilter::Type::objectDimensionBased: {
+        const auto& filterSpec = filter.get_objectDimensionBased();
+        const auto& dimension = universe_.getObjects()
+                                    .getDimension(universe_.getDimensionId(
+                                        *filterSpec.dimensionName()))
+                                    .only();
+        if (!dimension.isDynamic() || dimension.getScopeId() != scopeId)
+            [[unlikely]] {
+          throw std::runtime_error(
+              fmt::format(
+                  "ObjectDimensionBasedFilter dimension '{}' is expected to be dynamic on scope '{}'",
+                  *filterSpec.dimensionName(),
+                  scopeName));
+        }
+        const auto hotContainerScopeItem = scope.getScopeItemId(hotContainer);
+        objectDimensionFilter.emplace(
+            filterSpec, dimension, scopeId, *hotObject, hotContainerScopeItem);
+        break;
+      }
+      case interface::ScopeItemFilter::Type::__EMPTY__:
+        throw std::runtime_error("ScopeItemFilter is not set");
+    }
+  }
+
+  ReferenceList<const std::vector<entities::ContainerId>> destinations;
+  const auto addToDestinations = [&](entities::ScopeItemId scopeItemId) {
+    if (!objectDimensionFilter.has_value() ||
+        objectDimensionFilter->includes(scopeItemId)) {
       destinations.emplace_back(getAcceptingContainers(scopeItemId, scope));
+    }
+  };
+
+  if (scopeItemList.scopeItems().has_value()) {
+    const auto& scopeItemNames = scopeItemList.scopeItems().value();
+    for (const auto& scopeItemName : scopeItemNames) {
+      addToDestinations(universe_.getScopeItemId(scopeId, scopeItemName));
     }
   } else {
     // if scopeItems are not explicitly listed, all scopeItems in the specified
     // scopeName are taken
     auto& scopeItemIds = scope.getScopeItemIds();
     for (auto scopeItemId : scopeItemIds) {
-      destinations.emplace_back(getAcceptingContainers(scopeItemId, scope));
+      addToDestinations(scopeItemId);
     }
   }
   return destinations;

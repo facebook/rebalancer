@@ -466,7 +466,7 @@ MoveResult SwapMoveType::findBestMove(
 std::optional<PackerSet<entities::ContainerId>>
 SwapMoveType::getCustomColdContainers(
     const MovesEvaluator& evaluator,
-    entities::ContainerId /*hotContainer*/) const {
+    entities::ContainerId hotContainer) const {
   if (auto destinationsToExplore = config_.destinationsToExplore()) {
     auto exploreOption = destinationsToExplore->getType();
     if (exploreOption ==
@@ -475,7 +475,7 @@ SwapMoveType::getCustomColdContainers(
           evaluator.getProblem()
               .getDestinationsGenerator()
               .getAcceptingDestinations(
-                  destinationsToExplore->get_moveToScopeItems());
+                  destinationsToExplore->get_moveToScopeItems(), hotContainer);
       PackerSet<entities::ContainerId> allowedColdContainers;
       for (auto& containers : allowedColdContainersList) {
         allowedColdContainers.insert(

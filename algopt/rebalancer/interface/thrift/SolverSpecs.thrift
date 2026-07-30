@@ -414,11 +414,34 @@ struct MoveToCurrentScopeItemSpec {
   1: string scopeNameForExploringMovesToCurrentScopeItem;
 }
 
+// Filters candidate scope items by a dimension of the moving object, so a move
+// type explores only scope items that are better than the current one, plus
+// ties when includeEqual is set. See ScopeItemList.filter.
+struct ObjectDimensionBasedFilter {
+  // The object dimension whose value is used to compare candidate scope items. It
+  // must be a dynamic object dimension defined on the enclosing ScopeItemList's scope (scopeName)
+  1: string dimensionName;
+  // Whether a lower value should be considered better (e.g. latency). If false, higher is better.
+  2: bool preferLower = true;
+  // Also keep scope items that tie the current one, not just better ones.
+  3: bool includeEqual = false;
+}
+
+union ScopeItemFilter {
+  1: ObjectDimensionBasedFilter objectDimensionBased;
+}
+
 @thrift.ReserveIds{ids = [3]}
 struct ScopeItemList {
   1: string scopeName;
   // if scopeItems are not explicitly listed, all scopeItems in the specified scopeName are taken
   2: optional list<string> scopeItems;
+  // If set, restrict exploration to candidate scope items that the selected
+  // ScopeItemFilter considers better than the moving object's current scope
+  // item, plus ties when the filter includes equal values. If unset, or the
+  // object has no scope item in this scope, all candidates are explored. See
+  // ScopeItemFilter for the strategies.
+  4: optional ScopeItemFilter filter;
 }
 
 struct GroupToScopeItemList {

@@ -73,6 +73,19 @@ getDefaultGroupCapacitySpec() {
   return spec;
 }
 
+static ScopeItemList makeDimensionFilteredScopeItemList(
+    const std::string& scopeName,
+    const std::string& dimensionName) {
+  ObjectDimensionBasedFilter dimensionFilter;
+  dimensionFilter.dimensionName() = dimensionName;
+  ScopeItemFilter scopeItemFilter;
+  scopeItemFilter.objectDimensionBased() = dimensionFilter;
+  ScopeItemList scopeItemList;
+  scopeItemList.scopeName() = scopeName;
+  scopeItemList.filter() = scopeItemFilter;
+  return scopeItemList;
+}
+
 TEST_P(ProblemSolverChecksTest, SetObjectNameTwice) {
   auto solver =
       initializeTestProblemSolver({.executorThreadCount = GetParam()});
@@ -2753,6 +2766,39 @@ TEST_P(ProblemSolverChecksTest, MoveToScopeItemSpecsTest) {
             "name2", destinationsToExploreOption),
         "unknown group j3 in partition job");
   }
+
+  {
+    // filter must reference an existing dimension
+    MoveToScopeItemsSpec moveToScopeItemsSpec;
+    moveToScopeItemsSpec.defaultScopeItems() =
+        makeDimensionFilteredScopeItemList("rack", "network");
+
+    DestinationsToExploreOptions destinationsToExploreOption;
+    destinationsToExploreOption.set_moveToScopeItems(moveToScopeItemsSpec);
+
+    REBALANCER_EXPECT_RUNTIME_ERROR(
+        solver->addDestinationsToExploreOptions(
+            "filterBadDimension", destinationsToExploreOption),
+        "unknown dimension network");
+  }
+
+  {
+    // filter requires a dynamic dimension; a static one is rejected.
+    solver->addObjectDimension(
+        "size", std::map<std::string, double>{{"s1", 1.0}, {"s2", 2.0}});
+
+    MoveToScopeItemsSpec moveToScopeItemsSpec;
+    moveToScopeItemsSpec.defaultScopeItems() =
+        makeDimensionFilteredScopeItemList("rack", "size");
+
+    DestinationsToExploreOptions destinationsToExploreOption;
+    destinationsToExploreOption.set_moveToScopeItems(moveToScopeItemsSpec);
+
+    REBALANCER_EXPECT_RUNTIME_ERROR(
+        solver->addDestinationsToExploreOptions(
+            "filterStaticDimension", destinationsToExploreOption),
+        "ObjectDimensionBasedFilter dimension 'size' is expected to be dynamic on scope 'rack'");
+  }
 }
 
 TEST_P(ProblemSolverChecksTest, SampleSizeTest) {
@@ -3233,7 +3279,7 @@ TEST_P(ProblemSolverChecksTest, GroupMoveWithHintStrategiesMoveType) {
   }
   {
     // no hint map
-    MoveStrategies groupToMoveStrategy2;
+    const MoveStrategies groupToMoveStrategy2;
     auto spec = makeGroupMoveWithStrategies(
         "primaryPartition", "secondaryPartition", groupToMoveStrategy2);
 
