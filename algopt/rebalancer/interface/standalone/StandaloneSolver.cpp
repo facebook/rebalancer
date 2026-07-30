@@ -163,6 +163,17 @@ DEFINE_string(
     "If set, append one JSON line of learned-filter inference metrics (timings "
     "+ prune counts) per solve to this file, for offline plotting/analysis. "
     "Passed to the solver via LearnedMoveFilterSpec, not a core global flag.");
+DEFINE_bool(
+    learned_auto_resolve,
+    false,
+    "Enable the learned move filter via auto-resolve: leaves modelPath empty so "
+    "the solver picks the latest published model for the problem's (service, "
+    "fingerprint) from Manifold, instead of an explicit --learned_model_path.");
+DEFINE_string(
+    learned_model_service,
+    "",
+    "Override the service used for learned-model auto-resolve (defaults to the "
+    "problem's own service).");
 
 static interface::LearnedMoveFilterSpec makeLearnedMoveFilterSpecFromFlags() {
   interface::LearnedMoveFilterSpec spec;
@@ -422,14 +433,19 @@ static void possiblyModifyProblem(AssignmentProblem& problem) {
     problem.enableInvalidMoveFilter() = FLAGS_enable_invalid_move_filter;
   }
 
-  // Enable the learned move-legality heuristic (rebalancer-net) at the problem
-  // level if a model path is given; presence of the spec enables the filter.
-  if (!FLAGS_learned_model_path.empty()) {
+  // Enable the learned move-legality heuristic (rebalancer-net): an explicit
+  // --learned_model_path uses that model; --learned_auto_resolve leaves
+  // modelPath empty so the solver auto-resolves by (service, fingerprint).
+  if (!FLAGS_learned_model_path.empty() || FLAGS_learned_auto_resolve) {
     problem.learnedMoveFilterSpec() = makeLearnedMoveFilterSpecFromFlags();
+    if (!FLAGS_learned_model_service.empty()) {
+      problem.service_() = FLAGS_learned_model_service;
+    }
     XLOGF(
         INFO,
         "Enabled learned move filter: model={}, pruneThreshold={}",
-        FLAGS_learned_model_path,
+        FLAGS_learned_model_path.empty() ? "<auto-resolve>"
+                                         : FLAGS_learned_model_path,
         FLAGS_learned_prune_threshold);
   }
 
