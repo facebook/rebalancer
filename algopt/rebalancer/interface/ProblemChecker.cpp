@@ -1725,7 +1725,33 @@ void ProblemChecker::checkMoveTypeSpec(
   }*/
 
   if (spec.destinationsToExplore().has_value()) {
-    checkDestinationsToExploreOptions(spec.destinationsToExplore().value());
+    const auto& destinationOptions = spec.destinationsToExplore().value();
+    if (destinationOptions.getType() ==
+        interface::DestinationsToExploreOptions::Type::moveToScopeItems) {
+      // SwapMoveType reads only defaultScopeItems.
+      const auto unsupported = [](std::string_view field) {
+        return fmt::format(
+            "SwapMoveType does not support {}: only unfiltered MoveToScopeItemsSpec.defaultScopeItems is supported",
+            field);
+      };
+      const auto& moveToScopeItems = destinationOptions.get_moveToScopeItems();
+      if (moveToScopeItems.defaultScopeItems()->filter().has_value()) {
+        throw std::runtime_error(
+            unsupported("MoveToScopeItemsSpec.defaultScopeItems.filter"));
+      }
+      if (!moveToScopeItems.objectToScopeItems()->empty()) {
+        throw std::runtime_error(
+            unsupported("MoveToScopeItemsSpec.objectToScopeItems"));
+      }
+      if (!moveToScopeItems.scopeItemsPerGroups()
+               ->groupToScopeItemList()
+               ->empty()) {
+        throw std::runtime_error(
+            unsupported("MoveToScopeItemsSpec.scopeItemsPerGroups"));
+      }
+    }
+
+    checkDestinationsToExploreOptions(destinationOptions);
   }
 
   if (auto sampleSize = spec.sampleSize()) {

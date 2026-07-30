@@ -18,6 +18,7 @@
 #include "algopt/rebalancer/solver/moves/FixedDestMoveType.h"
 #include "algopt/rebalancer/solver/moves/FixedSourceMoveType.h"
 
+#include <fmt/format.h>
 #include <folly/container/irange.h>
 #include <gtest/gtest.h>
 
@@ -2974,6 +2975,52 @@ TEST_P(ProblemSolverChecksTest, SwapMoveTypeTests) {
   sampleSize.objectToSampleSize() = {{"s1", 1}, {"s2", 2}};
   spec.sampleSize() = sampleSize;
   verify(spec, "objectToSampleSize is not supported in this move type");
+
+  // SwapMoveType only reads defaultScopeItems; other MoveToScopeItemsSpec
+  // fields must be rejected rather than silently ignored.
+  auto verifySwapRejects = [&](const MoveToScopeItemsSpec& moveToScopeItems,
+                               const std::string& unsupportedField) {
+    DestinationsToExploreOptions destinationsToExplore;
+    destinationsToExplore.set_moveToScopeItems(moveToScopeItems);
+    SwapMoveTypeSpec swapSpec;
+    swapSpec.destinationsToExplore() = destinationsToExplore;
+    verify(
+        swapSpec,
+        fmt::format(
+            "SwapMoveType does not support {}: only unfiltered MoveToScopeItemsSpec.defaultScopeItems is supported",
+            unsupportedField));
+  };
+
+  ScopeItemList rackScopeItems;
+  rackScopeItems.scopeName() = "rack";
+
+  {
+    MoveToScopeItemsSpec moveToScopeItems;
+    moveToScopeItems.defaultScopeItems() =
+        makeDimensionFilteredScopeItemList("rack", "network");
+    verifySwapRejects(
+        moveToScopeItems, "MoveToScopeItemsSpec.defaultScopeItems.filter");
+  }
+
+  {
+    MoveToScopeItemsSpec moveToScopeItems;
+    moveToScopeItems.defaultScopeItems() = rackScopeItems;
+    moveToScopeItems.objectToScopeItems() = {{"s1", rackScopeItems}};
+    verifySwapRejects(
+        moveToScopeItems, "MoveToScopeItemsSpec.objectToScopeItems");
+  }
+
+  {
+    GroupToScopeItemList scopeItemsPerGroups;
+    scopeItemsPerGroups.partitionName() = "job";
+    scopeItemsPerGroups.groupToScopeItemList() = {{"j1", rackScopeItems}};
+
+    MoveToScopeItemsSpec moveToScopeItems;
+    moveToScopeItems.defaultScopeItems() = rackScopeItems;
+    moveToScopeItems.scopeItemsPerGroups() = scopeItemsPerGroups;
+    verifySwapRejects(
+        moveToScopeItems, "MoveToScopeItemsSpec.scopeItemsPerGroups");
+  }
 }
 
 TEST_P(ProblemSolverChecksTest, MultiStageConfigNoStagesTest) {
