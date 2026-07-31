@@ -193,6 +193,29 @@ struct SolverEvalStats {
   10: i32 numCycles;
 }
 
+// Inference stats for a learned move-filter (rebalancer-net) run that attached.
+struct LearnedMoveFilterStats {
+  1: string configuredModelPath; // spec value; empty for auto-resolution.
+  2: string resolvedModelKey; // resolved Manifold key; empty for a local model.
+  3: double pruneThreshold;
+  4: i64 numPairsScored;
+  5: i64 numPruned;
+  6: double pruneRatio; // numPruned / numPairsScored.
+  7: double modelLoadSec;
+  8: double graphEncodeSec;
+  9: double gnnForwardSec;
+  10: double scorePairsSec;
+}
+
+// Per-solve learned move-filter outcome, logged into the additionalInfo column
+// of rebalancer_runs. `stats` is set when the filter attached; otherwise
+// `message` explains why it was not used.
+struct LearnedMoveFilterInfo {
+  1: string fingerprintHash;
+  2: optional LearnedMoveFilterStats stats;
+  3: optional string message;
+}
+
 struct SolverMoveStats {
   // time spent in solver
   1: double durationSecs;

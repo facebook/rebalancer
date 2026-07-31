@@ -194,6 +194,7 @@ class RebalancerLog {
   virtual void log(const ManifoldInfo& /*info*/) {}
   virtual void log(const interface::thrift::Metrics& /*metrics*/) {}
   virtual void log(const NodeSummary& /*info*/) {}
+  virtual void log(const interface::LearnedMoveFilterInfo& /*info*/) {}
 
   virtual void setLoggingLabel(const std::string& /*label*/) {}
 

@@ -718,7 +718,8 @@ static void runInstance(Bundle&& bundle) {
   // the only place torch enters the binary, keeping CoreSolver torch-free.
   std::shared_ptr<const InvalidMoveFilter> learnedFilter;
 #ifndef REBALANCER_OSS_BUILD
-  learnedFilter = rebalancer_net::buildLearnedFilter(*universe, problem);
+  learnedFilter =
+      rebalancer_net::buildLearnedFilter(*universe, problem, logger.get());
 #endif
 
   auto runCoreSolver = [&]() {
