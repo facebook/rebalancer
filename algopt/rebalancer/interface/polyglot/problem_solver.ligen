@@ -241,6 +241,9 @@ unique class ProblemSolverBinding {
   @output_name(py="enableInvalidMoveFilter")
   mut void enableInvalidMoveFilter(bool enable) throws;
 
+  @output_name(py="validateAppliedMoves")
+  mut void validateAppliedMoves(bool enable) throws;
+
   @output_name(py="setPrecision")
   mut void setPrecision(
     CommonTypes.PrecisionTolerances precisionTolerances,

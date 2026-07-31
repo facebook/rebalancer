@@ -86,6 +86,7 @@ enum EndReason {
   HIT_EXCEPTION = 8,
   UNABLE_TO_FIND_MORE_MOVES = 9,
   HIT_MIN_CYCLE_OBJECTIVE_IMPROVEMENT = 10,
+  UNABLE_TO_FIND_IMPROVING_MOVES = 11,
 }
 
 struct TupperwareMoveValidatorSpec {

@@ -192,6 +192,8 @@ class ProblemSolverBinding {
 
   void enableInvalidMoveFilter(bool enable);
 
+  void validateAppliedMoves(bool enable);
+
   void setPrecision(
       const algopt::common::thrift::PrecisionTolerances& precisionTolerances);
 

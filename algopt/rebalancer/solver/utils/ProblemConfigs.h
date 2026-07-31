@@ -51,6 +51,7 @@ struct ProblemConfigs {
   std::optional<std::string> decompositionScopeName;
   bool enableParallelizedLpBuilding = false;
   bool useDynamicObjectOrdering = false;
+  bool validateAppliedMoves = false;
   bool enableParallelizedBoundsComputing = false;
   bool addMetricsExprsToOrchestrator = false;
   // Learned (GNN) move-legality filter, pre-built by the caller (the only

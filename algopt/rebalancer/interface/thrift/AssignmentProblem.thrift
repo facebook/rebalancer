@@ -63,6 +63,8 @@ struct AssignmentProblem {
   // ProblemSolver::enableLearnedMoveFilter(), mirroring enableInvalidMoveFilter.
   25: optional SolverSpecs.LearnedMoveFilterSpec learnedMoveFilterSpec;
 
+  26: bool validateAppliedMoves = false;
+
   // this field is used internally to add specific labels to the rebalancer_run_info scuba table; mainly used when running experiments to test changes
   1024: optional string scubaLoggingLabel;
 }

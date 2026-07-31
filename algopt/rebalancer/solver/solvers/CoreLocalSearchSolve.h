@@ -156,7 +156,8 @@ class CoreLocalSearchSolve {
   bool reachedGlobalOptimum();
   bool reachedLocalOptimum();
   bool shouldRecomputeHottestOrderingAfterMove(int nContainersToOrder) const;
-  size_t applyMove(size_t moveIndex, const MoveResult& moveResult);
+  // Returns whether the move remains applied.
+  bool tryApplyMove(size_t moveIndex, const MoveResult& moveResult);
   bool finalizeAndReturn(bool solved);
   bool shouldTerminate(double curTime, double lastImprovedTime);
   bool shouldStartNextCycle();

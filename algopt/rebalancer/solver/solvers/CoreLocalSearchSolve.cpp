@@ -187,6 +187,11 @@ bool CoreLocalSearchSolve::shouldRecomputeHottestOrderingAfterMove(
 bool CoreLocalSearchSolve::shouldTerminate(
     double curTime,
     double lastImprovedTime) {
+  if (stopInfo_.endReason ==
+      interface::EndReason::UNABLE_TO_FIND_IMPROVING_MOVES) {
+    return true;
+  }
+
   if (curTime >= solveParams_.solveTime) {
     stopInfo_.endReason = interface::EndReason::HIT_TIME_LIMIT;
     stopInfo_.auxInfo =
@@ -358,18 +363,32 @@ MoveResult CoreLocalSearchSolve::findBestMove(
   return bestResult;
 }
 
-size_t CoreLocalSearchSolve::applyMove(
+bool CoreLocalSearchSolve::tryApplyMove(
     size_t moveIndex,
     const MoveResult& moveResult) {
-  auto changes = moveResult.getMoveSet().getChangeSet();
-  solveState_.evaluator.apply(changes);
-  // Update hints whenever the assignment changes.
-  solveState_.hints.update(problem_, solveState_.evaluator, moveResult);
+  const auto acceptMove = [this, moveIndex, &moveResult] {
+    solveState_.hints.update(problem_, solveState_.evaluator, moveResult);
+    const auto numMoves = moveResult.getMoveSet().size();
+    solveState_.movesInCycle += numMoves;
+    solveState_.moveCounts[moveIndex].recordApply(numMoves);
+    return true;
+  };
+  const auto rejectMove = [this](std::string reason) {
+    stopInfo_.endReason = interface::EndReason::UNABLE_TO_FIND_IMPROVING_MOVES;
+    stopInfo_.auxInfo = std::move(reason);
+    return false;
+  };
 
-  auto numMoves = moveResult.getMoveSet().size();
-  solveState_.movesInCycle += numMoves;
-  solveState_.moveCounts[moveIndex].recordApply(numMoves);
-  return numMoves;
+  switch (solveState_.evaluator.tryApply(moveResult)) {
+    case ApplyStatus::APPLIED:
+      return acceptMove();
+    case ApplyStatus::VIOLATES_CONSTRAINT:
+      return rejectMove("candidate move violates a constraint");
+    case ApplyStatus::WORSENS_HIGHER_PRIORITY_OBJECTIVE:
+      return rejectMove("candidate move worsens a higher-priority objective");
+    case ApplyStatus::DOES_NOT_IMPROVE_OBJECTIVE:
+      return rejectMove("candidate move does not improve the objective");
+  }
 }
 
 bool CoreLocalSearchSolve::improveHotContainer(
@@ -387,6 +406,12 @@ bool CoreLocalSearchSolve::improveHotContainer(
     }
 
     applyTimer_.start();
+    if (!tryApplyMove(moveIndex, moveResult)) {
+      applyTimer_.stop();
+      return false;
+    }
+
+    const auto numMoves = moveResult.getMoveSet().size();
     const auto& movesSummary = MovesSummaryHelper::makeMovesSummary(
         problem_,
         moveResult,
@@ -395,7 +420,6 @@ bool CoreLocalSearchSolve::improveHotContainer(
         solveState_.cyclesStarted);
     problem_.configs.logger->log(movesSummary);
     moveTimes_.emplace_back(timer_.getSeconds(), movesSummary.moves()->size());
-    auto numMoves = applyMove(moveIndex, moveResult);
 
     lastImprovedTime = timer_.getSeconds();
 

@@ -89,6 +89,18 @@ std::optional<int> MovesEvaluator::DoNotWorsenGoalConfig::getFirstWorseTuplePos(
   return std::nullopt;
 }
 
+bool MovesEvaluator::DoNotWorsenGoalConfig::hasWorsened(
+    const GlobalObjectiveValue& oldValue,
+    const GlobalObjectiveValue& newValue) const {
+  for (const auto i : folly::irange((int)oldValue.size())) {
+    if (exceedsAllowedWorsening(i, oldValue.get(i), newValue.get(i))) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 bool MovesEvaluator::DoNotWorsenGoalConfig::exceedsAllowedWorsening(
     int pos,
     double oldValue,
@@ -154,8 +166,15 @@ bool MovesEvaluator::isPositive(const Expression* expression, Context& context)
     const {
   const auto exprValue =
       problem_.getOrchestrator().evaluate(expression, context);
-  return precision_.isstrictlyGreater(
-      exprValue, *precision_.getTolerances().absolute());
+  return precision_.isStrictlyGtZero(exprValue);
+}
+
+bool MovesEvaluator::violatesConstraints() const {
+  const auto& constraints = problem_.getLabeledConstraints();
+  return std::any_of(
+      constraints.begin(), constraints.end(), [this](const auto& constraint) {
+        return precision_.isStrictlyGtZero(constraint->expression->value);
+      });
 }
 
 bool MovesEvaluator::satisfiesConstraints(const MoveSet& moves) const {
@@ -246,12 +265,28 @@ MoveResult MovesEvaluator::evaluate(MoveSet&& moves) const {
       getObjectiveDeltas(context, objIdxEvaluatedUpto));
 }
 
-void MovesEvaluator::apply(const ChangeSet& changes) const {
-  // moves are only applied after evaluations assert that they do not result in
-  // any constraint violations. Therefore, we do not explicitly check for
-  // constraint violations after apply and hence use false for
-  // 'makeInvalidIfConstraintBroken'
-  getProblem().apply(changes);
+ApplyStatus MovesEvaluator::tryApply(const MoveResult& moveResult) const {
+  const auto changes = moveResult.getMoveSet().getChangeSet();
+  if (!problem_.configs.validateAppliedMoves) {
+    problem_.apply(changes);
+    return ApplyStatus::APPLIED;
+  }
+
+  const auto oldDoNotWorsenGoalValue = doNotWorsenGoalConfig_.goal.getValue();
+  return problem_.tryApply(changes, [&] {
+    if (violatesConstraints()) {
+      return ApplyStatus::VIOLATES_CONSTRAINT;
+    }
+    if (doNotWorsenGoalConfig_.hasWorsened(
+            oldDoNotWorsenGoalValue, doNotWorsenGoalConfig_.goal.getValue())) {
+      return ApplyStatus::WORSENS_HIGHER_PRIORITY_OBJECTIVE;
+    }
+    if (!GlobalObjectiveValue::isStrictlyBetter(
+            minimizingGoal_.getValue(), moveResult.getOldValue(), precision_)) {
+      return ApplyStatus::DOES_NOT_IMPROVE_OBJECTIVE;
+    }
+    return ApplyStatus::APPLIED;
+  });
 }
 
 const GlobalObjective& MovesEvaluator::getObjective() const {

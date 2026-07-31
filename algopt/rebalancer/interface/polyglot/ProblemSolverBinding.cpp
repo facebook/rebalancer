@@ -382,6 +382,10 @@ void ProblemSolverBinding::enableInvalidMoveFilter(bool enable) {
   solver_->enableInvalidMoveFilter(enable);
 }
 
+void ProblemSolverBinding::validateAppliedMoves(bool enable) {
+  solver_->validateAppliedMoves(enable);
+}
+
 void ProblemSolverBinding::setPrecision(
     const algopt::common::thrift::PrecisionTolerances& precisionTolerances) {
   solver_->setPrecision(precisionTolerances);

@@ -46,10 +46,8 @@ class MovesEvaluator {
       const std::vector<const Expression*>& constraints,
       const Move& move) const;
 
-  // NOTE: apply changes to problem and also update internal state
-  // needed since what we evaluate depends on what the intermediate 'applied'
-  // state is
-  void apply(const ChangeSet& changes) const;
+  // Applies the move if it is valid. Otherwise, undoes it.
+  ApplyStatus tryApply(const MoveResult& moveResult) const;
 
   const GlobalObjective& getObjective() const;
 
@@ -86,6 +84,7 @@ class MovesEvaluator {
       Context& context) const;
 
   bool isPositive(const Expression* expression, Context& context) const;
+  bool violatesConstraints() const;
 
  protected:
   // By default, all prior goals in [0, objTupleBegin) cannot be worsened by any
@@ -105,6 +104,9 @@ class MovesEvaluator {
     std::optional<int> getFirstWorseTuplePos(
         Context& context,
         Orchestrator& orchestrator) const;
+    bool hasWorsened(
+        const GlobalObjectiveValue& oldValue,
+        const GlobalObjectiveValue& newValue) const;
     bool exceedsAllowedWorsening(int pos, double oldValue, double newValue)
         const;
 

@@ -498,6 +498,8 @@ class ProblemSolver {
   // memory proportional to the number of invalid (object, container) pairs.
   void enableInvalidMoveFilter(bool enable);
 
+  void validateAppliedMoves(bool enable);
+
   // Scope used by the optimal solver to partition the problem into
   // independently-solvable subproblems (decomposition).
   void setDecompositionScope(const std::string& scopeName);
@@ -618,6 +620,7 @@ class ProblemSolver {
   // When enabled, pre-compute invalid (object, container) pairs and skip them
   // during move evaluation to improve performance.
   bool enableInvalidMoveFilter_ = false;
+  bool validateAppliedMoves_ = false;
 
   // if specified, optimal slover will use this scope to partition the problem
   // into subproblems

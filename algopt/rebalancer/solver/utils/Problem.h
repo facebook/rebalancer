@@ -35,10 +35,18 @@
 #include "algopt/rebalancer/solver/utils/Util.h"
 
 #include <folly/CppAttributes.h>
+#include <folly/Function.h>
 
 #include <memory>
 
 namespace facebook::rebalancer {
+
+enum class ApplyStatus {
+  APPLIED,
+  VIOLATES_CONSTRAINT,
+  WORSENS_HIGHER_PRIORITY_OBJECTIVE,
+  DOES_NOT_IMPROVE_OBJECTIVE,
+};
 
 // If we partition the problem expression-tree variables into subproblems,
 // we can have variables that are not resolved (because they are complicating).
@@ -73,6 +81,11 @@ class Problem {
   friend class LocalSearchStageSolver;
 
   MoveResult apply(const ChangeSet& changes);
+  // Applies changes and restores them if validation rejects the resulting
+  // state.
+  ApplyStatus tryApply(
+      const ChangeSet& changes,
+      folly::FunctionRef<ApplyStatus()> validate);
 
   const std::string& containerName(entities::ContainerId containerId) const;
 

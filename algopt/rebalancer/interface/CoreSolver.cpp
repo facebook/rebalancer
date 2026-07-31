@@ -417,6 +417,7 @@ ProblemConfigs CoreSolver::makeProblemConfig(
   problemConfig.runId.run_id = *problemSpec.runId();
   problemConfig.useDynamicObjectOrdering =
       *problemSpec.useDynamicObjectOrdering();
+  problemConfig.validateAppliedMoves = *problemSpec.validateAppliedMoves();
 
   if (auto decompositionScopeName = problemSpec.decompositionScopeName()) {
     problemConfig.decompositionScopeName = *decompositionScopeName;

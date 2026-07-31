@@ -279,6 +279,21 @@ MoveResult Problem::apply(const ChangeSet& changes) {
   return result;
 }
 
+ApplyStatus Problem::tryApply(
+    const ChangeSet& changes,
+    folly::FunctionRef<ApplyStatus()> validate) {
+  applyChanges(changes);
+  const auto status = validate();
+  if (status != ApplyStatus::APPLIED) {
+    // Restore the previous state when validation fails.
+    applyChanges(changes.getInverse());
+    return status;
+  }
+
+  maybeFixMovedObjects(changes);
+  return status;
+}
+
 MoveResult Problem::applyChanges(const ChangeSet& changes) {
   auto oldValue = objective.getValue();
 
