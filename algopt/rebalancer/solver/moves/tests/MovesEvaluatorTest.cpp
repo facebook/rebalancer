@@ -403,7 +403,7 @@ TEST_F(MovesEvaluatorTest, TryApplyUndoesConstraintViolation) {
   EXPECT_FALSE(problem.fixed_objects.contains(object(2)));
 }
 
-TEST_F(MovesEvaluatorTest, TryApplySkipsValidationByDefault) {
+TEST_F(MovesEvaluatorTest, TryApplySkipsValidationWhenDisabled) {
   setInitialAssignment(
       {{"container1", {"object1"}}, {"container2", {"object2"}}});
   const auto universe = buildUniverse();
@@ -416,6 +416,7 @@ TEST_F(MovesEvaluatorTest, TryApplySkipsValidationByDefault) {
       /*constraint=*/container1Objects - const_expr(1.0, *universe));
 
   auto& problem = getProblem();
+  problem.configs.validateAppliedMoves = false;
   const MovesEvaluator evaluator(problem, 0, 1, "stage");
   MoveSet moves;
   moves.insert(Move(object(2), container(2), container(1)));

@@ -109,6 +109,7 @@ inline std::unique_ptr<Problem> createTestProblem(
 
   // use dynamicObjectOrdering
   config.useDynamicObjectOrdering = true;
+  config.validateAppliedMoves = true;
   config.enableParallelizedBoundsComputing = enableParallelizedBoundsComputing;
   return std::make_unique<Problem>(universe, materializedProblem, config);
 }

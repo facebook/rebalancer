@@ -72,7 +72,6 @@ TEST_F(LocalSearchEvalApplyDisagreementTest, UndoesMoveAndStopsLocalSearch) {
   auto logger = std::make_shared<InMemoryLog>();
   ProblemConfigs config;
   config.logger = logger;
-  config.validateAppliedMoves = true;
 
   auto problem = packer::tests::createTestProblem(
       universe,
