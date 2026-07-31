@@ -105,6 +105,8 @@ class MovesEvaluator {
     std::optional<int> getFirstWorseTuplePos(
         Context& context,
         Orchestrator& orchestrator) const;
+    bool exceedsAllowedWorsening(int pos, double oldValue, double newValue)
+        const;
 
     GlobalObjective goal;
     std::map<int, double> tuplePosToAllowedWorsenUntilValue;

@@ -274,17 +274,21 @@ const GlobalLabeledObjectives& Problem::getLabeledObjectives() const {
 }
 
 MoveResult Problem::apply(const ChangeSet& changes) {
+  auto result = applyChanges(changes);
+  maybeFixMovedObjects(changes);
+  return result;
+}
+
+MoveResult Problem::applyChanges(const ChangeSet& changes) {
   auto oldValue = objective.getValue();
 
   for (auto& change : changes) {
     if (change.getValue() == 1) {
       assignment.setOn(change.getObject(), change.getContainer());
-      if (universe_->getMoveObjectsOnce()) {
-        fixed_objects.insert(change.getObject());
-      }
     } else {
       if (change.getValue() != -1) {
-        std::runtime_error(fmt::format("Invalid change {}", change.toString()));
+        throw std::runtime_error(
+            fmt::format("Invalid change {}", change.toString()));
       }
       assignment.removeFrom(change.getObject(), change.getContainer());
     }
@@ -307,6 +311,17 @@ MoveResult Problem::apply(const ChangeSet& changes) {
       MoveSet::fromChangeSet(changes),
       std::move(oldValue),
       materializedProblem_->globalObjective.getValue());
+}
+
+void Problem::maybeFixMovedObjects(const ChangeSet& changes) {
+  if (!universe_->getMoveObjectsOnce()) {
+    return;
+  }
+  for (const auto& change : changes) {
+    if (change.getValue() == 1) {
+      fixed_objects.insert(change.getObject());
+    }
+  }
 }
 
 void Problem::partialApply(const ChangeSet& changes) {

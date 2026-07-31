@@ -78,31 +78,31 @@ std::optional<int> MovesEvaluator::DoNotWorsenGoalConfig::getFirstWorseTuplePos(
   if (goal.size() == 0) {
     return std::nullopt;
   }
-  const auto& precision = universe_.getPrecision();
-
-  auto currentValue = goal.getValue();
+  const auto currentValue = goal.getValue();
   for (const auto i : folly::irange((int)currentValue.size())) {
-    const auto newAtI = goal.evaluateObjectiveAt(i, context, orchestrator);
-    const auto newWorseThanCurr =
-        precision.isstrictlyGreater(newAtI, currentValue.get(i));
-    if (!newWorseThanCurr) {
-      continue;
-    }
-
-    // new value is worse than the current value
-    auto allowedWorsenUntilValuePtr = getAllowedWorsenUntilValue(i);
-    if (!allowedWorsenUntilValuePtr ||
-        precision.isstrictlyGreater(newAtI, *allowedWorsenUntilValuePtr)) {
-      // if higher-priority objectives are NOT allowed to worsen, then make
-      // the move invalid
-      // or if higher-priority objectives are allowed to worsen,
-      // then make the move invalid if the newValue is greater than the
-      // allowedWorsenUntilValue
+    const auto newValue = goal.evaluateObjectiveAt(i, context, orchestrator);
+    if (exceedsAllowedWorsening(i, currentValue.get(i), newValue)) {
       return i;
     }
   }
 
   return std::nullopt;
+}
+
+bool MovesEvaluator::DoNotWorsenGoalConfig::exceedsAllowedWorsening(
+    int pos,
+    double oldValue,
+    double newValue) const {
+  const auto& precision = universe_.getPrecision();
+  if (!precision.isstrictlyGreater(newValue, oldValue)) {
+    return false;
+  }
+
+  const auto* allowedWorsenUntilValue = getAllowedWorsenUntilValue(pos);
+  // A goal without an allowance cannot worsen. Otherwise, it cannot exceed
+  // its allowed value.
+  return !allowedWorsenUntilValue ||
+      precision.isstrictlyGreater(newValue, *allowedWorsenUntilValue);
 }
 
 MovesEvaluator::MovesEvaluator(

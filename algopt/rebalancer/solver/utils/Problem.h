@@ -237,6 +237,8 @@ class Problem {
   interface::EquivalenceSetInfo makeEquivalenceSetInfo() const;
 
  private:
+  MoveResult applyChanges(const ChangeSet& changes);
+  void maybeFixMovedObjects(const ChangeSet& changes);
   void log_node_summary(size_t numFixedNodes, size_t nodeCount);
 
   void buildInitialAssignment();

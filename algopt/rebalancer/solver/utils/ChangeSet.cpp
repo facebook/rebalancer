@@ -42,6 +42,15 @@ const Change& ChangeSet::at(size_t index) const {
   return changes_.at(index);
 }
 
+ChangeSet ChangeSet::getInverse() const {
+  std::vector<Change> inverse;
+  inverse.reserve(changes_.size());
+  for (auto it = changes_.rbegin(); it != changes_.rend(); ++it) {
+    inverse.emplace_back(it->getObject(), it->getContainer(), -it->getValue());
+  }
+  return ChangeSet(std::move(inverse));
+}
+
 std::vector<Change>::const_iterator ChangeSet::begin() const {
   return changes_.begin();
 }

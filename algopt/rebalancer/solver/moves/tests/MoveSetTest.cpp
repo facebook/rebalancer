@@ -67,6 +67,21 @@ TEST(MoveSetTest, FromChangeSet) {
   EXPECT_EQ(expected, actual);
 }
 
+TEST(MoveSetTest, FromInverseChangeSet) {
+  MoveSet moves;
+  moves.insert(Move{object(11), container(101), container(102)});
+  moves.insert(Move{object(12), container(103), container(104)});
+
+  const auto inverse =
+      MoveSet::fromChangeSet(moves.getChangeSet().getInverse());
+  const std::set<Move, Compare> actual(inverse.begin(), inverse.end());
+  const std::set<Move, Compare> expected = {
+      Move(object(11), container(102), container(101)),
+      Move(object(12), container(104), container(103))};
+
+  EXPECT_EQ(expected, actual);
+}
+
 TEST(MoveSetTest, FromChangeSetRemovedTwice) {
   ChangeSet changes;
   changes.insert(Change(object(11), container(101), -1));

@@ -34,6 +34,8 @@ class ChangeSet {
 
   size_t size() const;
   const Change& at(size_t index) const;
+  // Returns a ChangeSet that undoes these changes.
+  ChangeSet getInverse() const;
   std::vector<Change>::const_iterator begin() const;
   std::vector<Change>::const_iterator end() const;
   bool empty() const;
