@@ -40,6 +40,14 @@ BENCHMARK(ProductionReplay) {
   replay("6bfcd36a-bf2e-4b91-a5a6-d2dc47bf0352-iter0-v3-v2");
 }
 
+BENCHMARK(GSPEvalApplyNumericalIssue1) {
+  replay("GSP_eval_apply_numerical_issue_1");
+}
+
+BENCHMARK(GSPEvalApplyNumericalIssue2) {
+  replay("GSP_eval_apply_numerical_issue_2");
+}
+
 int main(int argc, char** argv) {
   const folly::Init init(&argc, &argv);
 
