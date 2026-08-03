@@ -80,6 +80,6 @@ leaves fewer explicit entries. Then add a [CapacitySpec](capacity) on it with an
 
 ## Source
 
-- Thrift definition: [`interface/thrift/ProblemSpecs.thrift`](https://github.com/facebookincubator/rebalancer/blob/main/algopt/rebalancer/interface/thrift/ProblemSpecs.thrift) (`AvoidAssignmentsSpec`, `AvoidAssignment`)
-- SpecBuilder: [`materializer/spec_builder/AvoidAssignmentsSpecBuilder.cpp`](https://github.com/facebookincubator/rebalancer/blob/main/algopt/rebalancer/materializer/spec_builder/AvoidAssignmentsSpecBuilder.cpp)---the code that defines this spec's behavior
-- Tests and runnable examples: [`interface/tests/AvoidAssignmentsTest.cpp`](https://github.com/facebookincubator/rebalancer/blob/main/algopt/rebalancer/interface/tests/AvoidAssignmentsTest.cpp)---the unit tests the snippets on this page are drawn from
+- Thrift definition: [`interface/thrift/ProblemSpecs.thrift`](https://github.com/facebook/rebalancer/blob/main/algopt/rebalancer/interface/thrift/ProblemSpecs.thrift) (`AvoidAssignmentsSpec`, `AvoidAssignment`)
+- SpecBuilder: [`materializer/spec_builder/AvoidAssignmentsSpecBuilder.cpp`](https://github.com/facebook/rebalancer/blob/main/algopt/rebalancer/materializer/spec_builder/AvoidAssignmentsSpecBuilder.cpp)---the code that defines this spec's behavior
+- Tests and runnable examples: [`interface/tests/AvoidAssignmentsTest.cpp`](https://github.com/facebook/rebalancer/blob/main/algopt/rebalancer/interface/tests/AvoidAssignmentsTest.cpp)---the unit tests the snippets on this page are drawn from
