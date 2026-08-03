@@ -3,12 +3,14 @@ include "algopt/rebalancer/interface/thrift/Types.thrift"
 include "algopt/rebalancer/solver/if/packer.thrift"
 include "thrift/annotation/hack.thrift"
 
+@hack.NamePrefix{prefix = "rebalancer_explorer_"}
+@hack.LegacyAlwaysIncludeNamePrefixInProcessor
+@hack.LegacyOmitPrefixInNameString
 @thrift.AllowLegacyMissingUris
 package;
 
 namespace cpp2 facebook.rebalancer.explorer
 namespace py3 rebalancer.explorer
-namespace php rebalancer_explorer
 
 ////
 // Common
