@@ -140,14 +140,16 @@ In general a perfect solution isn't always possible---one that perfectly balance
 
 ## Build and Run
 
-The default build produces only the Rebalancer library; the examples are gated behind a CMake option. Assuming you've already built Rebalancer from source (see [Installation](installation)), re-run CMake with `-DEXAMPLES=ON`, then build and run this example's target:
+The default build produces only the Rebalancer library; the examples are gated behind CMake options. `-DEXAMPLES=ON` turns on the examples under `algopt/rebalancer/examples/`, and `-DREBALANCER_BUILD_WEBSITE_EXAMPLES=ON` additionally turns on the ones written for this site, which live under `examples/website/`. This tutorial's source is one of the latter, so you need both. Assuming you've already built Rebalancer from source (see [Installation](installation)), re-run CMake with both options, then build and run this example's target:
 
 ```bash
 # From the rebalancer/build/ directory
-cmake -GNinja -DEXAMPLES=ON -DCMAKE_BUILD_TYPE=Debug ..
+cmake -GNinja -DEXAMPLES=ON -DREBALANCER_BUILD_WEBSITE_EXAMPLES=ON -DCMAKE_BUILD_TYPE=Debug ..
 ninja tasks_on_hosts.exe
 ./tasks_on_hosts.exe
 ```
+
+An example's target name is its source file name with a `.exe` suffix, so `tasks_on_hosts.cpp` builds `tasks_on_hosts.exe`.
 
 You should see the `=== Final placement ===` output shown above.
 
