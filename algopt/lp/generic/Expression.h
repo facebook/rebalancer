@@ -48,6 +48,10 @@ class ExpressionImpl {
   // value of an expression
   virtual double computeValue() const = 0;
 
+  // Returns the constant/offset term of the expression (the part with no
+  // variables). Backends store this alongside their coefficient representation.
+  virtual double getConstant() const = 0;
+
   virtual void print() const = 0;
 };
 

@@ -50,7 +50,7 @@ class HiGHSExpression : public ExpressionImpl {
   size_t size() const;
   const std::vector<HiGHSVariable>& getVariables() const;
   const std::vector<double>& getCoeffs() const;
-  double getConstant() const;
+  double getConstant() const override;
   bool isQuadratic() const;
 
   using ColPair = std::pair<HighsInt, HighsInt>;

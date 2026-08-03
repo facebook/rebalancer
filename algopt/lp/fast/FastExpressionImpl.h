@@ -47,7 +47,7 @@ class FastExpressionImpl : public ExpressionImpl {
   void print() const override;
 
   std::vector<Term> getTerms() const;
-  double getConstant() const;
+  double getConstant() const override;
 
  private:
   folly::F14FastMap<uint64_t, double> terms_;

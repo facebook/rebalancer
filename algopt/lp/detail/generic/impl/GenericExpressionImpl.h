@@ -121,7 +121,7 @@ class GenericExpressionImpl : public ExpressionImpl {
   double getValue() const override;
   double computeValue() const override;
 
-  double getConstant() const;
+  double getConstant() const override;
   bool isConstant() const;
   bool isQuadratic() const;
 

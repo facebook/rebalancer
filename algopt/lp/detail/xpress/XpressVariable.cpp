@@ -56,7 +56,7 @@ double XpressVariable::getValue() const {
 std::shared_ptr<ExpressionImpl> XpressVariable::makeExpression(
     double coeff) const {
   return std::make_shared<XpressExpression>(
-      dashoptimization::XPRBexpr(coeff, variable_));
+      dashoptimization::XPRBexpr(coeff, variable_), 0.0);
 }
 
 const dashoptimization::XPRBvar& XpressVariable::get() const {

@@ -22,31 +22,39 @@
 
 namespace facebook::algopt::lp::detail {
 
-XpressExpression::XpressExpression(const dashoptimization::XPRBexpr& expression)
-    : expression_(expression) {}
+XpressExpression::XpressExpression(
+    const dashoptimization::XPRBexpr& expression,
+    double constant)
+    : expression_(expression), constant_(constant) {}
 
 std::shared_ptr<ExpressionImpl> XpressExpression::clone() const {
   flushBuffer();
-  return std::make_shared<XpressExpression>(expression_);
+  return std::make_shared<XpressExpression>(expression_, constant_);
 }
 
 void XpressExpression::add(double constant) {
+  constant_ += constant;
   addBuffered(constant);
 }
 
 void XpressExpression::add(std::shared_ptr<const ExpressionImpl> expression) {
-  addBuffered(dynamic_cast<const XpressExpression&>(*expression).get());
+  const auto& other = dynamic_cast<const XpressExpression&>(*expression);
+  constant_ += other.getConstant();
+  addBuffered(other.get());
 }
 
 void XpressExpression::multiply(double constant) {
   flushBuffer();
+  constant_ *= constant;
   expression_.mul(constant);
 }
 
 void XpressExpression::multiply(
     std::shared_ptr<const ExpressionImpl> expression) {
   flushBuffer();
-  expression_.mul(dynamic_cast<const XpressExpression&>(*expression).get());
+  const auto& other = dynamic_cast<const XpressExpression&>(*expression);
+  constant_ *= other.getConstant();
+  expression_.mul(other.get());
 }
 
 std::shared_ptr<RelationImpl> XpressExpression::makeEqualZeroRelation() const {
@@ -79,6 +87,10 @@ double XpressExpression::computeValue() const {
   // seem to provide a way to access the underlying variables used in an
   // expression
   return getValue();
+}
+
+double XpressExpression::getConstant() const {
+  return constant_;
 }
 
 void XpressExpression::print() const {

@@ -477,7 +477,7 @@ std::shared_ptr<VariableImpl> XpressProblem::makeBoolVar(
 std::shared_ptr<ExpressionImpl> XpressProblem::makeExpression(
     double constant) const {
   return std::make_shared<XpressExpression>(
-      dashoptimization::XPRBexpr(constant));
+      dashoptimization::XPRBexpr(constant), constant);
 }
 
 std::shared_ptr<VariableImpl>

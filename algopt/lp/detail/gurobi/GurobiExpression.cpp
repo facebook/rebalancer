@@ -153,6 +153,13 @@ double GurobiExpression::computeValue() const {
   return exprValue;
 }
 
+double GurobiExpression::getConstant() const {
+  if (std::holds_alternative<GRBLinExpr>(expression_)) {
+    return std::get<GRBLinExpr>(expression_).getConstant();
+  }
+  return std::get<GRBQuadExpr>(expression_).getLinExpr().getConstant();
+}
+
 void GurobiExpression::print() const {
   if (std::holds_alternative<GRBLinExpr>(expression_)) {
     std::cout << std::get<GRBLinExpr>(expression_) << std::endl;

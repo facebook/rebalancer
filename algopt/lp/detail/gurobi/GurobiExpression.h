@@ -45,6 +45,7 @@ class GurobiExpression : public ExpressionImpl {
 
   double getValue() const override;
   double computeValue() const override;
+  double getConstant() const override;
 
   void print() const override;
 

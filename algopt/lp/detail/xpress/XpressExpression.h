@@ -25,7 +25,13 @@ namespace facebook::algopt::lp::detail {
 
 class XpressExpression : public ExpressionImpl {
  public:
-  explicit XpressExpression(const dashoptimization::XPRBexpr& expression);
+  // Constructed by the XpressProblem / XpressVariable factories and clone().
+  // There is deliberately no default for `constant`: every caller must pass the
+  // constant that `expression` was built with, so the shadow constant_ never
+  // drifts from the wrapped XPRBexpr. See constant_ below for why it exists.
+  XpressExpression(
+      const dashoptimization::XPRBexpr& expression,
+      double constant);
 
   std::shared_ptr<ExpressionImpl> clone() const override;
 
@@ -41,6 +47,7 @@ class XpressExpression : public ExpressionImpl {
 
   double getValue() const override;
   double computeValue() const override;
+  double getConstant() const override;
 
   void print() const override;
 
@@ -66,6 +73,17 @@ class XpressExpression : public ExpressionImpl {
   mutable dashoptimization::XPRBexpr expression_;
   mutable dashoptimization::XPRBexpr buffer_;
   mutable int bufferSize_ = 0;
+  // Shadow copy of the expression's constant/offset term.
+  //
+  // The FICO XPRBexpr API is write-only for the constant: you can set it (via
+  // setTerm/addTerm with a null variable) but there is no getter. The only way
+  // to read a value back, XPRBevalexpr (getSol), evaluates the whole expression
+  // using the variables' current solution values -- so it is unusable at build
+  // time and it mixes in the variable terms rather than isolating the constant.
+  // getConstant() must return just the constant without a solve, so we maintain
+  // this shadow in lockstep with the wrapped XPRBexpr: the constructor takes
+  // the initial constant, add()/multiply() update it, and clone() copies it.
+  double constant_;
 };
 
 } // namespace facebook::algopt::lp::detail

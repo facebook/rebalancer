@@ -69,7 +69,7 @@ bool Expression::isConstant() const {
 }
 
 double Expression::getConstant() const {
-  return constant_;
+  return expression_ ? expression_->getConstant() : constant_;
 }
 
 void Expression::add(double constant) {
