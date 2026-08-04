@@ -527,6 +527,24 @@ TEST_P(ProblemSolverChecksTest, MinimizeContainersSpecInvalidFilter) {
       solver->addGoal(spec), "unknown item h7 in scope host");
 }
 
+TEST_P(
+    ProblemSolverChecksTest,
+    MinimizeContainersSpecRejectsNonPositiveMaxFreeLimit) {
+  auto solver = makeInitializedSolver(GetParam());
+  solver->addContainerDimension("cpu", std::map<std::string, double>{});
+
+  MinimizeContainersSpec spec;
+  spec.scope() = "host";
+  spec.dimension() = "cpu";
+  MinimizeContainersTarget target;
+  target.set_maxFreeLimit(0);
+  spec.target() = std::move(target);
+
+  REBALANCER_EXPECT_RUNTIME_ERROR(
+      solver->addGoal(spec),
+      "expected maxFreeLimit for MinimizeContainersSpec dimension 'cpu' to be positive but got 0");
+}
+
 TEST_P(ProblemSolverChecksTest, ThrottlingSpecUnknownScope) {
   auto solver = makeInitializedSolver(GetParam());
 

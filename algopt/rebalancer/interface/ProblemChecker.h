@@ -231,6 +231,8 @@ class ProblemChecker {
 
   enum ObjectBundleExpectation { DISALLOWED, REQUIRED };
 
+  enum class ValueRequirement { NONE, NON_NEGATIVE, POSITIVE };
+
   void checkObjectExists(const std::string& object) const;
   void checkObjectNameIsSet() const;
   void checkContainerNameIsSet() const;
@@ -240,18 +242,24 @@ class ProblemChecker {
   static void checkLimitType(
       const LimitType& type,
       const LimitType& expectedType);
-  static void checkNonNegativeValue(double val, const std::string& attribute);
-  static void checkLimitValuesAreNonNegative(const Limit& limit);
+  static void checkValue(
+      double value,
+      std::string_view attribute,
+      ValueRequirement requirement);
+  static void checkNonNegativeValue(double value, std::string_view attribute);
+  static void checkLimitValues(
+      const Limit& limit,
+      ValueRequirement requirement);
   void checkLimitForScopeItems(
       const std::string& scope,
       const Limit& limit,
-      bool enforceLimitValuesAreNonNegative = false) const;
+      ValueRequirement requirement = ValueRequirement::NONE) const;
   void checkLimitForGroups(
       const std::string& scope,
       const std::string& partition,
       const Limit& limit,
       std::optional<interface::LimitType> expectedType = std::nullopt,
-      bool enforceLimitValuesAreNonNegative = false) const;
+      ValueRequirement requirement = ValueRequirement::NONE) const;
   void checkLimitForGroups(
       const std::string& partition,
       const Limit& limit,

@@ -564,14 +564,12 @@ void ProblemChecker::addSpec(const MinimizeContainersSpec& spec) {
   if (spec.target()) {
     switch (spec.target()->getType()) {
       case MinimizeContainersTarget::Type::maxFreeLimit:
-        if (spec.target()->get_maxFreeLimit() <= 0) {
-          throw std::runtime_error(
-              fmt::format(
-                  "Minimize containers spec on dimension {} has non-positive "
-                  "maxFreeLimit {}",
-                  *spec.dimension(),
-                  spec.target()->get_maxFreeLimit()));
-        }
+        checkValue(
+            spec.target()->get_maxFreeLimit(),
+            fmt::format(
+                "maxFreeLimit for MinimizeContainersSpec dimension '{}'",
+                *spec.dimension()),
+            ValueRequirement::POSITIVE);
         break;
       case MinimizeContainersTarget::Type::minUsedLimit:
         if (spec.target()->get_minUsedLimit() < 0) {
@@ -1153,9 +1151,7 @@ void ProblemChecker::addSpec(const CapacityWithGroupPresenceSpec& spec) {
                 aggregationPartition));
       }
       checkLimitForScopeItems(
-          mainScope,
-          *spec.scopeItemToLimit(),
-          /*enforceLimitValuesAreNonNegative=*/true);
+          mainScope, *spec.scopeItemToLimit(), ValueRequirement::NON_NEGATIVE);
       break;
     }
     case interface::CapacityWithGroupPresenceUsageIntent::
@@ -1165,7 +1161,7 @@ void ProblemChecker::addSpec(const CapacityWithGroupPresenceSpec& spec) {
           mainPartition,
           *spec.scopeItemToLimit(),
           /*expectedType=*/std::nullopt,
-          /*enforceLimitValuesAreNonNegative=*/true);
+          ValueRequirement::NON_NEGATIVE);
       break;
     }
   }
@@ -1175,7 +1171,7 @@ void ProblemChecker::addSpec(const CapacityWithGroupPresenceSpec& spec) {
       aggregationPartition,
       *spec.groupToPresenceWeight(),
       interface::LimitType::ABSOLUTE,
-      true /*enforceLimitValuesAreNonNegative*/);
+      ValueRequirement::NON_NEGATIVE);
   checkScopeItemFilterSpec(*spec.scopeItemFilter(), mainScope);
 
   for (auto& multiplier : *spec.multiplierList()) {
@@ -1184,7 +1180,7 @@ void ProblemChecker::addSpec(const CapacityWithGroupPresenceSpec& spec) {
         aggregationPartition,
         multiplier,
         interface::LimitType::ABSOLUTE,
-        true /*enforceLimitValuesAreNonNegative*/);
+        ValueRequirement::NON_NEGATIVE);
   }
 
   checkLimitForGroups(
@@ -1215,7 +1211,7 @@ void ProblemChecker::addSpec(const DiversifyWithinScopeItemSpec& spec) {
       *spec.partition(),
       *spec.groupToLimit(),
       std::nullopt, /*expectType*/
-      true /*enforceLimitValuesAreNonNegative*/);
+      ValueRequirement::NON_NEGATIVE);
   checkScopeItemFilterSpec(*spec.scopeItemFilter(), *spec.scope());
   addSpecName(*spec.name());
 }
@@ -1266,13 +1262,12 @@ void ProblemChecker::checkLimitType(
 void ProblemChecker::checkLimitForScopeItems(
     const std::string& scope,
     const Limit& limit,
-    bool enforceLimitValuesAreNonNegative) const {
-  if (enforceLimitValuesAreNonNegative) {
-    checkLimitValuesAreNonNegative(limit);
+    ValueRequirement requirement) const {
+  if (requirement != ValueRequirement::NONE) {
+    checkLimitValues(limit, requirement);
   }
-  // thrift will always have a map, but it might be the default of empty
-  for (auto& [key, _] : *limit.scopeItemLimits()) {
-    checkScopeItemExists(scope, key);
+  for (const auto& [scopeItem, _] : *limit.scopeItemLimits()) {
+    checkScopeItemExists(scope, scopeItem);
   }
   if (!limit.groupLimits()->empty()) {
     throw std::runtime_error("unexpected group limits");
@@ -1282,32 +1277,56 @@ void ProblemChecker::checkLimitForScopeItems(
   }
 }
 
-void ProblemChecker::checkNonNegativeValue(
+void ProblemChecker::checkValue(
     double value,
-    const std::string& attribute) {
-  if (value < 0) {
-    throw std::runtime_error(
-        fmt::format(
-            "expected {} to be non-negative but got {}", attribute, value));
+    std::string_view attribute,
+    ValueRequirement requirement) {
+  switch (requirement) {
+    case ValueRequirement::NONE:
+      return;
+    case ValueRequirement::NON_NEGATIVE:
+      if (value < 0) {
+        throw std::runtime_error(
+            fmt::format(
+                "expected {} to be non-negative but got {}", attribute, value));
+      }
+      return;
+    case ValueRequirement::POSITIVE:
+      if (value <= 0) {
+        throw std::runtime_error(
+            fmt::format(
+                "expected {} to be positive but got {}", attribute, value));
+      }
+      return;
   }
 }
 
-void ProblemChecker::checkLimitValuesAreNonNegative(const Limit& limit) {
-  checkNonNegativeValue(*limit.globalLimit(), "global limit value");
+void ProblemChecker::checkNonNegativeValue(
+    double value,
+    std::string_view attribute) {
+  checkValue(value, attribute, ValueRequirement::NON_NEGATIVE);
+}
+
+void ProblemChecker::checkLimitValues(
+    const Limit& limit,
+    ValueRequirement requirement) {
+  checkValue(*limit.globalLimit(), "global limit value", requirement);
 
   for (auto& [key, value] : *limit.scopeItemLimits()) {
-    checkNonNegativeValue(value, fmt::format("limit for scope item '{}'", key));
+    checkValue(
+        value, fmt::format("limit for scope item '{}'", key), requirement);
   }
   for (auto& [key, value] : *limit.groupLimits()) {
-    checkNonNegativeValue(value, fmt::format("limit for group '{}'", key));
+    checkValue(value, fmt::format("limit for group '{}'", key), requirement);
   }
 
   for (auto& [scopeItem, groups] : *limit.scopeItemToGroupLimits()) {
     for (auto& [group, value] : groups) {
-      checkNonNegativeValue(
+      checkValue(
           value,
           fmt::format(
-              "limit for (scopeItem '{}', group '{}', )", scopeItem, group));
+              "limit for (scopeItem '{}', group '{}', )", scopeItem, group),
+          requirement);
     }
   }
 }
@@ -1317,12 +1336,12 @@ void ProblemChecker::checkLimitForGroups(
     const std::string& partition,
     const Limit& limit,
     std::optional<interface::LimitType> expectedType,
-    bool enforceLimitValuesAreNonNegative) const {
+    ValueRequirement requirement) const {
   if (expectedType.has_value()) {
     checkLimitType(*limit.type(), expectedType.value());
   }
-  if (enforceLimitValuesAreNonNegative) {
-    checkLimitValuesAreNonNegative(limit);
+  if (requirement != ValueRequirement::NONE) {
+    checkLimitValues(limit, requirement);
   }
 
   for (auto& [scopeItem, value] : *limit.scopeItemLimits()) {
