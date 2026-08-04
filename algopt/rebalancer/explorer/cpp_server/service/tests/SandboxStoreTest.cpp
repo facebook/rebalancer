@@ -2,6 +2,7 @@
 
 #include "rebalancer/explorer/cpp_server/service/SandboxStore.h"
 
+#include <folly/coro/Baton.h>
 #include <folly/coro/BlockingWait.h>
 #include <folly/coro/Sleep.h>
 #include <folly/executors/CPUThreadPoolExecutor.h>
@@ -10,6 +11,7 @@
 #include <atomic>
 #include <chrono>
 #include <cstdint>
+#include <exception>
 #include <limits>
 #include <memory>
 #include <string>
@@ -90,16 +92,49 @@ class FailingSandboxFactory {
 
 using FailingSandboxStore = SandboxStore<FailingSandboxFactory, FakeSandbox>;
 
-class DelayedFailingSandboxFactory {
+class ControlledFailingSandboxFactory {
  public:
   static folly::coro::Task<std::shared_ptr<FakeSandbox>> create(std::string) {
-    co_await folly::coro::sleep(std::chrono::milliseconds(300));
+    co_await failureGate_;
     throw SandboxLoadError("delayed sandbox load failed");
   }
+
+  static void reset() {
+    failureGate_.reset();
+  }
+
+  static void failPendingLoads() {
+    failureGate_.post();
+  }
+
+ private:
+  static inline folly::coro::Baton failureGate_;
 };
 
-using DelayedFailingSandboxStore =
-    SandboxStore<DelayedFailingSandboxFactory, FakeSandbox>;
+using ControlledFailingSandboxStore =
+    SandboxStore<ControlledFailingSandboxFactory, FakeSandbox>;
+
+class ControlledSuccessfulSandboxFactory {
+ public:
+  static folly::coro::Task<std::shared_ptr<FakeSandbox>> create(std::string) {
+    co_await loadGate_;
+    co_return std::make_shared<FakeSandbox>();
+  }
+
+  static void reset() {
+    loadGate_.reset();
+  }
+
+  static void finishPendingLoads() {
+    loadGate_.post();
+  }
+
+ private:
+  static inline folly::coro::Baton loadGate_;
+};
+
+using ControlledSuccessfulSandboxStore =
+    SandboxStore<ControlledSuccessfulSandboxFactory, FakeSandbox>;
 
 class FailOnceSandboxFactory {
  public:
@@ -181,6 +216,12 @@ constexpr auto kPastShortTtl = std::chrono::milliseconds(100);
 constexpr auto kDelayedLoadTtl = std::chrono::milliseconds(100);
 constexpr auto kPastDelayedLoadTtl = std::chrono::milliseconds(200);
 
+// Keep the observed and fatal idle gaps distinct.
+constexpr auto kDeliberateGap = std::chrono::milliseconds(60);
+constexpr auto kFatalIdle = std::chrono::milliseconds(200);
+constexpr int kConcurrentAccessThreads = 8;
+constexpr int kAccessesPerThread = 50;
+
 // Drive eviction without waiting for the background sweep.
 template <typename Store>
 void sleepThenSweep(
@@ -189,6 +230,12 @@ void sleepThenSweep(
   // @lint-ignore CLANGTIDY facebook-hte-BadCall-sleep_for
   std::this_thread::sleep_for(delay);
   store.dropInactiveSandboxesForTesting();
+}
+
+std::shared_ptr<FakeSandbox> getSandboxBlocking(
+    TestSandboxStore& store,
+    const std::string& id) {
+  return folly::coro::blockingWait(store.getSandbox(id));
 }
 
 TEST(SandboxStoreTest, CapsConcurrentLoads) {
@@ -247,6 +294,39 @@ TEST(SandboxStoreTest, GetOrLoadAwaitsExistingLoad) {
   EXPECT_EQ(FakeSandboxStatus::LOADED, statusOf(store, "sandbox_x"));
 }
 
+TEST(SandboxStoreTest, GetOrLoadReturnsSuccessfulEvictedLoad) {
+  ControlledSuccessfulSandboxFactory::reset();
+  ControlledSuccessfulSandboxStore store(
+      ControlledSuccessfulSandboxFactory{},
+      SandboxStoreOptions{
+          .inactiveSandboxTimeout = std::chrono::steady_clock::duration::zero(),
+          .evictLoadingSandboxes = true,
+      });
+  std::shared_ptr<FakeSandbox> sandbox;
+  std::exception_ptr loadException;
+  std::thread caller([&] {
+    try {
+      sandbox = folly::coro::blockingWait(store.getOrLoadSandbox("sandbox_x"));
+    } catch (...) {
+      loadException = std::current_exception();
+    }
+  });
+
+  const bool loadStarted = waitUntil([&] {
+    return statusOf(store, "sandbox_x") == FakeSandboxStatus::LOADING;
+  });
+  if (loadStarted) {
+    store.dropInactiveSandboxesForTesting();
+  }
+  ControlledSuccessfulSandboxFactory::finishPendingLoads();
+  caller.join();
+
+  ASSERT_TRUE(loadStarted);
+  EXPECT_EQ(FakeSandboxStatus::NOT_LOADED, statusOf(store, "sandbox_x"));
+  EXPECT_FALSE(loadException);
+  EXPECT_NE(nullptr, sandbox);
+}
+
 TEST(SandboxStoreTest, SupportsInjectedFactoryAndCompoundKey) {
   auto totalLoads = std::make_shared<std::atomic<int>>(0);
   auto executor = std::make_shared<folly::CPUThreadPoolExecutor>(1);
@@ -261,6 +341,28 @@ TEST(SandboxStoreTest, SupportsInjectedFactoryAndCompoundKey) {
   const auto status = store.getLoadStatus(key);
   ASSERT_TRUE(status.has_value());
   EXPECT_EQ(SandboxLoadState::LOADED, status->state);
+}
+
+TEST(SandboxStoreTest, RecordsEachGetOrLoadAccessOnce) {
+  FakeSandboxFactory::resetCounters();
+  std::vector<DroppedSandboxInfo> dropped;
+  {
+    TestSandboxStore store(
+        kDefaultInactiveSandboxTimeout,
+        /*maxConcurrentLoads=*/0,
+        [&](const DroppedSandboxInfo& info) { dropped.push_back(info); });
+
+    folly::coro::blockingWait(store.getOrLoadSandbox("sandbox_x"));
+    // @lint-ignore CLANGTIDY facebook-hte-BadCall-sleep_for
+    std::this_thread::sleep_for(kDeliberateGap);
+    folly::coro::blockingWait(store.getOrLoadSandbox("sandbox_x"));
+  }
+
+  ASSERT_EQ(1u, dropped.size());
+  EXPECT_EQ(2, dropped[0].callCount);
+  // A cache hit must measure the gap from the previous call, not from its own
+  // lookup.
+  EXPECT_GE(dropped[0].maxInterCallGap, kDeliberateGap);
 }
 
 TEST(SandboxStoreTest, RetainsFailureForAwaitingConsumers) {
@@ -339,18 +441,23 @@ TEST(SandboxStoreTest, EvictsUsingPerSandboxTtl) {
 }
 
 TEST(SandboxStoreTest, IdleTtlStartsAfterLoadFailure) {
-  DelayedFailingSandboxStore store(
-      DelayedFailingSandboxFactory{},
+  ControlledFailingSandboxFactory::reset();
+  std::vector<DroppedSandboxInfo> dropped;
+  ControlledFailingSandboxStore store(
+      ControlledFailingSandboxFactory{},
       SandboxStoreOptions{
           .inactiveSandboxTimeout = kDelayedLoadTtl,
           .retainFailedSandboxes = true,
           .evictLoadingSandboxes = false,
+          .onSandboxDropped =
+              [&](const DroppedSandboxInfo& info) { dropped.push_back(info); },
       });
 
   store.startLoadSandbox("sandbox_x");
   sleepThenSweep(store, kPastDelayedLoadTtl);
   EXPECT_EQ(FakeSandboxStatus::LOADING, statusOf(store, "sandbox_x"));
 
+  ControlledFailingSandboxFactory::failPendingLoads();
   ASSERT_TRUE(waitUntil([&]() {
     const auto status = store.getLoadStatus("sandbox_x");
     return status && status->state == SandboxLoadState::FAILED;
@@ -360,6 +467,32 @@ TEST(SandboxStoreTest, IdleTtlStartsAfterLoadFailure) {
 
   sleepThenSweep(store, kPastDelayedLoadTtl);
   EXPECT_FALSE(store.getLoadStatus("sandbox_x").has_value());
+  EXPECT_TRUE(dropped.empty());
+}
+
+TEST(SandboxStoreTest, DoesNotEmitDropForLoadingSandbox) {
+  ControlledFailingSandboxFactory::reset();
+  std::vector<DroppedSandboxInfo> dropped;
+  {
+    ControlledFailingSandboxStore store(
+        ControlledFailingSandboxFactory{},
+        SandboxStoreOptions{
+            .inactiveSandboxTimeout = kDelayedLoadTtl,
+            .retainFailedSandboxes = true,
+            .evictLoadingSandboxes = true,
+            .onSandboxDropped =
+                [&](const DroppedSandboxInfo& info) {
+                  dropped.push_back(info);
+                },
+        });
+
+    store.startLoadSandbox("sandbox_x");
+    sleepThenSweep(store, kPastDelayedLoadTtl);
+    EXPECT_EQ(FakeSandboxStatus::NOT_LOADED, statusOf(store, "sandbox_x"));
+    ControlledFailingSandboxFactory::failPendingLoads();
+  }
+
+  EXPECT_TRUE(dropped.empty());
 }
 
 TEST(SandboxStoreTest, TtlIsRaisedNotLowered) {
@@ -393,6 +526,172 @@ TEST(SandboxStoreTest, FallsBackToDefaultTtlWhenUnset) {
   sleepThenSweep(store);
 
   EXPECT_EQ(FakeSandboxStatus::NOT_LOADED, statusOf(store, "no_ttl"));
+}
+
+TEST(SandboxStoreTest, EmitsLongestCallGapOnIdleEviction) {
+  FakeSandboxFactory::resetCounters();
+  std::vector<DroppedSandboxInfo> dropped;
+  TestSandboxStore store(
+      kDefaultInactiveSandboxTimeout,
+      /*maxConcurrentLoads=*/0,
+      [&](const DroppedSandboxInfo& info) { dropped.push_back(info); });
+
+  store.startLoadSandbox("s", kShortTtl, "client_a");
+  ASSERT_TRUE(waitUntilLoaded(store, "s"));
+
+  getSandboxBlocking(store, "s");
+  // @lint-ignore CLANGTIDY facebook-hte-BadCall-sleep_for
+  std::this_thread::sleep_for(kDeliberateGap);
+  getSandboxBlocking(store, "s");
+
+  // @lint-ignore CLANGTIDY facebook-hte-BadCall-sleep_for
+  std::this_thread::sleep_for(kFatalIdle);
+  store.dropInactiveSandboxesForTesting();
+
+  ASSERT_EQ(1u, dropped.size());
+  const auto& info = dropped[0];
+  EXPECT_EQ("s", info.manifoldId);
+  EXPECT_EQ("client_a", info.clientId);
+  EXPECT_EQ(SandboxDropReason::kIdleTtlExpiry, info.reason);
+  EXPECT_EQ(kShortTtl, info.configuredTtl);
+  EXPECT_EQ(2, info.callCount);
+  EXPECT_GE(info.maxInterCallGap, kDeliberateGap);
+  EXPECT_LT(info.maxInterCallGap, info.lifetime);
+}
+
+TEST(SandboxStoreTest, IncludesGapFromLoadCompletionToFirstAccess) {
+  FakeSandboxFactory::resetCounters();
+  std::vector<DroppedSandboxInfo> dropped;
+  {
+    TestSandboxStore store(
+        kDefaultInactiveSandboxTimeout,
+        /*maxConcurrentLoads=*/0,
+        [&](const DroppedSandboxInfo& info) { dropped.push_back(info); });
+    store.startLoadSandbox("s", kLongTtl, "client_a");
+    ASSERT_TRUE(waitUntilLoaded(store, "s"));
+
+    // @lint-ignore CLANGTIDY facebook-hte-BadCall-sleep_for
+    std::this_thread::sleep_for(kDeliberateGap);
+    getSandboxBlocking(store, "s");
+  }
+
+  ASSERT_EQ(1u, dropped.size());
+  EXPECT_EQ(1, dropped[0].callCount);
+  EXPECT_GE(dropped[0].maxInterCallGap, kDeliberateGap);
+}
+
+TEST(SandboxStoreTest, PreservesConcurrentAccessCount) {
+  FakeSandboxFactory::resetCounters();
+  std::vector<DroppedSandboxInfo> dropped;
+  {
+    TestSandboxStore store(
+        kDefaultInactiveSandboxTimeout,
+        /*maxConcurrentLoads=*/0,
+        [&](const DroppedSandboxInfo& info) { dropped.push_back(info); });
+    store.startLoadSandbox("s", kLongTtl, "client_a");
+    ASSERT_TRUE(waitUntilLoaded(store, "s"));
+
+    std::atomic<bool> start{false};
+    std::vector<std::thread> threads;
+    threads.reserve(kConcurrentAccessThreads);
+    for (int i = 0; i < kConcurrentAccessThreads; ++i) {
+      threads.emplace_back([&] {
+        while (!start.load(std::memory_order_acquire)) {
+          std::this_thread::yield();
+        }
+        for (int access = 0; access < kAccessesPerThread; ++access) {
+          getSandboxBlocking(store, "s");
+        }
+      });
+    }
+    start.store(true, std::memory_order_release);
+    for (auto& thread : threads) {
+      thread.join();
+    }
+  }
+
+  ASSERT_EQ(1u, dropped.size());
+  EXPECT_EQ(
+      kConcurrentAccessThreads * kAccessesPerThread, dropped[0].callCount);
+}
+
+TEST(SandboxStoreTest, EmitsShutdownReasonForLiveSandbox) {
+  FakeSandboxFactory::resetCounters();
+  std::vector<DroppedSandboxInfo> dropped;
+  {
+    TestSandboxStore store(
+        kDefaultInactiveSandboxTimeout,
+        /*maxConcurrentLoads=*/0,
+        [&](const DroppedSandboxInfo& info) { dropped.push_back(info); });
+    store.startLoadSandbox("s", kLongTtl, "client_a");
+    ASSERT_TRUE(waitUntilLoaded(store, "s"));
+  }
+
+  ASSERT_EQ(1u, dropped.size());
+  EXPECT_EQ("s", dropped[0].manifoldId);
+  EXPECT_EQ("client_a", dropped[0].clientId);
+  EXPECT_EQ(SandboxDropReason::kShutdown, dropped[0].reason);
+}
+
+TEST(SandboxStoreTest, IgnoresLoadStartedByDropCallbackDuringShutdown) {
+  FakeSandboxFactory::resetCounters();
+  TestSandboxStore* storePtr = nullptr;
+  bool callbackReturned = false;
+  {
+    TestSandboxStore store(
+        kDefaultInactiveSandboxTimeout,
+        /*maxConcurrentLoads=*/0,
+        [&](const DroppedSandboxInfo&) {
+          storePtr->startLoadSandbox("reentered", kLongTtl);
+          callbackReturned = true;
+        });
+    storePtr = &store;
+    store.startLoadSandbox("s", kLongTtl);
+    ASSERT_TRUE(waitUntilLoaded(store, "s"));
+  }
+
+  EXPECT_TRUE(callbackReturned);
+  EXPECT_EQ(1, FakeSandboxFactory::totalLoads());
+}
+
+TEST(SandboxStoreTest, ContainsDropCallbackExceptions) {
+  FakeSandboxFactory::resetCounters();
+  int callbackCalls = 0;
+  TestSandboxStore store(
+      kDefaultInactiveSandboxTimeout,
+      /*maxConcurrentLoads=*/0,
+      [&](const DroppedSandboxInfo&) {
+        ++callbackCalls;
+        throw std::runtime_error("test callback failure");
+      });
+
+  store.startLoadSandbox("a", std::chrono::steady_clock::duration::zero());
+  store.startLoadSandbox("b", std::chrono::steady_clock::duration::zero());
+  ASSERT_TRUE(waitUntilLoaded(store, "a"));
+  ASSERT_TRUE(waitUntilLoaded(store, "b"));
+
+  EXPECT_NO_THROW(store.dropInactiveSandboxesForTesting());
+  EXPECT_EQ(2, callbackCalls);
+  EXPECT_EQ(FakeSandboxStatus::NOT_LOADED, statusOf(store, "a"));
+  EXPECT_EQ(FakeSandboxStatus::NOT_LOADED, statusOf(store, "b"));
+}
+
+TEST(SandboxStoreTest, ContainsDropCallbackExceptionsDuringShutdown) {
+  FakeSandboxFactory::resetCounters();
+  int callbackCalls = 0;
+  {
+    TestSandboxStore store(
+        kDefaultInactiveSandboxTimeout,
+        /*maxConcurrentLoads=*/0,
+        [&](const DroppedSandboxInfo&) {
+          ++callbackCalls;
+          throw std::runtime_error("test callback failure");
+        });
+    store.startLoadSandbox("s", kLongTtl);
+    ASSERT_TRUE(waitUntilLoaded(store, "s"));
+  }
+
+  EXPECT_EQ(1, callbackCalls);
 }
 
 } // namespace facebook::rebalancer::explorer

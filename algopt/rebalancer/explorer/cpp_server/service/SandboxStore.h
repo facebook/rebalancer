@@ -18,7 +18,9 @@
 #include <folly/system/HardwareConcurrency.h>
 
 #include <chrono>
+#include <cstdint>
 #include <exception>
+#include <functional>
 #include <optional>
 #include <string>
 #include <type_traits>
@@ -47,6 +49,20 @@ inline std::chrono::steady_clock::duration inactiveSandboxTtlFromRequest(
   return kDefaultInactiveSandboxTimeout;
 }
 
+// Shutdown drops are censored for TTL analysis.
+enum class SandboxDropReason { kIdleTtlExpiry, kShutdown };
+
+// maxInterCallGap starts at load completion and excludes the final idle period.
+struct DroppedSandboxInfo {
+  std::string manifoldId;
+  std::string clientId;
+  std::chrono::steady_clock::duration maxInterCallGap{};
+  std::chrono::steady_clock::duration configuredTtl{};
+  std::chrono::steady_clock::duration lifetime{};
+  int64_t callCount{0};
+  SandboxDropReason reason{SandboxDropReason::kIdleTtlExpiry};
+};
+
 enum class SandboxLoadState { LOADING, LOADED, FAILED };
 
 struct SandboxLoadStatus {
@@ -60,6 +76,8 @@ struct SandboxStoreOptions {
   int32_t maxConcurrentLoads{0};
   bool retainFailedSandboxes{false};
   bool evictLoadingSandboxes{false};
+  // Called once for each loaded sandbox removed from the store.
+  std::function<void(const DroppedSandboxInfo&)> onSandboxDropped{};
 };
 
 template <
@@ -72,21 +90,23 @@ class SandboxStore {
   explicit SandboxStore(
       std::chrono::steady_clock::duration inactiveSandboxTimeout =
           kDefaultInactiveSandboxTimeout,
-      int32_t maxConcurrentLoads = 0)
+      int32_t maxConcurrentLoads = 0,
+      std::function<void(const DroppedSandboxInfo&)> onSandboxDropped = {})
       : SandboxStore(
             SandboxFactory{},
             SandboxStoreOptions{
                 .inactiveSandboxTimeout = inactiveSandboxTimeout,
                 .maxConcurrentLoads = maxConcurrentLoads,
+                .onSandboxDropped = std::move(onSandboxDropped),
             }) {}
 
   explicit SandboxStore(
       SandboxFactory factory,
       SandboxStoreOptions options = {},
       std::shared_ptr<folly::Executor> executor = nullptr)
-      : options_{options},
+      : options_{std::move(options)},
         loadSemaphore_{static_cast<size_t>(
-            options.maxConcurrentLoads > 0 ? options.maxConcurrentLoads : 1)},
+            options_.maxConcurrentLoads > 0 ? options_.maxConcurrentLoads : 1)},
         executor_(
             executor != nullptr
                 ? std::move(executor)
@@ -104,8 +124,10 @@ class SandboxStore {
   SandboxStore& operator=(SandboxStore&&) = delete;
 
   ~SandboxStore() {
+    shuttingDown_ = true;
     cancel_.requestCancellation();
     folly::coro::blockingWait(scope_.cancelAndJoinAsync());
+    drainForShutdown();
   }
 
   template <typename SandboxStatus>
@@ -136,6 +158,9 @@ class SandboxStore {
       SandboxKey key,
       std::optional<std::chrono::steady_clock::duration> ttl = std::nullopt,
       std::string clientId = "") {
+    if (shuttingDown_) {
+      return;
+    }
     auto [holder, shouldStart] = getOrCreateSandboxHolder(
         key,
         ttl,
@@ -149,16 +174,20 @@ class SandboxStore {
   folly::coro::Task<std::shared_ptr<Sandbox>> getOrLoadSandbox(
       SandboxKey key,
       std::string clientId = "") {
+    if (shuttingDown_) {
+      throw std::runtime_error(
+          "cannot load sandbox while store is shutting down");
+    }
     auto [holder, shouldStart] = getOrCreateSandboxHolder(
         key,
         std::nullopt,
         /* retryFailed */ false,
         /* touchExisting */ false);
     if (shouldStart) {
-      startLoad(std::move(key), std::move(clientId), holder);
+      startLoad(key, std::move(clientId), holder);
     }
     auto sandbox = co_await holder->sandbox.getFuture();
-    holder->lastAccess = std::chrono::steady_clock::now();
+    recordAccessIfCurrent(key, holder);
     co_return sandbox;
   }
 
@@ -170,8 +199,11 @@ class SandboxStore {
       throw std::runtime_error(
           fmt::format("key {} does not exist", describeKey(key)));
     }
+    if (!recordAccessIfCurrent(key, holder)) {
+      throw std::runtime_error(
+          fmt::format("key {} does not exist", describeKey(key)));
+    }
     auto sandbox = co_await holder->sandbox.getFuture();
-    holder->lastAccess = std::chrono::steady_clock::now();
     co_return sandbox;
   }
 
@@ -205,13 +237,60 @@ class SandboxStore {
   }
 
  private:
+  struct SandboxUsageStats {
+    // Eviction holds this lock through erase so load completion cannot race it.
+    SandboxLoadState loadState{SandboxLoadState::LOADING};
+    std::chrono::steady_clock::time_point lastAccess{
+        std::chrono::steady_clock::now()};
+    std::chrono::steady_clock::duration maxInterCallGap{
+        std::chrono::steady_clock::duration::zero()};
+    std::chrono::steady_clock::time_point createdAt{
+        std::chrono::steady_clock::now()};
+    int64_t callCount{0};
+    std::string clientId;
+  };
+
   struct SandboxHolder {
     folly::coro::SharedPromise<std::shared_ptr<Sandbox>> sandbox;
-    folly::relaxed_atomic<std::chrono::steady_clock::time_point> lastAccess{
-        std::chrono::steady_clock::now()};
     folly::relaxed_atomic<std::chrono::steady_clock::duration> ttl{
         kDefaultInactiveSandboxTimeout};
+    folly::Synchronized<SandboxUsageStats> usageStats;
   };
+
+  struct SandboxHolderLookup {
+    std::shared_ptr<SandboxHolder> holder;
+    // Set when this call created the holder, making the caller responsible for
+    // starting its load. Nobody else will.
+    bool shouldStart{false};
+  };
+
+  // The first gap starts at load completion; the final idle gap is excluded.
+  static void recordAccess(SandboxHolder& holder) {
+    auto stats = holder.usageStats.wlock();
+    const auto now = std::chrono::steady_clock::now();
+    const auto gap = now - stats->lastAccess;
+    if (gap > stats->maxInterCallGap) {
+      stats->maxInterCallGap = gap;
+    }
+    ++stats->callCount;
+    stats->lastAccess = now;
+  }
+
+  static void touchLastAccess(SandboxHolder& holder) {
+    holder.usageStats.wlock()->lastAccess = std::chrono::steady_clock::now();
+  }
+
+  bool recordAccessIfCurrent(
+      const SandboxKey& key,
+      const std::shared_ptr<SandboxHolder>& holder) {
+    const auto rlock = sandboxes_.rlock();
+    const auto it = rlock->find(key);
+    if (it == rlock->end() || it->second != holder) {
+      return false;
+    }
+    recordAccess(*holder);
+    return true;
+  }
 
   static std::string getErrorMessage(
       const folly::exception_wrapper& exception) {
@@ -242,7 +321,7 @@ class SandboxStore {
     return it == rlock->end() ? nullptr : it->second;
   }
 
-  std::pair<std::shared_ptr<SandboxHolder>, bool> getOrCreateSandboxHolder(
+  SandboxHolderLookup getOrCreateSandboxHolder(
       const SandboxKey& key,
       std::optional<std::chrono::steady_clock::duration> ttl,
       bool retryFailed,
@@ -252,25 +331,29 @@ class SandboxStore {
     auto it = wlock->find(key);
     if (it != wlock->end()) {
       auto holder = it->second;
-      if (retryFailed &&
-          getLoadStatus(*holder).state == SandboxLoadState::FAILED) {
+      const auto state = getLoadStatus(*holder).state;
+      if (retryFailed && state == SandboxLoadState::FAILED) {
         wlock->erase(it);
       } else {
         if (ttl && *ttl > holder->ttl.load()) {
           holder->ttl = *ttl;
         }
         if (touchExisting) {
-          holder->lastAccess = now;
+          if (state == SandboxLoadState::LOADED) {
+            recordAccess(*holder);
+          } else if (state == SandboxLoadState::LOADING) {
+            touchLastAccess(*holder);
+          }
         }
-        return {std::move(holder), false};
+        return {.holder = std::move(holder), .shouldStart = false};
       }
     }
 
     auto holder = std::make_shared<SandboxHolder>();
-    holder->lastAccess = now;
+    holder->usageStats.wlock()->lastAccess = now;
     holder->ttl = ttl.value_or(options_.inactiveSandboxTimeout);
     wlock->emplace(key, holder);
-    return {std::move(holder), true};
+    return {.holder = std::move(holder), .shouldStart = true};
   }
 
   void startLoad(
@@ -321,7 +404,18 @@ class SandboxStore {
         sandbox = co_await factory_.create(key);
       }
       const auto end = std::chrono::steady_clock::now();
-      holder->lastAccess = end;
+      // Exclude load time from idle-gap statistics.
+      {
+        auto stats = holder->usageStats.wlock();
+        if (end > stats->lastAccess) {
+          stats->lastAccess = end;
+        }
+        stats->createdAt = end;
+        stats->maxInterCallGap = std::chrono::steady_clock::duration::zero();
+        stats->callCount = 0;
+        stats->clientId = std::move(clientId);
+        stats->loadState = SandboxLoadState::LOADED;
+      }
       holder->sandbox.setValue(sandbox);
 
       const std::chrono::duration<double> elapsed = end - start;
@@ -332,7 +426,11 @@ class SandboxStore {
     } catch (...) {
       auto exception = folly::exception_wrapper(std::current_exception());
       const auto errorMessage = getErrorMessage(exception);
-      holder->lastAccess = std::chrono::steady_clock::now();
+      {
+        auto stats = holder->usageStats.wlock();
+        stats->lastAccess = std::chrono::steady_clock::now();
+        stats->loadState = SandboxLoadState::FAILED;
+      }
       holder->sandbox.setException(std::move(exception));
       XLOG(ERR) << "sandbox for " << keyDescription
                 << " failed to load: " << errorMessage;
@@ -347,18 +445,74 @@ class SandboxStore {
     }
   }
 
+  void notifySandboxDropped(
+      const SandboxKey& key,
+      const SandboxHolder& holder,
+      SandboxDropReason reason) const noexcept {
+    if (!options_.onSandboxDropped) {
+      return;
+    }
+    try {
+      DroppedSandboxInfo info;
+      {
+        const auto stats = holder.usageStats.rlock();
+        info.clientId = stats->clientId;
+        info.maxInterCallGap = stats->maxInterCallGap;
+        info.configuredTtl = holder.ttl.load();
+        info.lifetime = std::chrono::steady_clock::now() - stats->createdAt;
+        info.callCount = stats->callCount;
+      }
+      info.manifoldId = describeKey(key);
+      info.reason = reason;
+      options_.onSandboxDropped(info);
+    } catch (const std::exception& error) {
+      XLOG(ERR) << "onSandboxDropped callback failed: " << error.what();
+    } catch (...) {
+      XLOG(ERR) << "onSandboxDropped callback failed with unknown exception";
+    }
+  }
+
+  void drainForShutdown() {
+    if (!options_.onSandboxDropped) {
+      return;
+    }
+
+    std::vector<std::pair<SandboxKey, std::shared_ptr<SandboxHolder>>> loaded;
+    {
+      const auto rlock = sandboxes_.rlock();
+      loaded.reserve(rlock->size());
+      for (const auto& [key, holder] : *rlock) {
+        if (getLoadStatus(*holder).state == SandboxLoadState::LOADED) {
+          loaded.emplace_back(key, holder);
+        }
+      }
+    }
+
+    for (const auto& [key, holder] : loaded) {
+      notifySandboxDropped(key, *holder, SandboxDropReason::kShutdown);
+    }
+  }
+
   void dropInactiveSandboxes() {
-    std::vector<std::pair<SandboxKey, std::shared_ptr<SandboxHolder>>> removed;
+    struct RemovedSandbox {
+      SandboxKey key;
+      std::shared_ptr<SandboxHolder> holder;
+      bool wasLoaded;
+    };
+    std::vector<RemovedSandbox> removed;
     const auto now = std::chrono::steady_clock::now();
     {
       auto wlock = sandboxes_.wlock();
       for (auto it = wlock->begin(); it != wlock->end();) {
-        const auto& holder = *it->second;
-        const bool canEvict =
-            getLoadStatus(holder).state != SandboxLoadState::LOADING ||
+        const auto holder = it->second;
+        const auto stats = holder->usageStats.rlock();
+        const auto state = stats->loadState;
+        const bool canEvict = state != SandboxLoadState::LOADING ||
             options_.evictLoadingSandboxes;
-        if (canEvict && now - holder.lastAccess.load() > holder.ttl.load()) {
-          removed.emplace_back(*it);
+        const bool expired = now - stats->lastAccess > holder->ttl.load();
+        if (canEvict && expired) {
+          removed.push_back(
+              {it->first, holder, state == SandboxLoadState::LOADED});
           it = wlock->erase(it);
         } else {
           ++it;
@@ -366,8 +520,11 @@ class SandboxStore {
       }
     }
 
-    for (const auto& [key, _] : removed) {
+    for (const auto& [key, holder, wasLoaded] : removed) {
       XLOG(INFO) << "dropped inactive sandbox " << describeKey(key);
+      if (wasLoaded) {
+        notifySandboxDropped(key, *holder, SandboxDropReason::kIdleTtlExpiry);
+      }
     }
   }
 
@@ -394,6 +551,7 @@ class SandboxStore {
       sandboxes_;
   folly::coro::CancellableAsyncScope scope_;
   folly::CancellationSource cancel_;
+  folly::relaxed_atomic<bool> shuttingDown_{false};
 };
 
 } // namespace explorer
