@@ -568,6 +568,10 @@ ExprPtr ceil(ExprPtr expr) {
   return make_shared<Ceil>(expr);
 }
 
+ExprPtr floor(ExprPtr expr) {
+  return -1 * ceil(-1 * std::move(expr));
+}
+
 ExprPtr step_mod_k(ExprPtr expr, int k) {
   if (k == 0) {
     throw std::runtime_error("step_mod_k with k=0 is not supported");

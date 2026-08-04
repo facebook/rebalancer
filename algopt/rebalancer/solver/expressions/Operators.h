@@ -170,6 +170,7 @@ ExprPtr square(ExprPtr expr, const ApproximationHint& hint);
 ExprPtr step(ExprPtr expr);
 ExprPtr step_mod_k(ExprPtr expr, int k);
 ExprPtr ceil(ExprPtr expr);
+ExprPtr floor(ExprPtr expr);
 ExprPtr log(ExprPtr expr);
 ExprPtr rectangle(ExprPtr expr, const double lb, const double ub);
 ExprPtr sum_over_threshold(
