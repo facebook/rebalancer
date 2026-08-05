@@ -139,6 +139,7 @@ void populateScopedValuesFromLegacyValues(
     return;
   }
 
+  // NOLINTNEXTLINE(facebook-hte-Deprecated)
   auto& legacyValues = *dyn.values();
   folly::F14FastMap<int, entities::thrift::ObjectValues> scopedValues;
   scopedValues.reserve(legacyValues.size());
