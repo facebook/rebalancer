@@ -54,8 +54,8 @@ inline bool isSignificantDecrease(
     return false;
   }
 
-  const auto& pct = threshold.percent();
-  const auto& abs = threshold.absolute();
+  auto pct = threshold.percent();
+  auto abs = threshold.absolute();
   if (!pct.has_value() && !abs.has_value()) [[unlikely]] {
     throw std::runtime_error(
         "Threshold must have at least one of percent or absolute set");
