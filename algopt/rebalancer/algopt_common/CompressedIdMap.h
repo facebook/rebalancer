@@ -114,6 +114,42 @@ class CompressedIdMap {
     }
   }
 
+  // Consumes existing sparse storage, retaining it unless the resulting
+  // density favors dense storage.
+  CompressedIdMap(
+      SparseStorage&& keyToValue,
+      ValueT defaultValue,
+      std::size_t totalSize)
+      : totalSize_(totalSize),
+        defaultValue_(std::move(defaultValue)),
+        dense_(/*totalSize=*/0, defaultValue_) {
+    for (auto it = keyToValue.begin(); it != keyToValue.end();) {
+      const auto& [key, value] = *it;
+      const auto index = static_cast<std::size_t>(key);
+      FOLLY_SAFE_CHECK(
+          index < totalSize_,
+          "CompressedIdMap: key index ",
+          index,
+          " exceeds totalSize ",
+          totalSize_);
+      if (value == defaultValue_) {
+        it = keyToValue.erase(it);
+      } else {
+        ++it;
+      }
+    }
+
+    isDense_ = shouldPickDense(totalSize_, keyToValue.size());
+    if (isDense_) {
+      dense_ = DenseStorage(totalSize_, defaultValue_);
+      for (auto& [key, value] : keyToValue) {
+        emplace(key, std::move(value));
+      }
+    } else {
+      sparse_ = std::move(keyToValue);
+    }
+  }
+
   bool operator==(const CompressedIdMap&) const = default;
 
   template <typename... Args>

@@ -176,6 +176,10 @@ TEST(CompressedIdMapDeathTest, OutOfRangeKeyAborts) {
   EXPECT_DEATH(
       (void)map.getValue(id(99999)),
       "CompressedIdMap::getValue: key index .*99999.* exceeds totalSize .*10");
+  entities::Map<entities::ObjectId, double> entries{{id(99999), 1.0}};
+  EXPECT_DEATH(
+      (CompressedIdObjectMap(std::move(entries), kDefaultValue, 10)),
+      "CompressedIdMap: key index .*99999.* exceeds totalSize .*10");
 }
 
 TEST(CompressedIdMapTest, EmplaceVariadicForwardsValueConstruction) {
@@ -254,6 +258,25 @@ TEST(CompressedIdMapTest, RangeCtorBuildsAndFiltersDefaults) {
   EXPECT_EQ(map.nonDefaultSize(), 2u);
   for (const auto& [key, value] : entries) {
     EXPECT_EQ(map.getValue(key), value);
+  }
+}
+
+TEST(CompressedIdMapTest, RvalueMapCtorSelectsLayoutAfterFilteringDefaults) {
+  const entities::Map<entities::ObjectId, double> expected{
+      {id(1), 1.5}, {id(3), 3.5}};
+  for (const auto& [totalSize, expectedDense] :
+       std::vector<std::pair<std::size_t, bool>>{
+           {/*sparse after filtering*/ 20, false},
+           {/*dense after filtering*/ 5, true}}) {
+    entities::Map<entities::ObjectId, double> entries{
+        {id(0), kDefaultValue},
+        {id(1), 1.5},
+        {id(2), kDefaultValue},
+        {id(3), 3.5}};
+    const CompressedIdObjectMap map(
+        std::move(entries), kDefaultValue, totalSize);
+    EXPECT_EQ(map.isDense(), expectedDense);
+    verifyMatches(map, expected, totalSize, kDefaultValue);
   }
 }
 
