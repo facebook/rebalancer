@@ -820,6 +820,23 @@ struct MaximizeAllocationSpec {
   4: Filter filter;
 }
 
+/*
+For each scope item S:
+  available units = max(
+      0,
+      floor((capacity(S) - utilization(S)) / unitSize(S)))
+
+This goal maximizes the sum of available units across the filtered scope items.
+unitSize can have one global value or a different value per scope item.
+*/
+struct MaximizeFreeCapacityUnitsSpec {
+  1: string name;
+  2: string scope;
+  3: string dimension;
+  4: Limit unitSize = {"type": LimitType.ABSOLUTE, "globalLimit": 1};
+  5: Filter filter;
+}
+
 // RAS stacking specific spec that tries to colocate scope items
 // of both types (think lowCpu / highCpu reservations) on the same
 // group (think server partition) in a balanced way
