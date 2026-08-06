@@ -1258,7 +1258,19 @@ bool XpressProblem::setIndicatorOnConstraint(
             "(XPRB_BV), got type {}",
             xpressVar->get().getType()));
   }
-  return xpressCtr->get().setIndicator(dir, xpressVar->get()) == 0;
+  // The cross-backend interface uses Gurobi's convention, where dir is the
+  // binary value that activates the constraint (0 or 1). BCL instead encodes
+  // the direction as +1 ("active when the variable is 1") or -1 ("active when
+  // the variable is 0"), and rejects 0 outright with
+  // "BCL Error 1575: (setindicator) Unexpected argument value 0". Translate
+  // here rather than leaking BCL's encoding into callers.
+  if (dir != 0 && dir != 1) {
+    throw std::invalid_argument(
+        fmt::format(
+            "setIndicatorOnConstraint: dir must be 0 or 1, got {}", dir));
+  }
+  const int bclDir = (dir == 1) ? 1 : -1;
+  return xpressCtr->get().setIndicator(bclDir, xpressVar->get()) == 0;
 }
 
 std::optional<algopt::lp::Expression> XpressProblem::addNativePwlConstraint(
@@ -1343,9 +1355,16 @@ std::optional<algopt::lp::Expression> XpressProblem::addNativeMaxConstraint(
   for (const auto i : folly::irange(inputs.size())) {
     auto inputImpl = makeVar(fmt::format("max_input_{}", i));
     auto inputAuxExprImpl = inputImpl->makeExpression(1.0);
-    auto inputNegImpl = inputs[i].get()->clone();
-    inputNegImpl->multiply(-1.0);
-    inputAuxExprImpl->add(inputNegImpl);
+    // A pure-constant Expression carries its value in constant_ and leaves
+    // expression_ null, so get() must not be dereferenced unconditionally.
+    // Link against the constant directly in that case: max_input_i - c == 0.
+    if (const auto inputExprImpl = inputs[i].get()) {
+      auto inputNegImpl = inputExprImpl->clone();
+      inputNegImpl->multiply(-1.0);
+      inputAuxExprImpl->add(inputNegImpl);
+    } else {
+      inputAuxExprImpl->add(-inputs[i].getConstant());
+    }
     newConstraint(
         inputAuxExprImpl->makeEqualZeroRelation(),
         fmt::format("max_input_link_{}", i));
