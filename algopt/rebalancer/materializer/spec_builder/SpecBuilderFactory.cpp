@@ -43,6 +43,7 @@
 #include "algopt/rebalancer/materializer/spec_builder/LogicalAndSpecBuilder.h"
 #include "algopt/rebalancer/materializer/spec_builder/LogicalOrSpecBuilder.h"
 #include "algopt/rebalancer/materializer/spec_builder/MaximizeAllocationSpecBuilder.h"
+#include "algopt/rebalancer/materializer/spec_builder/MaximizeFreeCapacityUnitsSpecBuilder.h"
 #include "algopt/rebalancer/materializer/spec_builder/MinimizeContainersSpecBuilder.h"
 #include "algopt/rebalancer/materializer/spec_builder/MinimizeMovementSpecBuilder.h"
 #include "algopt/rebalancer/materializer/spec_builder/MinimizeNthLargestUtilizationSpecBuilder.h"
@@ -232,6 +233,11 @@ std::unique_ptr<SpecBuilder> SpecBuilderFactory::getBuilder(
     case GoalSpecs::Type::maximizeAllocationSpec:
       return std::make_unique<MaximizeAllocationSpecBuilder>(
           universe_, spec.get_maximizeAllocationSpec());
+    case GoalSpecs::Type::maximizeFreeCapacityUnitsSpec:
+      return std::make_unique<MaximizeFreeCapacityUnitsSpecBuilder>(
+          universe_,
+          spec.get_maximizeFreeCapacityUnitsSpec(),
+          continuousExpressions_);
     case GoalSpecs::Type::capacityRatioSpec:
       return std::make_unique<CapacityRatioSpecBuilder>(
           universe_, spec.get_capacityRatioSpec());

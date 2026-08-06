@@ -538,6 +538,14 @@ class MaximizeAllocationSpec(TypedDict, total=False):
     filter: Filter
 
 
+class MaximizeFreeCapacityUnitsSpec(TypedDict, total=False):
+    name: str
+    scope: str
+    dimension: str
+    unitSize: Limit
+    filter: Filter
+
+
 class ItemsAffinitySpec(TypedDict, total=False):
     scopeItemsOfType1: list[str]
     scopeItemsOfType2: list[str]
@@ -1382,6 +1390,7 @@ class GoalSpec(TypedDict, total=False):
     groupCountSpec: NotRequired[GroupCountSpec]
     groupIsolationLimitSpec: NotRequired[GroupIsolationLimitSpec]
     maximizeAllocationSpec: NotRequired[MaximizeAllocationSpec]
+    maximizeFreeCapacityUnitsSpec: NotRequired[MaximizeFreeCapacityUnitsSpec]
     minimizeContainersSpec: NotRequired[MinimizeContainersSpec]
     minimizeMovementSpec: NotRequired[MinimizeMovementSpec]
     minimizeNthLargestUtilizationSpec: NotRequired[MinimizeNthLargestUtilizationSpec]

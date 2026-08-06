@@ -119,6 +119,7 @@ union GoalSpecs {
   41: ProblemSpecs.CapacityWithGroupPresenceSpec capacityWithGroupPresenceSpec;
   42: ProblemSpecs.DiversifyWithinScopeItemSpec diversifyWithinScopeItemSpec;
   43: ProblemSpecs.ExclusiveScopeItemsSpec exclusiveScopeItemsSpec;
+  44: ProblemSpecs.MaximizeFreeCapacityUnitsSpec maximizeFreeCapacityUnitsSpec;
 }
 
 @thrift.ReserveIds{ids = [1, 2]}

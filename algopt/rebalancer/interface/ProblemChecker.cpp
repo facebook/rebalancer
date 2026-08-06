@@ -748,6 +748,20 @@ void ProblemChecker::addSpec(const MaximizeAllocationSpec& spec) {
   addSpecName(*spec.name());
 }
 
+void ProblemChecker::addSpec(const MaximizeFreeCapacityUnitsSpec& spec) {
+  checkScopeExists(*spec.scope());
+  checkDimensionExists(*spec.dimension());
+  checkLimitType(*spec.unitSize()->type(), LimitType::ABSOLUTE);
+  checkLimitForScopeItems(
+      *spec.scope(), *spec.unitSize(), ValueRequirement::POSITIVE);
+  if (*spec.unitSize()->isDefaultLimitUnbounded()) {
+    throw std::runtime_error(
+        "MaximizeFreeCapacityUnitsSpec unit sizes must be bounded");
+  }
+  checkScopeItemFilterSpec(*spec.filter(), *spec.scope());
+  addSpecName(*spec.name());
+}
+
 void ProblemChecker::addSpec(const WorkingSetSpec& spec) {
   checkScopeExists(*spec.scope());
   checkDimensionExists(*spec.dimension());

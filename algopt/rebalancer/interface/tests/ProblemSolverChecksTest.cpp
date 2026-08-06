@@ -1140,6 +1140,71 @@ TEST_P(ProblemSolverChecksTest, MaximizeAllocationSpecUnknownDimension) {
       solver->addGoal(spec), "unknown dimension network");
 }
 
+TEST_P(
+    ProblemSolverChecksTest,
+    MaximizeFreeCapacityUnitsSpecRejectsInvalidUnitSizes) {
+  auto makeSolver = [&]() {
+    auto solver = makeInitializedSolver(GetParam());
+    solver->addObjectDimension(
+        "cpu",
+        /*objectToValue=*/std::map<std::string, double>{},
+        /*defaultValue=*/1);
+    solver->addContainerDimension(
+        "cpu",
+        /*containerToValue=*/std::map<std::string, double>{},
+        /*defaultValue=*/8);
+    return solver;
+  };
+  auto makeSpec = []() {
+    MaximizeFreeCapacityUnitsSpec spec;
+    spec.scope() = "host";
+    spec.dimension() = "cpu";
+    spec.unitSize()->type() = LimitType::ABSOLUTE;
+    spec.unitSize()->globalLimit() = 4;
+    return spec;
+  };
+
+  {
+    auto solver = makeSolver();
+    auto spec = makeSpec();
+    spec.unitSize()->type() = LimitType::RELATIVE;
+    REBALANCER_EXPECT_RUNTIME_ERROR(
+        solver->addGoal(spec),
+        "expected limit of type ABSOLUTE, but got limit of type RELATIVE");
+  }
+  {
+    auto solver = makeSolver();
+    auto spec = makeSpec();
+    spec.unitSize()->globalLimit() = 0;
+    REBALANCER_EXPECT_RUNTIME_ERROR(
+        solver->addGoal(spec),
+        "expected global limit value to be positive but got 0");
+  }
+  {
+    auto solver = makeSolver();
+    auto spec = makeSpec();
+    spec.unitSize()->isDefaultLimitUnbounded() = true;
+    REBALANCER_EXPECT_RUNTIME_ERROR(
+        solver->addGoal(spec),
+        "MaximizeFreeCapacityUnitsSpec unit sizes must be bounded");
+  }
+  {
+    auto solver = makeSolver();
+    auto spec = makeSpec();
+    spec.unitSize()->scopeItemLimits() = {{"h1", 0}};
+    REBALANCER_EXPECT_RUNTIME_ERROR(
+        solver->addGoal(spec),
+        "expected limit for scope item 'h1' to be positive but got 0");
+  }
+  {
+    auto solver = makeSolver();
+    auto spec = makeSpec();
+    spec.unitSize()->scopeItemLimits() = {{"unknown", 4}};
+    REBALANCER_EXPECT_RUNTIME_ERROR(
+        solver->addGoal(spec), "unknown item unknown in scope host");
+  }
+}
+
 TEST_P(ProblemSolverChecksTest, WorkingSetSpecUnknownDimension) {
   auto solver = makeInitializedSolver(GetParam());
 

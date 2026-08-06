@@ -157,6 +157,7 @@ class ProblemChecker {
   void addSpec(const ExclusiveScopeItemsSpec& spec);
   void addSpec(const GroupIsolationLimitSpec& spec);
   void addSpec(const MaximizeAllocationSpec& spec);
+  void addSpec(const MaximizeFreeCapacityUnitsSpec& spec);
   void addSpec(const WorkingSetSpec& spec);
   void addSpec(const AssignmentAffinitiesSpec& spec);
   void addSpec(const GroupAssignmentAffinitiesSpec& spec);
