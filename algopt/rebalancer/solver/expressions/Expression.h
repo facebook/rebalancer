@@ -166,6 +166,14 @@ class Expression {
 
   virtual ExpressionProperties getProperties() const;
 
+  virtual bool references(entities::ObjectId) const {
+    return false;
+  }
+
+  virtual bool references(entities::ContainerId) const {
+    return false;
+  }
+
   virtual double evaluate(
       const BottomToTopEvaluator& evaluator,
       const ChangeSet& changes) const;

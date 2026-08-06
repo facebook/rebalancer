@@ -267,6 +267,10 @@ ExpressionProperties ObjectPartition::getProperties() const {
   return properties;
 }
 
+bool ObjectPartition::references(ObjectId object) const {
+  return partitionInfo_->getObjectIdToGroupIds().contains(object);
+}
+
 double ObjectPartition::getGroupLimit(GroupId groupId) const {
   if (!partitionInfo_->isRelevant(groupId)) {
     throw std::runtime_error(

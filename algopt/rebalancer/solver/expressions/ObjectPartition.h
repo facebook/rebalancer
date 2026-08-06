@@ -85,6 +85,8 @@ class ObjectPartition : public Expression {
   void updateEquivalenceSets(EquivalenceSets& equivalenceSets) const override;
 
   ExpressionProperties getProperties() const override;
+  using Expression::references;
+  bool references(entities::ObjectId object) const override;
 
   double getGroupLimit(entities::GroupId groupId) const;
 

@@ -90,6 +90,11 @@ class ObjectPartitionLookup : public Expression {
 
   ExpressionProperties getProperties() const override;
 
+  using Expression::references;
+  bool references(entities::ContainerId container) const override {
+    return lookupContainersPtr_->contains(container);
+  }
+
   std::optional<entities::ScopeItemId> getDimensionScopeItemId(
       entities::ContainerId container) const;
 

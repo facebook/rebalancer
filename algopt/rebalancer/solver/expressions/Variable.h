@@ -47,6 +47,14 @@ class Variable : public Expression {
 
   ExpressionProperties getProperties() const override;
 
+  using Expression::references;
+  bool references(entities::ObjectId objectId) const override {
+    return object == objectId;
+  }
+  bool references(entities::ContainerId containerId) const override {
+    return container == containerId;
+  }
+
   using Expression::evaluate;
   virtual double evaluate(
       const BottomToTopEvaluator& evaluator,

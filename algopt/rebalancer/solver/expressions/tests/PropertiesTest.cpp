@@ -120,6 +120,8 @@ TEST_F(PropertiesTest, BipartiteSwaps) {
            ->at("right_subset")
            .valueContainerIdList()
            ->value());
+  EXPECT_TRUE(swaps.references(container(1)));
+  EXPECT_FALSE(swaps.references(object(1)));
 }
 
 TEST_F(PropertiesTest, LinearSum) {
@@ -169,6 +171,8 @@ TEST_F(PropertiesTest, ObjectLookup) {
       std::vector<int>({container(3).asInt(), container(4).asInt()});
   std::sort(expectedContainers.begin(), expectedContainers.end());
   ASSERT_EQ(expectedContainers, containers);
+  EXPECT_TRUE(lookup->references(container(3)));
+  EXPECT_FALSE(lookup->references(object(3)));
 }
 
 TEST_F(PropertiesTest, ObjectVector) {
@@ -188,6 +192,14 @@ TEST_F(PropertiesTest, ObjectVector) {
            ->at("object_values")
            .valueObjectIdDoubleMap()
            ->value());
+  EXPECT_TRUE(vector->references(object(3)));
+  EXPECT_FALSE(vector->references(object(2)));
+  EXPECT_FALSE(vector->references(container(2)));
+
+  auto nonzeroDefaultVector =
+      makeObjectVector({{object(3), 0}}, 1, universe.getNumObjects(), universe);
+  EXPECT_TRUE(nonzeroDefaultVector->references(object(2)));
+  EXPECT_TRUE(nonzeroDefaultVector->references(object(3)));
 }
 
 TEST_F(PropertiesTest, Piecewise) {
@@ -248,6 +260,10 @@ TEST_F(PropertiesTest, Variable) {
   ASSERT_EQ(
       container(4).asInt(),
       *properties.properties()->at("container").valueContainerId()->value());
+  EXPECT_TRUE(var->references(object(3)));
+  EXPECT_TRUE(var->references(container(4)));
+  EXPECT_FALSE(var->references(object(4)));
+  EXPECT_FALSE(var->references(container(3)));
 }
 
 TEST_F(PropertiesTest, Ceil) {
@@ -269,10 +285,10 @@ TEST_F(PropertiesTest, Log) {
 CO_TEST_F(PropertiesTestCustom, ObjectPartition) {
   setInitialAssignment(
       folly::F14FastMap<std::string, std::vector<std::string>>{
-          {"container1", {"object1"}}});
+          {"container1", {"object1", "object2"}}});
 
   const auto objectCountDimensionId = dimensionId("object_count");
-  co_await addPartition("partition1", {});
+  co_await addPartition("partition1", {{"group1", {"object1"}}});
 
   const auto universe = buildUniverse();
   auto objPartition = object_partition(
@@ -282,6 +298,8 @@ CO_TEST_F(PropertiesTestCustom, ObjectPartition) {
       {});
 
   EXPECT_EQ("ObjectPartition", objPartition->getType());
+  EXPECT_TRUE(objPartition->references(objectId("object1")));
+  EXPECT_FALSE(objPartition->references(objectId("object2")));
 }
 
 CO_TEST_F(PropertiesTestCustom, ObjectPartitionLookup) {

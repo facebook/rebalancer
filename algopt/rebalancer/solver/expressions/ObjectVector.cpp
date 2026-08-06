@@ -140,6 +140,10 @@ bool ObjectVector::isZeroDefault() const {
   return defaultValue_ == 0.0;
 }
 
+bool ObjectVector::references(ObjectId object) const {
+  return !isZeroDefault() || objectValues_.getObjectValue(object) != 0.0;
+}
+
 size_t ObjectVector::nonDefaultCount() const {
   return objectValues_.nonDefaultCount();
 }

@@ -66,6 +66,9 @@ class ObjectVector : public Expression {
 
   ExpressionProperties getProperties() const override;
 
+  using Expression::references;
+  bool references(entities::ObjectId object) const override;
+
   virtual const std::string_view& getType() const override;
 
   virtual bool hasNoLpIntent() const override;

@@ -33,6 +33,12 @@ class BipartiteSwaps : public Expression {
 
   ExpressionProperties getProperties() const override;
 
+  using Expression::references;
+  bool references(entities::ContainerId container) const override {
+    return left_subset_.contains(container) ||
+        right_subset_.contains(container);
+  }
+
   using Expression::evaluate;
   virtual double evaluate(
       const BottomToTopEvaluator& evaluator,

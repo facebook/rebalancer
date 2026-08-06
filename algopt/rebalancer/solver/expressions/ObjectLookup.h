@@ -51,6 +51,11 @@ class ObjectLookup : public Expression {
 
   ExpressionProperties getProperties() const override;
 
+  using Expression::references;
+  bool references(entities::ContainerId container) const override {
+    return containersPtr_->contains(container);
+  }
+
   std::shared_ptr<const PackerSet<entities::ContainerId>> containersPtr_;
 
   using Expression::evaluate;
