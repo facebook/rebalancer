@@ -18,15 +18,62 @@
 
 #include <map>
 #include <string>
+#include <tuple>
+#include <utility>
 
 using namespace facebook::rebalancer::interface;
 
-class AssignmentAffinitiesTest : public ::testing::TestWithParam<int> {};
+enum class AffinityInput { LIST, DIMENSION };
+
+class AssignmentAffinitiesTest
+    : public ::testing::TestWithParam<std::tuple<int, AffinityInput>> {
+ protected:
+  using ScopeItemNameToObjectNameToAffinity =
+      std::map<std::string, std::map<std::string, double>>;
+
+  static int threadCount() {
+    return std::get<0>(GetParam());
+  }
+
+  static void addAffinityGoal(
+      ProblemSolver& solver,
+      AssignmentAffinitiesSpec spec) {
+    switch (std::get<1>(GetParam())) {
+      case AffinityInput::LIST:
+        break;
+      case AffinityInput::DIMENSION:
+        solver.addDynamicObjectDimension(
+            "assignment_affinity",
+            *spec.scope(),
+            makeScopeItemNameToObjectNameToAffinity(spec),
+            0);
+        spec.affinities()->clear();
+        spec.dimension() = "assignment_affinity";
+        break;
+    }
+    solver.addGoal(std::move(spec));
+  }
+
+ private:
+  static ScopeItemNameToObjectNameToAffinity
+  makeScopeItemNameToObjectNameToAffinity(
+      const AssignmentAffinitiesSpec& spec) {
+    ScopeItemNameToObjectNameToAffinity scopeItemNameToObjectNameToAffinity;
+    for (const auto& affinity : *spec.affinities()) {
+      scopeItemNameToObjectNameToAffinity[*affinity.scopeItemName()]
+                                         [*affinity.objectName()] +=
+          *affinity.affinity();
+    }
+    return scopeItemNameToObjectNameToAffinity;
+  }
+};
 
 INSTANTIATE_TEST_CASE_P(
     NumThreads,
     AssignmentAffinitiesTest,
-    testThreadCounts());
+    ::testing::Combine(
+        testThreadCounts(),
+        ::testing::Values(AffinityInput::LIST, AffinityInput::DIMENSION)));
 
 TEST_P(AssignmentAffinitiesTest, SingleAffinitiesGoal) {
   // In this example there are 3 hosts and 4 tasks. We add an assignment
@@ -34,7 +81,7 @@ TEST_P(AssignmentAffinitiesTest, SingleAffinitiesGoal) {
   // in different hosts. Since there aren't any constraints nor competing goals,
   // each task can be placed in its most preferred host in an optimal solution.
   auto solver =
-      initializeTestProblemSolver({.executorThreadCount = GetParam()});
+      initializeTestProblemSolver({.executorThreadCount = threadCount()});
   solver->setObjectName("task");
   solver->setContainerName("host");
 
@@ -64,7 +111,7 @@ TEST_P(AssignmentAffinitiesTest, SingleAffinitiesGoal) {
       makeAssignmentAffinity("task2", "host1", 1.4),
   };
 
-  solver->addGoal(assignmentAffinitiesSpec);
+  addAffinityGoal(*solver, std::move(assignmentAffinitiesSpec));
 
   solver->addSolver(makeDefaultLocalSearchSolver());
 
@@ -95,7 +142,7 @@ TEST_P(AssignmentAffinitiesTest, CompetingObjects) {
   // take the same host, one has to settle for its second preference. In this
   // rebalancer will maximize the overall sum of active affinities.
   auto solver =
-      initializeTestProblemSolver({.executorThreadCount = GetParam()});
+      initializeTestProblemSolver({.executorThreadCount = threadCount()});
   solver->setObjectName("task");
   solver->setContainerName("host");
 
@@ -132,7 +179,7 @@ TEST_P(AssignmentAffinitiesTest, CompetingObjects) {
       makeAssignmentAffinity("task1", "host2", 7),
   };
 
-  solver->addGoal(assignmentAffinitiesSpec);
+  addAffinityGoal(*solver, std::move(assignmentAffinitiesSpec));
 
   solver->addSolver(makeDefaultLocalSearchSolver());
 
@@ -148,7 +195,7 @@ TEST_P(AssignmentAffinitiesTest, CompetingObjects) {
 
 TEST_P(AssignmentAffinitiesTest, ContainerOutOfScope) {
   auto solver =
-      initializeTestProblemSolver({.executorThreadCount = GetParam()});
+      initializeTestProblemSolver({.executorThreadCount = threadCount()});
   solver->setObjectName("task");
   solver->setContainerName("host");
 
@@ -170,7 +217,7 @@ TEST_P(AssignmentAffinitiesTest, ContainerOutOfScope) {
       makeAssignmentAffinity("task0", "rack1", 1),
   };
 
-  solver->addGoal(spec);
+  addAffinityGoal(*solver, std::move(spec));
 
   solver->addSolver(makeDefaultLocalSearchSolver());
 

@@ -125,6 +125,8 @@ struct AssignmentAffinitiesSpec {
   1: string name;
   2: string scope;
   3: list<AssignmentAffinity> affinities;
+  // Alternative to affinities; the dimension must default to zero.
+  4: optional string dimension;
 }
 
 struct GroupScopeItemAffinity {

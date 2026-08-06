@@ -23,7 +23,10 @@
 
 namespace facebook::rebalancer::materializer::tests {
 
-class AssignmentAffinitiesSpecBuilderTest : public SpecBuilderTestBase<> {
+enum class AffinityInput { LIST, DIMENSION };
+
+class AssignmentAffinitiesSpecBuilderTest
+    : public SpecBuilderTestBase<AffinityInput> {
  protected:
   folly::coro::Task<void> setUpCoro() {
     setUpUniverse({
@@ -51,9 +54,47 @@ class AssignmentAffinitiesSpecBuilderTest : public SpecBuilderTestBase<> {
     result.affinity() = affinity;
     return result;
   }
+
+  static interface::AssignmentAffinitiesSpec makeDimensionSpec() {
+    interface::AssignmentAffinitiesSpec spec;
+    spec.scope() = "host";
+    spec.dimension() = "assignmentAffinity";
+    return spec;
+  }
+
+  folly::coro::Task<void> useSelectedInput(
+      interface::AssignmentAffinitiesSpec& spec) {
+    switch (GetParam()) {
+      case AffinityInput::LIST:
+        co_return;
+      case AffinityInput::DIMENSION:
+        break;
+    }
+
+    entities::Map<std::string, entities::Map<std::string, double>>
+        scopeItemNameToObjectNameToAffinity;
+    for (const auto& affinity : *spec.affinities()) {
+      scopeItemNameToObjectNameToAffinity[*affinity.scopeItemName()]
+                                         [*affinity.objectName()] +=
+          *affinity.affinity();
+    }
+    co_await addDynamicObjectDimension(
+        "assignmentAffinity",
+        scopeId(*spec.scope()),
+        scopeItemNameToObjectNameToAffinity,
+        0);
+    spec.affinities()->clear();
+    spec.dimension() = "assignmentAffinity";
+    co_return;
+  }
 };
 
-CO_TEST_F(AssignmentAffinitiesSpecBuilderTest, Goal) {
+INSTANTIATE_TEST_CASE_P(
+    Input,
+    AssignmentAffinitiesSpecBuilderTest,
+    ::testing::Values(AffinityInput::LIST, AffinityInput::DIMENSION));
+
+CO_TEST_P(AssignmentAffinitiesSpecBuilderTest, Goal) {
   interface::AssignmentAffinitiesSpec spec;
   spec.scope() = "host";
   spec.affinities() = {
@@ -62,6 +103,7 @@ CO_TEST_F(AssignmentAffinitiesSpecBuilderTest, Goal) {
       makeAffinity("task1", "host0", -4),
       makeAffinity("task1", "host1", -8),
   };
+  co_await useSelectedInput(spec);
 
   const AssignmentAffinitiesSpecBuilder specBuilder(buildUniverse(), spec);
 
@@ -93,7 +135,7 @@ CO_TEST_F(AssignmentAffinitiesSpecBuilderTest, Goal) {
       1e-8);
 }
 
-CO_TEST_F(AssignmentAffinitiesSpecBuilderTest, OutOfScope) {
+CO_TEST_P(AssignmentAffinitiesSpecBuilderTest, OutOfScope) {
   interface::AssignmentAffinitiesSpec spec;
   spec.scope() = "rack";
   spec.affinities() = {
@@ -102,6 +144,7 @@ CO_TEST_F(AssignmentAffinitiesSpecBuilderTest, OutOfScope) {
       makeAffinity("task2", "rack0", 4),
       makeAffinity("task2", "rack1", 8),
   };
+  co_await useSelectedInput(spec);
 
   const AssignmentAffinitiesSpecBuilder specBuilder(buildUniverse(), spec);
 
@@ -134,6 +177,89 @@ CO_TEST_F(AssignmentAffinitiesSpecBuilderTest, OutOfScope) {
   // Moving task2 out of scope increases penalty by 8, since it loses the
   // affinity to the current rack.
   EXPECT_NEAR(-1, evaluate(goal, deltaFromInitial({{"task2", "host2"}})), 1e-8);
+}
+
+CO_TEST_P(AssignmentAffinitiesSpecBuilderTest, Empty) {
+  interface::AssignmentAffinitiesSpec spec;
+  spec.scope() = "host";
+  co_await useSelectedInput(spec);
+
+  const AssignmentAffinitiesSpecBuilder specBuilder(buildUniverse(), spec);
+  EXPECT_EQ(
+      (SpecParameters{.name = "", .scope = "host", .size = 0}),
+      specBuilder.getSpecInfo());
+
+  const auto goal = co_await specBuilder.goalCoro(expressionBuilder());
+  EXPECT_NEAR(0, evaluate(goal, deltaFromInitial({})), 1e-8);
+  EXPECT_NEAR(0, evaluate(goal, deltaFromInitial({{"task0", "host1"}})), 1e-8);
+}
+
+CO_TEST_F(
+    AssignmentAffinitiesSpecBuilderTest,
+    StaticDimensionMatchesAffinityList) {
+  co_await addObjectDimension(
+      "assignmentAffinity",
+      {{objectId("task0"), 2}, {objectId("task1"), -3}},
+      0);
+
+  interface::AssignmentAffinitiesSpec listSpec;
+  listSpec.scope() = "rack";
+  listSpec.affinities() = {
+      makeAffinity("task0", "rack0", 2),
+      makeAffinity("task0", "rack1", 2),
+      makeAffinity("task1", "rack0", -3),
+      makeAffinity("task1", "rack1", -3),
+  };
+  auto dimensionSpec = makeDimensionSpec();
+  dimensionSpec.scope() = "rack";
+
+  const auto universe = buildUniverse();
+  const AssignmentAffinitiesSpecBuilder listBuilder(universe, listSpec);
+  const AssignmentAffinitiesSpecBuilder dimensionBuilder(
+      universe, dimensionSpec);
+  EXPECT_EQ(
+      (SpecParameters{.name = "", .scope = "rack", .size = 4}),
+      dimensionBuilder.getSpecInfo());
+  const auto listGoal = co_await listBuilder.goalCoro(expressionBuilder());
+  const auto dimensionGoal =
+      co_await dimensionBuilder.goalCoro(expressionBuilder());
+  for (const auto& assignmentDelta :
+       std::vector<entities::Map<std::string, std::string>>{
+           {},
+           {{"task0", "host1"}},
+           {{"task0", "host2"}},
+           {{"task1", "host1"}},
+           {{"task1", "host2"}},
+       }) {
+    EXPECT_NEAR(
+        evaluate(listGoal, deltaFromInitial(assignmentDelta)),
+        evaluate(dimensionGoal, deltaFromInitial(assignmentDelta)),
+        1e-8);
+  }
+}
+
+CO_TEST_F(AssignmentAffinitiesSpecBuilderTest, RejectsNonScalarDimension) {
+  co_await addObjectDimension(
+      "assignmentAffinity",
+      {{{objectId("task0"), 1}}, {{objectId("task0"), 2}}},
+      {0, 0});
+
+  const auto spec = makeDimensionSpec();
+
+  REBALANCER_EXPECT_RUNTIME_ERROR(
+      const AssignmentAffinitiesSpecBuilder specBuilder(buildUniverse(), spec),
+      "AssignmentAffinitiesSpec dimension 'assignmentAffinity' must be scalar, but has size 2");
+}
+
+CO_TEST_F(AssignmentAffinitiesSpecBuilderTest, RejectsNonzeroDefaultAffinity) {
+  co_await addDynamicObjectDimension(
+      "assignmentAffinity", scopeId("host"), {{"host0", {{"task0", 2}}}}, 1);
+
+  const auto spec = makeDimensionSpec();
+
+  REBALANCER_EXPECT_RUNTIME_ERROR(
+      const AssignmentAffinitiesSpecBuilder specBuilder(buildUniverse(), spec),
+      "AssignmentAffinitiesSpec dimension 'assignmentAffinity' must have default value 0, but has 1");
 }
 
 TEST_F(AssignmentAffinitiesSpecBuilderTest, Constraint) {

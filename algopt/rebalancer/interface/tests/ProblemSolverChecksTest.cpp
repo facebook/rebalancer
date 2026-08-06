@@ -1511,6 +1511,52 @@ TEST_P(
       "unknown group j3 in partition job");
 }
 
+TEST_P(ProblemSolverChecksTest, AssignmentAffinitiesUnknownDimension) {
+  auto solver = makeInitializedSolver(GetParam());
+  AssignmentAffinitiesSpec spec;
+  spec.scope() = "host";
+  spec.dimension() = "affinity";
+
+  REBALANCER_EXPECT_RUNTIME_ERROR(
+      solver->addGoal(spec), "unknown dimension affinity");
+}
+
+TEST_P(ProblemSolverChecksTest, AssignmentAffinitiesMultipleSources) {
+  auto solver = makeInitializedSolver(GetParam());
+  solver->addDynamicObjectDimension(
+      "affinity",
+      "host",
+      folly::F14FastMap<std::string, folly::F14FastMap<std::string, double>>{});
+
+  AssignmentAffinitiesSpec spec;
+  spec.scope() = "host";
+  spec.dimension() = "affinity";
+  spec.affinities() = {makeAssignmentAffinity("s1", "h1", 1)};
+
+  REBALANCER_EXPECT_RUNTIME_ERROR(
+      solver->addGoal(spec),
+      "AssignmentAffinitiesSpec cannot specify both affinities and a dimension");
+}
+
+TEST_P(ProblemSolverChecksTest, AssignmentAffinitiesDimensionOnOtherScope) {
+  auto solver = makeInitializedSolver(GetParam());
+  solver->addScope(
+      "rack",
+      std::unordered_map<std::string, std::string>{{"h1", "r1"}, {"h2", "r2"}});
+  solver->addDynamicObjectDimension(
+      "affinity",
+      "host",
+      folly::F14FastMap<std::string, folly::F14FastMap<std::string, double>>{});
+
+  AssignmentAffinitiesSpec spec;
+  spec.scope() = "rack";
+  spec.dimension() = "affinity";
+
+  REBALANCER_EXPECT_RUNTIME_ERROR(
+      solver->addGoal(spec),
+      "AssignmentAffinitiesSpec dimension 'affinity' must use the same scope 'rack' as the spec");
+}
+
 TEST_P(ProblemSolverChecksTest, GroupAssignmentAffinitiesUnknownScope) {
   auto solver = makeInitializedSolver(GetParam());
   GroupAssignmentAffinitiesSpec spec;

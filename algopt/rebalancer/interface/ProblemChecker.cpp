@@ -763,6 +763,24 @@ void ProblemChecker::addSpec(const AssignmentAffinitiesSpec& spec) {
   const auto& scope = spec.scope()->empty() ? containerName : *spec.scope();
   checkScopeExists(scope);
 
+  if (spec.dimension().has_value()) {
+    if (!spec.affinities()->empty()) {
+      throw std::runtime_error(
+          "AssignmentAffinitiesSpec cannot specify both affinities and a dimension");
+    }
+    const auto& dimensionName = *spec.dimension();
+    checkDimensionExists(dimensionName);
+    const auto* dimensionScope =
+        folly::get_ptr(dynamicObjectDimensionToScope_, dimensionName);
+    if (dimensionScope && *dimensionScope != scope) {
+      throw std::runtime_error(
+          fmt::format(
+              "AssignmentAffinitiesSpec dimension '{}' must use the same scope '{}' as the spec",
+              dimensionName,
+              scope));
+    }
+  }
+
   for (auto& it : *spec.affinities()) {
     checkObjectExists(*it.objectName());
     checkScopeItemExists(scope, *it.scopeItemName());

@@ -22,6 +22,7 @@
 #include "algopt/rebalancer/interface/thrift/gen-cpp2/SolverSpecs_types.h"
 
 #include <folly/container/irange.h>
+#include <folly/Conv.h>
 #include <folly/coro/BlockingWait.h>
 #include <folly/coro/Collect.h>
 #include <folly/coro/Task.h>
@@ -392,7 +393,9 @@ folly::coro::Task<void> UniverseProblemBuilder::addDynamicObjectDimensionImpl(
       entities::ScopeItemId,
       std::shared_ptr<const entities::ObjectIdToDoubleMap>>
       scopeItemIdToObjectIdToValue;
-  scopeItemIdToObjectIdToValue.reserve(scopeItemToObjectToValue.size());
+  scopeItemIdToObjectIdToValue.reserve(
+      folly::to<decltype(scopeItemIdToObjectIdToValue)::size_type>(
+          scopeItemToObjectToValue.size()));
   co_await CoroUtils::runEachFuncAndUpdate(
       scopeItemToObjectToValue.begin(),
       scopeItemToObjectToValue.end(),
@@ -852,9 +855,11 @@ GoalSpecs UniverseProblemBuilder::getGoalSpecsUnion(Spec spec) {
             toColocateGroupsSpec(std::move(spec)));
   }
 
-  // if dimension field is empty, then use objectCountDimension
-  algopt::utils::setStringFieldToValueIfEmptyOrUnset(
-      spec, kDimensionFieldName.data(), getObjectCountDimensionName());
+  if constexpr (!std::same_as<decltype(spec), AssignmentAffinitiesSpec>) {
+    // AssignmentAffinitiesSpec uses affinities when dimension is omitted.
+    algopt::utils::setStringFieldToValueIfEmptyOrUnset(
+        spec, kDimensionFieldName.data(), getObjectCountDimensionName());
+  }
 
   return algopt::utils::createThriftUnionByField<GoalSpecs, Spec>(
       std::move(spec));

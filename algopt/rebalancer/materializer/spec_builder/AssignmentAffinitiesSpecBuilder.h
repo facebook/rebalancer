@@ -36,7 +36,14 @@ class AssignmentAffinitiesSpecBuilder : public SpecBuilder {
   SpecParameters getSpecInfo() const override;
 
  private:
+  struct AffinityPenalties;
+
+  AffinityPenalties buildPenaltiesFromAffinityList() const;
+  AffinityPenalties buildPenaltiesFromDimension() const;
+
   interface::AssignmentAffinitiesSpec spec_;
+  entities::ScopeId scopeId_;
+  const entities::ObjectScalarDimension* dimension_;
 };
 
 } // namespace facebook::rebalancer::materializer
