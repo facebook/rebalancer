@@ -138,6 +138,11 @@ DEFINE_bool(
     false,
     "Enable invalid move filter for local search.");
 
+DEFINE_bool(
+    validate_applied_moves,
+    false,
+    "Validate local search moves after applying them.");
+
 DEFINE_double(
     precision_tolerance_absolute,
     -1,
@@ -431,6 +436,10 @@ static void possiblyModifyProblem(AssignmentProblem& problem) {
   if (!gflags::GetCommandLineFlagInfoOrDie("enable_invalid_move_filter")
            .is_default) {
     problem.enableInvalidMoveFilter() = FLAGS_enable_invalid_move_filter;
+  }
+  if (!gflags::GetCommandLineFlagInfoOrDie("validate_applied_moves")
+           .is_default) {
+    problem.validateAppliedMoves() = FLAGS_validate_applied_moves;
   }
 
   // Enable the learned move-legality heuristic (rebalancer-net): an explicit
