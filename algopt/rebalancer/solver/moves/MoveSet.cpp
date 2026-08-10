@@ -16,10 +16,11 @@
 
 #include "algopt/rebalancer/solver/utils/Util.h"
 
-#include <fmt/core.h>
+#include <fmt/format.h>
 #include <folly/container/irange.h>
 
 #include <cassert>
+#include <iterator>
 
 namespace facebook::rebalancer {
 
@@ -93,6 +94,21 @@ ChangeSet MoveSet::getChangeSet() const {
         Change(move.getObject(), move.getDestinationContainer(), 1));
   }
   return changeSet;
+}
+
+std::string MoveSet::toString(const entities::Universe& universe) const {
+  if (moves_.empty()) {
+    return "[]";
+  }
+
+  fmt::memory_buffer buffer;
+  fmt::format_to(std::back_inserter(buffer), "[");
+  for (const auto& move : moves_) {
+    fmt::format_to(
+        std::back_inserter(buffer), "\n  {}", move.toString(universe));
+  }
+  fmt::format_to(std::back_inserter(buffer), "\n]");
+  return fmt::to_string(buffer);
 }
 
 std::vector<Move>::const_iterator MoveSet::begin() const {

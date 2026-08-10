@@ -32,6 +32,7 @@ class MoveSet {
   size_t size() const;
   const Move& at(size_t index) const;
   ChangeSet getChangeSet() const;
+  std::string toString(const entities::Universe& universe) const;
   std::vector<Move>::const_iterator begin() const;
   std::vector<Move>::const_iterator end() const;
   static int compare(const MoveSet& lhs, const MoveSet& rhs);

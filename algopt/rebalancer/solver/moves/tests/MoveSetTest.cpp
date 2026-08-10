@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include "algopt/rebalancer/algopt_common/TestUtils.h"
+#include "algopt/rebalancer/entities/tests/UniverseBuilderTestUtils.h"
 #include "algopt/rebalancer/solver/moves/MoveSet.h"
 #include "algopt/rebalancer/solver/tests/IdConverterTestUtils.h"
 
@@ -80,6 +81,41 @@ TEST(MoveSetTest, FromInverseChangeSet) {
       Move(object(12), container(104), container(103))};
 
   EXPECT_EQ(expected, actual);
+}
+
+TEST(MoveSetTest, ToString) {
+  entities::tests::UniverseBuilderTestUtils builder("task", "host");
+  builder.setInitialAssignment(
+      {{"host1", {"task1"}}, {"host2", {"task2"}}, {"host3", {}}});
+
+  MoveSet moves;
+  moves.insert(
+      Move{
+          builder.object("task1"),
+          builder.container("host1"),
+          builder.container("host3")});
+  moves.insert(
+      Move{
+          builder.object("task2"),
+          builder.container("host2"),
+          builder.container("host3")});
+
+  const auto universe = builder.buildUniverse();
+  const auto result = moves.toString(*universe);
+  EXPECT_EQ(
+      "[\n"
+      "  Object = task1 (id: 0), Source Container = host1 (id: 0), Destination Container = host3 (id: 1)\n"
+      "  Object = task2 (id: 1), Source Container = host2 (id: 2), Destination Container = host3 (id: 1)\n"
+      "]",
+      result);
+}
+
+TEST(MoveSetTest, EmptyToString) {
+  entities::tests::UniverseBuilderTestUtils builder("task", "host");
+  builder.setInitialAssignment({{"host1", {}}});
+
+  const auto universe = builder.buildUniverse();
+  EXPECT_EQ("[]", MoveSet{}.toString(*universe));
 }
 
 TEST(MoveSetTest, FromChangeSetRemovedTwice) {
