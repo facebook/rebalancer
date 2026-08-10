@@ -189,6 +189,7 @@ class CoreLocalSearchSolve {
   // progress trackers
   bool solved_;
   StopInfo stopInfo_;
+  std::optional<std::string> lastApplyRejectionReason_;
 
   // captures moves histogram
   std::vector<std::pair<double, int>> moveTimes_;

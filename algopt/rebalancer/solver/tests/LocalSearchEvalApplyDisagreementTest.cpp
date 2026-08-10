@@ -67,7 +67,7 @@ class LocalSearchEvalApplyDisagreementTest
   }
 };
 
-TEST_F(LocalSearchEvalApplyDisagreementTest, UndoesMoveAndStopsLocalSearch) {
+TEST_F(LocalSearchEvalApplyDisagreementTest, UndoesMoveAndFinishesSearch) {
   const auto universe = buildNetZeroUniverse();
   auto logger = std::make_shared<InMemoryLog>();
   ProblemConfigs config;
@@ -86,7 +86,7 @@ TEST_F(LocalSearchEvalApplyDisagreementTest, UndoesMoveAndStopsLocalSearch) {
       interface::SingleMoveTypeSpec{})};
 
   LocalSearchSolver solver(std::move(spec));
-  EXPECT_FALSE(solver.solve(*problem));
+  EXPECT_TRUE(solver.solve(*problem));
 
   const auto& summaries = logger->getSolverSummaries();
   ASSERT_EQ(1, summaries.size());
@@ -107,6 +107,166 @@ TEST_F(LocalSearchEvalApplyDisagreementTest, UndoesMoveAndStopsLocalSearch) {
   ASSERT_EQ(1, profiles.front().moveTypeEvents()->size());
   const auto& event = profiles.front().moveTypeEvents()->front();
   EXPECT_DOUBLE_EQ(*event.initialValue(), *event.finalValue());
+}
+
+TEST_F(
+    LocalSearchEvalApplyDisagreementTest,
+    ContinuesSearchAfterRejectedAppliedMove) {
+  algopt::common::thrift::PrecisionTolerances tolerances;
+  tolerances.absolute() = 1e-12;
+  tolerances.relative() = 1e-12;
+  universeBuilder_.setPrecision(tolerances);
+  setInitialAssignment(
+      entities::Map<std::string, std::vector<std::string>>{
+          {"container0", {"object0"}},
+          {"container1", {}},
+          {"container2", {"object1"}},
+          {"container3", {}}});
+  const auto universe = buildUniverse();
+
+  // The constraint permits only object0 -> container1 and object1 ->
+  // container3. The first objective makes object0's move look best during
+  // evaluation, but it is neutral after apply; the second objective improves
+  // when object1 leaves container2. Search should reject the first move and
+  // apply the second.
+  auto logger = std::make_shared<InMemoryLog>();
+  ProblemConfigs config;
+  config.logger = logger;
+
+  const Assignment assignment(universe->getContainers().getInitialAssignment());
+  const auto constraint =
+      variable(object(0), container(2), *universe, assignment) +
+      variable(object(0), container(3), *universe, assignment) +
+      variable(object(1), container(0), *universe, assignment) +
+      variable(object(1), container(1), *universe, assignment);
+  auto problem = packer::tests::createTestProblem(
+      universe,
+      /*objectiveTuple=*/
+      {makeNetZeroObjective(*universe),
+       variable(object(1), container(2), *universe, assignment)},
+      /*constraint=*/constraint,
+      /*nonAcceptingContainers=*/{},
+      /*config=*/config);
+
+  interface::LocalSearchSolverSpec spec;
+  spec.stopAfterMoves() = 10;
+  spec.moveTypeList() = {interface::ProblemSolver::makeMoveTypeSpec(
+      interface::SingleMoveTypeSpec{})};
+
+  LocalSearchSolver solver(std::move(spec));
+  EXPECT_TRUE(solver.solve(*problem));
+
+  EXPECT_EQ(container(0), problem->assignment.getContainer(object(0)));
+  EXPECT_EQ(container(3), problem->assignment.getContainer(object(1)));
+
+  const auto moves = logger->flushMoves();
+  ASSERT_EQ(1, moves.size());
+  ASSERT_EQ(1, moves.front().moves()->size());
+  EXPECT_EQ("object1", *moves.front().moves()->front().object());
+}
+
+TEST_F(
+    LocalSearchEvalApplyDisagreementTest,
+    SkipsRemainingMovesAfterRejectedAppliedMove) {
+  algopt::common::thrift::PrecisionTolerances tolerances;
+  tolerances.absolute() = 1e-12;
+  tolerances.relative() = 1e-12;
+  universeBuilder_.setPrecision(tolerances);
+  setInitialAssignment(
+      entities::Map<std::string, std::vector<std::string>>{
+          {"container0", {"object0", "object1"}},
+          {"container1", {}},
+          {"container2", {}}});
+  const auto universe = buildUniverse();
+
+  // IMPORTANT: This test documents a potentially suboptimal behavior. After
+  // the best-looking move is rejected post-apply, search skips the remaining
+  // candidates from that move type, even though moving object1 would satisfy
+  // the constraints and improve objective2.
+  auto logger = std::make_shared<InMemoryLog>();
+  ProblemConfigs config;
+  config.logger = logger;
+
+  const Assignment assignment(universe->getContainers().getInitialAssignment());
+  const auto constraint =
+      variable(object(0), container(2), *universe, assignment) +
+      variable(object(1), container(1), *universe, assignment);
+  auto problem = packer::tests::createTestProblem(
+      universe,
+      /*objectiveTuple=*/
+      {makeNetZeroObjective(*universe),
+       variable(object(1), container(0), *universe, assignment)},
+      /*constraint=*/constraint,
+      /*nonAcceptingContainers=*/{},
+      /*config=*/config);
+
+  interface::LocalSearchSolverSpec spec;
+  spec.stopAfterMoves() = 10;
+  spec.moveTypeList() = {interface::ProblemSolver::makeMoveTypeSpec(
+      interface::SingleMoveTypeSpec{})};
+
+  LocalSearchSolver solver(std::move(spec));
+  EXPECT_TRUE(solver.solve(*problem));
+
+  EXPECT_EQ(container(0), problem->assignment.getContainer(object(0)));
+  EXPECT_EQ(container(0), problem->assignment.getContainer(object(1)));
+
+  const auto moves = logger->flushMoves();
+  EXPECT_TRUE(moves.empty());
+}
+
+TEST_F(
+    LocalSearchEvalApplyDisagreementTest,
+    TriesNextMoveTypeAfterRejectedAppliedMove) {
+  algopt::common::thrift::PrecisionTolerances tolerances;
+  tolerances.absolute() = 1e-12;
+  tolerances.relative() = 1e-12;
+  universeBuilder_.setPrecision(tolerances);
+  setInitialAssignment(
+      entities::Map<std::string, std::vector<std::string>>{
+          {"container0", {"object0", "object1"}},
+          {"container1", {}},
+          {"container2", {}}});
+  const auto universe = buildUniverse();
+
+  // SingleFast first selects object0's move, which is neutral after apply.
+  // Single then considers the same hot container and moves object1, which
+  // satisfies the constraints and improves the objective.
+  auto logger = std::make_shared<InMemoryLog>();
+  ProblemConfigs config;
+  config.logger = logger;
+
+  const Assignment assignment(universe->getContainers().getInitialAssignment());
+  const auto constraint =
+      variable(object(0), container(2), *universe, assignment) +
+      variable(object(1), container(1), *universe, assignment);
+  auto problem = packer::tests::createTestProblem(
+      universe,
+      /*objectiveTuple=*/
+      {makeNetZeroObjective(*universe) +
+       variable(object(1), container(0), *universe, assignment)},
+      /*constraint=*/constraint,
+      /*nonAcceptingContainers=*/{},
+      /*config=*/config);
+
+  interface::LocalSearchSolverSpec spec;
+  spec.stopAfterMoves() = 10;
+  spec.moveTypeList() = {
+      interface::ProblemSolver::makeMoveTypeSpec(
+          interface::SingleFastMoveTypeSpec{}),
+      interface::ProblemSolver::makeMoveTypeSpec(
+          interface::SingleMoveTypeSpec{})};
+
+  LocalSearchSolver solver(std::move(spec));
+  EXPECT_TRUE(solver.solve(*problem));
+
+  EXPECT_EQ(container(0), problem->assignment.getContainer(object(0)));
+  EXPECT_EQ(container(2), problem->assignment.getContainer(object(1)));
+
+  const auto moves = logger->flushMoves();
+  ASSERT_EQ(1, moves.size());
+  ASSERT_EQ(1, moves.front().moves()->size());
+  EXPECT_EQ("object1", *moves.front().moves()->front().object());
 }
 
 } // namespace facebook::rebalancer::tests

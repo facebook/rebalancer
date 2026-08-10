@@ -187,11 +187,6 @@ bool CoreLocalSearchSolve::shouldRecomputeHottestOrderingAfterMove(
 bool CoreLocalSearchSolve::shouldTerminate(
     double curTime,
     double lastImprovedTime) {
-  if (stopInfo_.endReason ==
-      interface::EndReason::UNABLE_TO_FIND_IMPROVING_MOVES) {
-    return true;
-  }
-
   if (curTime >= solveParams_.solveTime) {
     stopInfo_.endReason = interface::EndReason::HIT_TIME_LIMIT;
     stopInfo_.auxInfo =
@@ -367,15 +362,22 @@ bool CoreLocalSearchSolve::tryApplyMove(
     size_t moveIndex,
     const MoveResult& moveResult) {
   const auto acceptMove = [this, moveIndex, &moveResult] {
+    lastApplyRejectionReason_.reset();
     solveState_.hints.update(problem_, solveState_.evaluator, moveResult);
     const auto numMoves = moveResult.getMoveSet().size();
     solveState_.movesInCycle += numMoves;
     solveState_.moveCounts[moveIndex].recordApply(numMoves);
     return true;
   };
-  const auto rejectMove = [this](std::string reason) {
-    stopInfo_.endReason = interface::EndReason::UNABLE_TO_FIND_IMPROVING_MOVES;
-    stopInfo_.auxInfo = std::move(reason);
+  const auto rejectMove = [this, moveIndex, &moveResult](
+                              std::string_view reason) {
+    lastApplyRejectionReason_.emplace(reason);
+    XLOGF(
+        DBG2,
+        "Post-apply validation rejected a candidate from move type {}.\nReason: {}\nCandidate move: {}",
+        allowedMoves_[moveIndex]->name(),
+        reason,
+        moveResult.getMoveSet().toString(problem_.getUniverse()));
     return false;
   };
 
@@ -408,7 +410,7 @@ bool CoreLocalSearchSolve::improveHotContainer(
     applyTimer_.start();
     if (!tryApplyMove(moveIndex, moveResult)) {
       applyTimer_.stop();
-      return false;
+      continue;
     }
 
     const auto numMoves = moveResult.getMoveSet().size();
@@ -572,6 +574,11 @@ bool CoreLocalSearchSolve::solve() {
     REBALANCER_LOG_SOLVER_OUTPUT(DBG1, msg);
 
   } while (shouldStartNextCycle());
+  if (lastApplyRejectionReason_.has_value() &&
+      stopInfo_.endReason == interface::EndReason::UNABLE_TO_FIND_MORE_MOVES) {
+    stopInfo_.endReason = interface::EndReason::UNABLE_TO_FIND_IMPROVING_MOVES;
+    stopInfo_.auxInfo = *lastApplyRejectionReason_;
+  }
   return finalizeAndReturn(true);
 }
 
