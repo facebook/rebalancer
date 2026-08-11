@@ -10,7 +10,7 @@ Source: `algopt/rebalancer/interface/thrift/ProblemSpecs.thrift` and `ProblemSol
 - `ExclusiveScopeItemsSpec`, `LogicalOrSpec`, `LogicalAndSpec`
 
 ### Goals Only
-- `AssignmentAffinitiesSpec`, `MaximizeAllocationSpec`, `MinimizeContainersSpec`, `MinimizeNthLargestUtilizationSpec`, `MinimizeSquaresSpec`, `ScopeAffinitiesSpec`, `SumOfMaxSpec`, `UtilIncreaseCostSpec`, `WorkingSetSpec`, `ItemsAffinitySpec`, `LargeShardSpec`, `GroupAssignmentAffinitiesSpec`
+- `AssignmentAffinitiesSpec`, `MaximizeAllocationSpec`, `MaximizeFreeCapacityUnitsSpec`, `MinimizeContainersSpec`, `MinimizeNthLargestUtilizationSpec`, `MinimizeSquaresSpec`, `ScopeAffinitiesSpec`, `SumOfMaxSpec`, `UtilIncreaseCostSpec`, `WorkingSetSpec`, `ItemsAffinitySpec`, `LargeShardSpec`, `GroupAssignmentAffinitiesSpec`
 
 ### Both Constraints AND Goals
 - `AggregatedGroupSpec`, `AvoidAssignmentsSpec`, `AvoidMovingSpec`, `BalanceSpec`, `BalanceV2Spec`, `BipartiteSwapsSpec`, `CapacityRatioSpec`, `CapacitySpec`, `CapacityWithGroupPresenceSpec`, `CapacityWithSupplyAndDrSpec`, `ColocateGroupsSpec`, `DisasterRecoveryCapacitySpec`, `DiversifyWithinScopeItemSpec`, `DrainCapacitySpec`, `ExclusiveGroupsSpec`, `ExclusiveObjectsSpec`, `FlowSpec`, `GroupCapacitySpec`, `GroupCountSpec`, `GroupDiversitySpec`, `GroupIsolationLimitSpec`, `MinimizeMovementSpec`, `NestedScopeLimitSpec`, `PairAffinitiesSpec`, `RasRebalancingMovementSpec`, `RoutingLatencySpec`, `SRBufferCapacitySpec`, `ThrottlingSpec`, `ToFreeSpec`
