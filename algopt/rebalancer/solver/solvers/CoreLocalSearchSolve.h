@@ -136,7 +136,7 @@ class CoreLocalSearchSolve {
   StopInfo getStopInfo() const;
   std::vector<std::pair<double, int>> getMoveTimes() const;
   interface::SolverMoveStats getMoveStats() const;
-  interface::FinalEvaluationSummary getFinalEvaluationSummary() const;
+  interface::FinalEvaluationSummary makeFinalEvaluationSummary() const;
   std::optional<interface::SolverEvalStats> getEvalStats() const;
   size_t getTotalEvals() const;
   int getTotalMoves() const;
@@ -194,7 +194,6 @@ class CoreLocalSearchSolve {
   // captures moves histogram
   std::vector<std::pair<double, int>> moveTimes_;
   interface::SolverMoveStats moveStats_;
-  interface::FinalEvaluationSummary finalEvaluationSummary_;
   MoveStatsAggregator finalEvaluationStats_;
   MoveStatsAggregator perMoveStatsAggregator_;
   EvalSummary solverEvalSummary_;

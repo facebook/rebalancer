@@ -58,8 +58,8 @@ class LogCollector final {
   void log(const interface::GlobalObjectiveSummary& info);
   void log(const interface::ConstraintSummary& info);
   void log(const interface::MovesSummary& info);
-  void log(const SolverSummary& info);
-  void log(const interface::FinalEvaluationSummary& info);
+  void log(SolverSummary info);
+  void log(interface::FinalEvaluationSummary info);
   void log(const interface::LocalSearchProfile& info);
   void log(const interface::SpecMetadata& info);
   void log(const interface::thrift::Metrics& metrics);

@@ -100,6 +100,9 @@ TEST_P(StageSummaryTest, StageSummaryUnusedStagesTest) {
         *solution.solverSummaries()->at(0).stagesSummaries()->at(i).endReason(),
         facebook::rebalancer::interface::EndReason::HIT_TIME_LIMIT);
   }
+
+  ASSERT_TRUE(solution.finalEvaluationSummary().has_value());
+  EXPECT_EQ(FinalEvaluationSummary{}, *solution.finalEvaluationSummary());
 }
 
 TEST_P(StageSummaryTest, StageSummaryComprehensiveTest) {
@@ -189,6 +192,11 @@ TEST_P(StageSummaryTest, StageSummaryComprehensiveTest) {
       EXPECT_FALSE(stageSummaries.at(i).evalStats().has_value());
     }
   }
+
+  ASSERT_TRUE(solution.finalEvaluationSummary().has_value());
+  EXPECT_EQ(
+      *stageSummaries.at(3).finalEvaluationSummary(),
+      *solution.finalEvaluationSummary());
 }
 
 TEST_P(StageSummaryTest, StageSummaryMoveLimitOnlyInStages) {

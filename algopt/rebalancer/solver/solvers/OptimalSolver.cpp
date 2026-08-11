@@ -459,7 +459,7 @@ void OptimalSolver::solve(
       .endReason = endReason,
       .auxInfo = std::to_string(timer.getSeconds()),
   };
-  p.configs.logger->log(solverSummary);
+  p.configs.logger->log(std::move(solverSummary));
 }
 
 ChangeSet OptimalSolver::findOptimalChangeSet(

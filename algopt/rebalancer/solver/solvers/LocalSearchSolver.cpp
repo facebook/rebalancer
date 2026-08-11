@@ -79,12 +79,12 @@ bool LocalSearchSolver::solve(Problem& p, Profile /* unused */) {
       .moveStats = coreLocalSearchSolve.getMoveStats(),
   };
 
-  p.configs.logger->log(solverSummary);
+  p.configs.logger->log(std::move(solverSummary));
   for (auto& profile : profiler.getProfiles()) {
     p.configs.logger->log(profile);
   }
 
-  p.configs.logger->log(coreLocalSearchSolve.getFinalEvaluationSummary());
+  p.configs.logger->log(coreLocalSearchSolve.makeFinalEvaluationSummary());
   totalEvals = coreLocalSearchSolve.getTotalEvals();
 
   return coreLocalSearchSolve.getSolved();

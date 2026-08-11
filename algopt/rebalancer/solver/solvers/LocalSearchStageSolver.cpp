@@ -116,6 +116,8 @@ bool LocalSearchStageSolver::solve(Problem& p, Profile /* unused */) {
   LocalSearchProfiler profiler(
       moveTypesUsedInAllStages, p.objective.getValue().toVector());
 
+  std::optional<size_t> lastStageWithEvaluations;
+
   SCOPE_EXIT {
     auto msg = fmt::format(
         "\nExiting stage solver...\ntotal moves: {}, {}\n"
@@ -148,11 +150,17 @@ bool LocalSearchStageSolver::solve(Problem& p, Profile /* unused */) {
             timer_.getSeconds(),
             totalApplyTime_,
             moveTypesUsedInAllStages),
-        .stagesSummaries = stagesSummaries,
+        .stagesSummaries = std::move(stagesSummaries),
     };
-    p.configs.logger->log(solverSummary);
 
-    p.configs.logger->log(finalEvaluationSummary_);
+    // The last stage that evaluated moves explains why improvement stopped.
+    // Keep the solution-level field set even when no stage evaluated moves.
+    auto finalEvaluationSummary = lastStageWithEvaluations
+        ? *solverSummary.stagesSummaries->at(*lastStageWithEvaluations)
+               .finalEvaluationSummary()
+        : interface::FinalEvaluationSummary{};
+    p.configs.logger->log(std::move(solverSummary));
+    p.configs.logger->log(std::move(finalEvaluationSummary));
 
     for (auto& profile : profiler.getProfiles()) {
       p.configs.logger->log(profile);
@@ -294,7 +302,7 @@ bool LocalSearchStageSolver::solve(Problem& p, Profile /* unused */) {
     stageSummary.duration() = coreLocalSearchSolve.getTotalDuration();
     stageSummary.moveStats() = coreLocalSearchSolve.getMoveStats();
     stageSummary.finalEvaluationSummary() =
-        coreLocalSearchSolve.getFinalEvaluationSummary();
+        coreLocalSearchSolve.makeFinalEvaluationSummary();
     stageSummary.evalStats().from_optional(coreLocalSearchSolve.getEvalStats());
 
     totalMoves_ += coreLocalSearchSolve.getTotalMoves();
@@ -305,8 +313,7 @@ bool LocalSearchStageSolver::solve(Problem& p, Profile /* unused */) {
     solverEvalSummary_.aggregate(coreLocalSearchSolve.getGlobalMoveStats());
 
     if (coreLocalSearchSolve.getTotalEvals() > 0) {
-      finalEvaluationSummary_ =
-          coreLocalSearchSolve.getFinalEvaluationSummary();
+      lastStageWithEvaluations = stageId;
     }
   }
 

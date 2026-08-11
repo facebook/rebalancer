@@ -73,9 +73,6 @@ class LocalSearchStageSolver : public Solver {
   std::vector<std::pair<double, int>> moveTimes_;
   // evaluation summary during all stages of solver
   EvalSummary solverEvalSummary_;
-  // Evaluation summary after the last move applied, to help the user
-  // understand why the objective could not be improved any further.
-  interface::FinalEvaluationSummary finalEvaluationSummary_;
 
   double stageSolveTime_ = 0;
   std::shared_ptr<SolverOutputLogger> logger_ = nullptr;

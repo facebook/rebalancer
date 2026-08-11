@@ -280,8 +280,6 @@ bool CoreLocalSearchSolve::finalizeAndReturn(bool solved) {
 
   moveStats_ = CoreLocalSearchSolve::getMovesHistogram(
       moveTimes_, totalDuration, applyTimer_.getSeconds(), allowedMoves_);
-  finalEvaluationSummary_ = FinalEvaluationSummaryHelper::makeSummary(
-      problem_, finalEvaluationStats_);
   evalStats_ = solverEvalSummary_.getSolverEvalStats(
       /*evalDuration=*/evalTimer_.getSeconds(),
       /*timeToFindWorstContainers=*/findTime,
@@ -618,8 +616,9 @@ interface::SolverMoveStats CoreLocalSearchSolve::getMoveStats() const {
   return moveStats_;
 }
 interface::FinalEvaluationSummary
-CoreLocalSearchSolve::getFinalEvaluationSummary() const {
-  return finalEvaluationSummary_;
+CoreLocalSearchSolve::makeFinalEvaluationSummary() const {
+  return FinalEvaluationSummaryHelper::makeSummary(
+      problem_, finalEvaluationStats_);
 }
 std::optional<interface::SolverEvalStats> CoreLocalSearchSolve::getEvalStats()
     const {

@@ -55,13 +55,14 @@ void LogCollector::log(const interface::MovesSummary& info) {
   notifyAndStore(info, &Data::moves);
 }
 
-void LogCollector::log(const SolverSummary& info) {
-  notifyAndStore(info, &Data::solverSummaries);
+void LogCollector::log(SolverSummary info) {
+  notifyAndStore(std::move(info), &Data::solverSummaries);
 }
 
-void LogCollector::log(const interface::FinalEvaluationSummary& info) {
+void LogCollector::log(interface::FinalEvaluationSummary info) {
   notify(info);
-  data_.withWLock([&](Data& data) { data.finalEvaluationSummary = info; });
+  data_.withWLock(
+      [&](Data& data) { data.finalEvaluationSummary = std::move(info); });
 }
 
 void LogCollector::log(const interface::LocalSearchProfile& info) {
