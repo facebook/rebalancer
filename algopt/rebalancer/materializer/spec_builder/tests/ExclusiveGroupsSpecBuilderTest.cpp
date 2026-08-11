@@ -63,7 +63,7 @@ CO_TEST_F(ExclusiveGroupsSpecBuilderTest, fixDeficit) {
   auto& builder = expressionBuilder();
 
   const ExclusiveGroupsSpecBuilder specBuilder(
-      universe, spec, std::make_shared<RebalancerLog>());
+      universe, spec, std::make_shared<LogCollector>());
   // ScopeItemToGroupAssignment is computed when constraint is built, so tagging
   // would be initially unset
   EXPECT_EQ(
@@ -121,7 +121,7 @@ CO_TEST_F(ExclusiveGroupsSpecBuilderTest, minimizeMoves) {
   // The assignment of job to host should try to minimize moves from initial
   // state gives us the mapping: job0 => host0, job1 => host1
   const ExclusiveGroupsSpecBuilder specBuilder(
-      universe, spec, std::make_shared<RebalancerLog>());
+      universe, spec, std::make_shared<LogCollector>());
   const auto exprs = co_await specBuilder.constraints(builder);
   EXPECT_EQ(
       "exclusive groups spec test on dimension task_count, scope host, partition job, tagging: host0 -> job0, host1 -> job1",
@@ -149,7 +149,7 @@ TEST_F(ExclusiveGroupsSpecBuilderTest, SpecInfo) {
   spec.name() = "test";
 
   const ExclusiveGroupsSpecBuilder specBuilder(
-      buildUniverse(), spec, std::make_shared<RebalancerLog>());
+      buildUniverse(), spec, std::make_shared<LogCollector>());
 
   const auto expectedSpecInfo = SpecParameters{
       .name = "test",

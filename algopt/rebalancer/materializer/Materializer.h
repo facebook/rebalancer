@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include "algopt/rebalancer/common/log/RebalancerLog.h"
+#include "algopt/rebalancer/common/log/LogCollector.h"
 #include "algopt/rebalancer/entities/Identifiers.h"
 #include "algopt/rebalancer/entities/Map.h"
 #include "algopt/rebalancer/entities/Universe.h"
@@ -40,7 +40,7 @@ class Materializer {
       std::shared_ptr<algopt::treeprof::ExecutorWrapper> executor,
       std::shared_ptr<const entities::Universe> universe,
       bool continuousExpressions,
-      std::shared_ptr<RebalancerLog> logger = std::make_shared<RebalancerLog>(),
+      std::shared_ptr<LogCollector> logger = std::make_shared<LogCollector>(),
       bool shouldCollectMetrics = false,
       bool enableInvalidMoveFilter = false);
 
@@ -49,7 +49,7 @@ class Materializer {
       std::shared_ptr<algopt::treeprof::ExecutorWrapper> executor,
       std::shared_ptr<const entities::Universe> universe,
       bool continuousExpressions,
-      std::shared_ptr<RebalancerLog> logger,
+      std::shared_ptr<LogCollector> logger,
       bool shouldCollectMetrics = false,
       bool enableInvalidMoveFilter = false);
 
@@ -94,7 +94,7 @@ class Materializer {
   std::shared_ptr<algopt::treeprof::ExecutorWrapper> executor_;
   std::shared_ptr<const entities::Universe> universe_;
   SpecBuilderFactory specBuilderFactory_;
-  std::shared_ptr<RebalancerLog> logger_;
+  std::shared_ptr<LogCollector> logger_;
   folly::SynchronizedPtr<std::shared_ptr<MaterializedProblem>> materialized_;
   std::shared_ptr<Metrics::Builder> metricsBuilder_;
 };

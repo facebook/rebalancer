@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "algopt/rebalancer/common/log/LogCollector.h"
 #include "algopt/rebalancer/common/log/StreamLog.h"
 #include "algopt/rebalancer/interface/thrift/gen-cpp2/Types_types.h"
 
@@ -44,7 +45,8 @@ struct ProblemConfigs {
               folly::QueueBehaviorIfFull::BLOCK>>(
               folly::CPUThreadPoolExecutor::kDefaultMaxQueueSize),
           std::make_shared<folly::NamedThreadFactory>("CPUThreadPool"));
-  std::shared_ptr<RebalancerLog> logger = std::make_shared<StreamLog>();
+  std::shared_ptr<LogCollector> logger =
+      std::make_shared<LogCollector>(std::make_shared<StreamLog>());
   interface::MoveStatsSpec moveStatsSpec;
   // Used for logging
   RunId runId;

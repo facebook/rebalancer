@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include "algopt/rebalancer/common/log/RebalancerLog.h"
+#include "algopt/rebalancer/common/log/LogCollector.h"
 #include "algopt/rebalancer/interface/thrift/gen-cpp2/ProblemSolver_types.h"
 #include "algopt/rebalancer/materializer/spec_builder/SpecBuilder.h"
 
@@ -28,7 +28,7 @@ class SpecBuilderFactory {
   SpecBuilderFactory(
       std::shared_ptr<const entities::Universe> universe,
       bool continuousExpressions,
-      std::shared_ptr<RebalancerLog> logger);
+      std::shared_ptr<LogCollector> logger);
 
   std::unique_ptr<SpecBuilder> getBuilder(
       const interface::ConstraintSpecs& spec) const;
@@ -38,7 +38,7 @@ class SpecBuilderFactory {
  private:
   std::shared_ptr<const entities::Universe> universe_;
   bool continuousExpressions_;
-  std::shared_ptr<RebalancerLog> logger_;
+  std::shared_ptr<LogCollector> logger_;
 };
 
 } // namespace facebook::rebalancer::materializer

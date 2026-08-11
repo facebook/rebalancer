@@ -18,7 +18,7 @@
 #ifndef REBALANCER_OSS_BUILD
 #include "algopt/rebalancer/common/log/fb/ScubaLog.h"
 #endif
-#include "algopt/rebalancer/common/log/MultiLog.h"
+#include "algopt/rebalancer/common/log/LogCollector.h"
 #include "algopt/rebalancer/common/log/RebalancerLog.h"
 #include "algopt/rebalancer/common/log/StreamLog.h"
 #include "algopt/rebalancer/common/RebalancerExcep.h"
@@ -69,7 +69,7 @@ void logIfThereAreNegativeDimensionValues(
 
 void printAndLogProblemDefinition(
     std::shared_ptr<const Universe> universe,
-    std::shared_ptr<MultiLog> multiLogger) {
+    LogCollector& logCollector) {
   ProblemDefinition problemDefinition;
   const auto& objects = universe->getObjects();
   problemDefinition.objectName = universe->getObjectTypeName();
@@ -91,12 +91,12 @@ void printAndLogProblemDefinition(
   XLOG(INFO) << "Goals: " << problemDefinition.goalCount;
   XLOG(INFO) << "Constraints: " << problemDefinition.constraintCount;
 
-  multiLogger->log(problemDefinition);
+  logCollector.log(problemDefinition);
 }
 
 void logSolutionStats(
     const AssignmentSolution& solution,
-    std::shared_ptr<MultiLog> multiLogger,
+    LogCollector& logCollector,
     const Problem& problem) {
   SolutionStats solutionStats;
   solutionStats.equivalentSetCount = problem.getEquivalenceSets().size();
@@ -113,12 +113,12 @@ void logSolutionStats(
         *solution.problemProfile()->optimalSolverProfile()->gap()->relative();
   }
 
-  multiLogger->log(solutionStats);
+  logCollector.log(solutionStats);
 }
 
 void logSummary(
     const MaterializedProblem& materialized,
-    RebalancerLog& logger,
+    LogCollector& logger,
     const entities::Universe& universe,
     const Assignment& assignment,
     bool solved) {
@@ -279,18 +279,17 @@ AssignmentSolution CoreSolver::materializeAndSolve(
     std::shared_ptr<const entities::Universe> universe,
     std::shared_ptr<const InvalidMoveFilter> learnedInvalidMoveFilter) {
   Timer timer(true);
-  // Set up loggers.
-  auto memoryLogger = std::make_shared<InMemoryLog>();
+  const auto memoryLogger = std::make_shared<InMemoryLog>();
   std::vector<std::shared_ptr<RebalancerLog>> loggers = {
       std::make_shared<StreamLog>(), memoryLogger};
   if (logger) {
     loggers.push_back(logger);
   }
-  auto multiLogger = std::make_shared<MultiLog>(std::move(loggers));
+  const auto logCollector = std::make_shared<LogCollector>(std::move(loggers));
 
   algopt::treeprof::EventRecorder materializationEvent("Materialization");
 
-  printAndLogProblemDefinition(universe, multiLogger);
+  printAndLogProblemDefinition(universe, *logCollector);
 
   // TODO (T180294479): remove this once we add a check in ProblemChecker to
   // prevent object dimensions with negative values
@@ -318,7 +317,7 @@ AssignmentSolution CoreSolver::materializeAndSolve(
       wrappedExecutor,
       universe,
       solver->needs_continuous_expressions(),
-      multiLogger,
+      logCollector,
       *problemSpec.publishMetrics(),
       *problemSpec.enableInvalidMoveFilter());
   materialize.stop();
@@ -328,12 +327,12 @@ AssignmentSolution CoreSolver::materializeAndSolve(
 
   // TODO: remove the concept of ProblemConfigs
   auto config = makeProblemConfig(
-      problemSpec, multiLogger, executor, enableParallelizedNewMaterializer);
+      problemSpec, logCollector, executor, enableParallelizedNewMaterializer);
   config.learnedInvalidMoveFilter = std::move(learnedInvalidMoveFilter);
 
   algopt::treeprof::EventRecorder initProblemEvent("Initialize Problem");
 
-  Problem problem(universe, materialized, config, multiLogger);
+  Problem problem(universe, materialized, config, logCollector);
   initProblemEvent.stop();
 
   if (auto decompositionScopeName = problemSpec.decompositionScopeName()) {
@@ -343,7 +342,7 @@ AssignmentSolution CoreSolver::materializeAndSolve(
   // Initial summary.
   logSummary(
       *materialized,
-      *multiLogger,
+      *logCollector,
       *universe,
       problem.initial_assignment,
       false);
@@ -365,7 +364,7 @@ AssignmentSolution CoreSolver::materializeAndSolve(
 
   // Final summary.
   const algopt::treeprof::EventRecorder logEvent("log solution summary");
-  logSummary(*materialized, *multiLogger, *universe, problem.assignment, true);
+  logSummary(*materialized, *logCollector, *universe, problem.assignment, true);
 
   solution.runId() = *problemSpec.runId();
 
@@ -398,13 +397,13 @@ AssignmentSolution CoreSolver::materializeAndSolve(
 
   solution.numContainers() = problem.containers.size();
 
-  logSolutionStats(solution, multiLogger, problem);
+  logSolutionStats(solution, *logCollector, problem);
   return solution;
 }
 
 ProblemConfigs CoreSolver::makeProblemConfig(
     const AssignmentProblem& problemSpec,
-    std::shared_ptr<RebalancerLog> logger,
+    std::shared_ptr<LogCollector> logger,
     std::shared_ptr<folly::ThreadPoolExecutor> executor,
     bool enableParallelMaterializer) {
   ProblemConfigs problemConfig{

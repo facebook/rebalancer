@@ -4,6 +4,7 @@
 
 #include "algopt/rebalancer/algopt_common/Timer.h"
 #include "algopt/rebalancer/common/CoroUtils.h"
+#include "algopt/rebalancer/common/log/LogCollector.h"
 #include "algopt/rebalancer/entities/Identifiers.h"
 #include "algopt/rebalancer/entities/Universe.h"
 #include "algopt/rebalancer/interface/Constants.h"
@@ -1009,7 +1010,7 @@ ExplorerModel LoadModel::buildData(interface::Bundle&& bundle) {
       wrappedExecutor,
       universe,
       solver->needs_continuous_expressions(),
-      std::make_shared<RebalancerLog>(),
+      std::make_shared<LogCollector>(),
       /*shouldCollectMetrics=*/true);
 
   const ProblemConfigs problemConfigs{

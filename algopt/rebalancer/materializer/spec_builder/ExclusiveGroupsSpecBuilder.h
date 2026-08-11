@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include "algopt/rebalancer/common/log/RebalancerLog.h"
+#include "algopt/rebalancer/common/log/LogCollector.h"
 #include "algopt/rebalancer/materializer/spec_builder/SpecBuilder.h"
 #include "algopt/rebalancer/materializer/utils/ExpressionBuilder.h"
 
@@ -25,7 +25,7 @@ class ExclusiveGroupsSpecBuilder : public SpecBuilder {
   ExclusiveGroupsSpecBuilder(
       std::shared_ptr<const entities::Universe> universe,
       interface::ExclusiveGroupsSpec spec,
-      std::shared_ptr<RebalancerLog> logger);
+      std::shared_ptr<LogCollector> logger);
 
   folly::coro::Task<ExprPtr> goalCoro(
       ExpressionBuilder& expressionBuilder) const override;
@@ -46,7 +46,7 @@ class ExclusiveGroupsSpecBuilder : public SpecBuilder {
 
  private:
   interface::ExclusiveGroupsSpec spec_;
-  std::shared_ptr<RebalancerLog> logger_;
+  std::shared_ptr<LogCollector> logger_;
   // this depends on mapping of scope items to groups and is set after we call
   // constraint(...)
   mutable std::string taggingDescription_ = "unset";

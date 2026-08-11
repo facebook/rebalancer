@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "algopt/rebalancer/common/log/RebalancerLog.h"
+#include "algopt/rebalancer/common/log/LogCollector.h"
 #include "algopt/rebalancer/materializer/spec_builder/SpecBuilderFactory.h"
 #include "algopt/rebalancer/materializer/utils/tests/SpecBuilderTestBase.h"
 
@@ -21,7 +21,7 @@
 #include <memory>
 
 namespace facebook::rebalancer::materializer::tests {
-using facebook::rebalancer::RebalancerLog;
+using facebook::rebalancer::LogCollector;
 
 class SpecBuilderFactoryTest : public SpecBuilderTestBase<> {
  protected:
@@ -36,7 +36,7 @@ class SpecBuilderFactoryTest : public SpecBuilderTestBase<> {
 
 TEST_F(SpecBuilderFactoryTest, CapacitySpecGoal) {
   const SpecBuilderFactory factory(
-      buildUniverse(), false, std::make_shared<RebalancerLog>());
+      buildUniverse(), false, std::make_shared<LogCollector>());
 
   interface::CapacitySpec spec;
   spec.scope() = "host";
@@ -52,7 +52,7 @@ TEST_F(SpecBuilderFactoryTest, CapacitySpecGoal) {
 
 TEST_F(SpecBuilderFactoryTest, CapacitySpecConstraint) {
   const SpecBuilderFactory factory(
-      buildUniverse(), false, std::make_shared<RebalancerLog>());
+      buildUniverse(), false, std::make_shared<LogCollector>());
 
   interface::CapacitySpec spec;
   spec.scope() = "host";

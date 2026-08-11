@@ -14,6 +14,7 @@
 
 #include "algopt/rebalancer/algopt_common/thrift/gen-cpp2/Types_types.h"
 #include "algopt/rebalancer/common/log/InMemoryLog.h"
+#include "algopt/rebalancer/common/log/LogCollector.h"
 #include "algopt/rebalancer/entities/tests/UniverseBuilderTestUtils.h"
 #include "algopt/rebalancer/interface/ProblemSolver.h"
 #include "algopt/rebalancer/solver/expressions/LinearSum.h"
@@ -69,9 +70,9 @@ class LocalSearchEvalApplyDisagreementTest
 
 TEST_F(LocalSearchEvalApplyDisagreementTest, UndoesMoveAndFinishesSearch) {
   const auto universe = buildNetZeroUniverse();
-  auto logger = std::make_shared<InMemoryLog>();
+  const auto memoryLog = std::make_shared<InMemoryLog>();
   ProblemConfigs config;
-  config.logger = logger;
+  config.logger = std::make_shared<LogCollector>(memoryLog);
 
   auto problem = packer::tests::createTestProblem(
       universe,
@@ -88,7 +89,7 @@ TEST_F(LocalSearchEvalApplyDisagreementTest, UndoesMoveAndFinishesSearch) {
   LocalSearchSolver solver(std::move(spec));
   EXPECT_TRUE(solver.solve(*problem));
 
-  const auto& summaries = logger->getSolverSummaries();
+  const auto& summaries = memoryLog->getSolverSummaries();
   ASSERT_EQ(1, summaries.size());
   const auto& summary = summaries.front();
   EXPECT_EQ(
@@ -98,11 +99,11 @@ TEST_F(LocalSearchEvalApplyDisagreementTest, UndoesMoveAndFinishesSearch) {
   ASSERT_TRUE(summary.moveStats.has_value());
   EXPECT_EQ(0, *summary.moveStats->numMoves());
 
-  EXPECT_TRUE(logger->flushMoves().empty());
+  EXPECT_TRUE(memoryLog->flushMoves().empty());
   EXPECT_EQ(container(0), problem->assignment.getContainer(object(0)));
   EXPECT_DOUBLE_EQ(kInitialValue, problem->objective.getValue().get(0));
 
-  const auto& profiles = logger->getLocalSearchProfiles();
+  const auto& profiles = memoryLog->getLocalSearchProfiles();
   ASSERT_EQ(1, profiles.size());
   ASSERT_EQ(1, profiles.front().moveTypeEvents()->size());
   const auto& event = profiles.front().moveTypeEvents()->front();
@@ -129,9 +130,9 @@ TEST_F(
   // evaluation, but it is neutral after apply; the second objective improves
   // when object1 leaves container2. Search should reject the first move and
   // apply the second.
-  auto logger = std::make_shared<InMemoryLog>();
+  const auto memoryLog = std::make_shared<InMemoryLog>();
   ProblemConfigs config;
-  config.logger = logger;
+  config.logger = std::make_shared<LogCollector>(memoryLog);
 
   const Assignment assignment(universe->getContainers().getInitialAssignment());
   const auto constraint =
@@ -159,7 +160,7 @@ TEST_F(
   EXPECT_EQ(container(0), problem->assignment.getContainer(object(0)));
   EXPECT_EQ(container(3), problem->assignment.getContainer(object(1)));
 
-  const auto moves = logger->flushMoves();
+  const auto moves = memoryLog->flushMoves();
   ASSERT_EQ(1, moves.size());
   ASSERT_EQ(1, moves.front().moves()->size());
   EXPECT_EQ("object1", *moves.front().moves()->front().object());
@@ -183,9 +184,9 @@ TEST_F(
   // the best-looking move is rejected post-apply, search skips the remaining
   // candidates from that move type, even though moving object1 would satisfy
   // the constraints and improve objective2.
-  auto logger = std::make_shared<InMemoryLog>();
+  const auto memoryLog = std::make_shared<InMemoryLog>();
   ProblemConfigs config;
-  config.logger = logger;
+  config.logger = std::make_shared<LogCollector>(memoryLog);
 
   const Assignment assignment(universe->getContainers().getInitialAssignment());
   const auto constraint =
@@ -211,7 +212,7 @@ TEST_F(
   EXPECT_EQ(container(0), problem->assignment.getContainer(object(0)));
   EXPECT_EQ(container(0), problem->assignment.getContainer(object(1)));
 
-  const auto moves = logger->flushMoves();
+  const auto moves = memoryLog->flushMoves();
   EXPECT_TRUE(moves.empty());
 }
 
@@ -232,9 +233,9 @@ TEST_F(
   // SingleFast first selects object0's move, which is neutral after apply.
   // Single then considers the same hot container and moves object1, which
   // satisfies the constraints and improves the objective.
-  auto logger = std::make_shared<InMemoryLog>();
+  const auto memoryLog = std::make_shared<InMemoryLog>();
   ProblemConfigs config;
-  config.logger = logger;
+  config.logger = std::make_shared<LogCollector>(memoryLog);
 
   const Assignment assignment(universe->getContainers().getInitialAssignment());
   const auto constraint =
@@ -263,7 +264,7 @@ TEST_F(
   EXPECT_EQ(container(0), problem->assignment.getContainer(object(0)));
   EXPECT_EQ(container(2), problem->assignment.getContainer(object(1)));
 
-  const auto moves = logger->flushMoves();
+  const auto moves = memoryLog->flushMoves();
   ASSERT_EQ(1, moves.size());
   ASSERT_EQ(1, moves.front().moves()->size());
   EXPECT_EQ("object1", *moves.front().moves()->front().object());

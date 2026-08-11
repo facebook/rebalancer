@@ -78,7 +78,7 @@ namespace facebook::rebalancer::materializer {
 SpecBuilderFactory::SpecBuilderFactory(
     std::shared_ptr<const Universe> universe,
     bool continuousExpressions,
-    std::shared_ptr<RebalancerLog> logger)
+    std::shared_ptr<LogCollector> logger)
     : universe_(std::move(universe)),
       continuousExpressions_(continuousExpressions),
       logger_(std::move(logger)) {}

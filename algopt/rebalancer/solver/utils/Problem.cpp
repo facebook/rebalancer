@@ -64,7 +64,7 @@ Problem::Problem(
     std::shared_ptr<const entities::Universe> universe,
     const std::shared_ptr<const MaterializedProblem> materializedProblem,
     const ProblemConfigs& configs,
-    std::shared_ptr<RebalancerLog> logger)
+    std::shared_ptr<LogCollector> logger)
     : universe_(std::move(universe)),
       objective(materializedProblem->globalObjective),
       configs(configs),

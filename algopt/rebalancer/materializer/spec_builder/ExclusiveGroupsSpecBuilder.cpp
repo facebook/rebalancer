@@ -28,7 +28,7 @@ namespace facebook::rebalancer::materializer {
 ExclusiveGroupsSpecBuilder::ExclusiveGroupsSpecBuilder(
     std::shared_ptr<const Universe> universe,
     interface::ExclusiveGroupsSpec spec,
-    std::shared_ptr<RebalancerLog> logger)
+    std::shared_ptr<LogCollector> logger)
     : SpecBuilder(std::move(universe)),
       spec_(std::move(spec)),
       logger_(std::move(logger)) {}

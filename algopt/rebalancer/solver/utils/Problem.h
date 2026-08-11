@@ -73,8 +73,7 @@ class Problem {
       std::shared_ptr<const entities::Universe> universe,
       const std::shared_ptr<const MaterializedProblem> materializedProblem,
       const ProblemConfigs& configs = ProblemConfigs(),
-      std::shared_ptr<RebalancerLog> logger =
-          std::make_shared<RebalancerLog>());
+      std::shared_ptr<LogCollector> logger = std::make_shared<LogCollector>());
 
   friend class OptimalSolver;
   friend class LocalSearchSolver;
@@ -288,7 +287,7 @@ class Problem {
 
   std::shared_ptr<ObjectsToExploreGenerator> objectsGenerator_;
 
-  std::shared_ptr<RebalancerLog> logger_;
+  std::shared_ptr<LogCollector> logger_;
 
   std::shared_ptr<algopt::treeprof::ExecutorWrapper> wrappedExecutor_;
   EntityAttributesStore entityAttributesStore_;

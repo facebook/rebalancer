@@ -15,6 +15,7 @@
 #pragma once
 
 #include "algopt/rebalancer/common/log/InMemoryLog.h"
+#include "algopt/rebalancer/common/log/LogCollector.h"
 #include "algopt/rebalancer/common/log/RebalancerLog.h"
 #include "algopt/rebalancer/entities/Universe.h"
 #include "algopt/rebalancer/interface/thrift/gen-cpp2/AssignmentProblem_types.h"
@@ -64,7 +65,7 @@ class CoreSolver {
 
   static ProblemConfigs makeProblemConfig(
       const AssignmentProblem& problemSpec,
-      std::shared_ptr<RebalancerLog> logger,
+      std::shared_ptr<LogCollector> logger,
       std::shared_ptr<folly::ThreadPoolExecutor> executor,
       bool enableParallelMaterializer = false);
 

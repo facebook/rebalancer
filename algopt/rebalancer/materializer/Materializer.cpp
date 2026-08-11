@@ -55,7 +55,7 @@ const std::shared_ptr<const MaterializedProblem> Materializer::materialize(
     std::shared_ptr<algopt::treeprof::ExecutorWrapper> executor,
     std::shared_ptr<const Universe> universe,
     bool continuousExpressions,
-    std::shared_ptr<RebalancerLog> logger,
+    std::shared_ptr<LogCollector> logger,
     bool shouldCollectMetrics,
     bool enableInvalidMoveFilter) {
   Materializer materializer(
@@ -72,7 +72,7 @@ Materializer::Materializer(
     std::shared_ptr<algopt::treeprof::ExecutorWrapper> executor,
     std::shared_ptr<const entities::Universe> universe,
     bool continuousExpressions,
-    std::shared_ptr<RebalancerLog> logger,
+    std::shared_ptr<LogCollector> logger,
     bool shouldCollectMetrics,
     bool enableInvalidMoveFilter)
     : executor_(std::move(executor)),
