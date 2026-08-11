@@ -19,6 +19,7 @@
 
 #include <memory>
 #include <optional>
+#include <thread>
 #include <vector>
 
 namespace facebook::rebalancer {
@@ -26,12 +27,60 @@ namespace {
 
 class RecordingLog final : public RebalancerLog {
  public:
+  void log(const SolverSummary& info) override {
+    solverSummary = info;
+  }
+
   void log(const GenericInfo& info) override {
     genericInfo = info;
   }
 
+  std::optional<SolverSummary> solverSummary;
   std::optional<GenericInfo> genericInfo;
 };
+
+TEST(LogCollectorTest, RetainsSolverSummaryAndForwardsItToLogs) {
+  const auto log = std::make_shared<RecordingLog>();
+  LogCollector collector(log);
+  const SolverSummary summary{
+      .solverType = SolverType::LOCAL_SEARCH,
+      .endReason = interface::EndReason::UNABLE_TO_FIND_IMPROVING_MOVES,
+      .auxInfo = std::nullopt,
+      .evalStats = std::nullopt,
+      .moveStats = std::nullopt,
+      .stagesSummaries = std::nullopt,
+  };
+
+  collector.log(summary);
+  const auto data = collector.takeLoggedData();
+
+  ASSERT_TRUE(log->solverSummary.has_value());
+  EXPECT_EQ(log->solverSummary->endReason, summary.endReason);
+  ASSERT_EQ(data.solverSummaries.size(), 1);
+  EXPECT_EQ(data.solverSummaries.front().endReason, summary.endReason);
+}
+
+TEST(LogCollectorTest, RetainsLogsWrittenConcurrently) {
+  constexpr int kThreadCount = 8;
+  constexpr int kLogsPerThread = 100;
+  LogCollector collector;
+  std::vector<std::thread> threads;
+  threads.reserve(kThreadCount);
+
+  for (int threadIndex = 0; threadIndex < kThreadCount; ++threadIndex) {
+    threads.emplace_back([&collector] {
+      for (int logIndex = 0; logIndex < kLogsPerThread; ++logIndex) {
+        collector.log(interface::SpecMetadata{});
+      }
+    });
+  }
+  for (auto& thread : threads) {
+    thread.join();
+  }
+
+  const auto data = collector.takeLoggedData();
+  EXPECT_EQ(data.specMetadata.size(), kThreadCount * kLogsPerThread);
+}
 
 TEST(LogCollectorTest, ForwardsDataToEveryLog) {
   const auto firstLog = std::make_shared<RecordingLog>();

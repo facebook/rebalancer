@@ -15,25 +15,58 @@
 #pragma once
 
 #include "algopt/rebalancer/common/log/RebalancerLog.h"
+#include <algopt/rebalancer/interface/thrift/gen-cpp2/Metrics_types.h>
+
+#include <folly/Synchronized.h>
 
 #include <memory>
+#include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace facebook::rebalancer {
 
 class LogCollector final {
  public:
+  struct Data {
+    std::vector<interface::MovesSummary> moves;
+    std::vector<interface::GlobalObjectiveSummary> objectiveSummaries;
+    std::vector<interface::ConstraintSummary> constraintSummaries;
+    std::vector<SolverSummary> solverSummaries;
+    std::optional<interface::FinalEvaluationSummary> finalEvaluationSummary;
+    std::vector<interface::LocalSearchProfile> localSearchProfiles;
+    std::vector<interface::SpecMetadata> specMetadata;
+    std::vector<interface::thrift::Metrics> metrics;
+  };
+
   explicit LogCollector(
       std::vector<std::shared_ptr<RebalancerLog>> loggers = {});
   explicit LogCollector(std::shared_ptr<RebalancerLog> logger);
+
+  ~LogCollector() = default;
+  LogCollector(const LogCollector&) = delete;
+  LogCollector(LogCollector&&) = delete;
+  LogCollector& operator=(const LogCollector&) = delete;
+  LogCollector& operator=(LogCollector&&) = delete;
 
   template <class T>
   void log(const T& info) {
     notify(info);
   }
 
+  void log(const interface::GlobalObjectiveSummary& info);
+  void log(const interface::ConstraintSummary& info);
+  void log(const interface::MovesSummary& info);
+  void log(const SolverSummary& info);
+  void log(const interface::FinalEvaluationSummary& info);
+  void log(const interface::LocalSearchProfile& info);
+  void log(const interface::SpecMetadata& info);
+  void log(const interface::thrift::Metrics& metrics);
+
   void setLoggingLabel(const std::string& label);
+
+  Data takeLoggedData();
 
  private:
   template <class T>
@@ -43,6 +76,14 @@ class LogCollector final {
     }
   }
 
+  template <class T>
+  void notifyAndStore(T info, std::vector<T> Data::* field) {
+    notify(info);
+    data_.withWLock(
+        [&](Data& data) { (data.*field).push_back(std::move(info)); });
+  }
+
+  folly::Synchronized<Data> data_;
   std::vector<std::shared_ptr<RebalancerLog>> loggers_;
 };
 

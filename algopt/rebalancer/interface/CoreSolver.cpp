@@ -38,6 +38,7 @@
 
 #include <memory>
 #include <sstream>
+#include <string_view>
 #include <vector>
 
 namespace {
@@ -56,6 +57,21 @@ std::shared_ptr<folly::CPUThreadPoolExecutor> getSerialExecutor() {
           folly::QueueBehaviorIfFull::BLOCK>>(
           folly::CPUThreadPoolExecutor::kDefaultMaxQueueSize),
       std::make_shared<folly::NamedThreadFactory>("CPUThreadPool"));
+}
+
+void checkSummaryCount(size_t count, std::string_view name) {
+  if (count != 2) {
+    throw std::runtime_error(
+        fmt::format("expected 2 '{}' summaries but found {}", name, count));
+  }
+}
+
+void validateDataForSolution(const LogCollector::Data& data) {
+  checkSummaryCount(data.objectiveSummaries.size(), "objective");
+  checkSummaryCount(data.constraintSummaries.size(), "constraint");
+  if (!data.metrics.empty()) {
+    checkSummaryCount(data.metrics.size(), "metric");
+  }
 }
 
 void logIfThereAreNegativeDimensionValues(
@@ -279,9 +295,8 @@ AssignmentSolution CoreSolver::materializeAndSolve(
     std::shared_ptr<const entities::Universe> universe,
     std::shared_ptr<const InvalidMoveFilter> learnedInvalidMoveFilter) {
   Timer timer(true);
-  const auto memoryLogger = std::make_shared<InMemoryLog>();
   std::vector<std::shared_ptr<RebalancerLog>> loggers = {
-      std::make_shared<StreamLog>(), memoryLogger};
+      std::make_shared<StreamLog>()};
   if (logger) {
     loggers.push_back(logger);
   }
@@ -389,7 +404,7 @@ AssignmentSolution CoreSolver::materializeAndSolve(
         *solution.assignment(), finalObjectIds, containerName);
   }
 
-  appendLoggedData(solution, *memoryLogger);
+  populateSolutionFromLogs(solution, *logCollector);
 
   if (*problemSpec.publishEquivalenceSetsInfo()) {
     solution.equivalenceSetInfo() = problem.makeEquivalenceSetInfo();
@@ -479,39 +494,45 @@ void CoreSolver::initSubproblemDecomposition(
   problem.containerToSubproblemId = std::move(containerToSubproblemId);
 }
 
-void CoreSolver::appendLoggedData(
+void CoreSolver::populateSolutionFromLogs(
     AssignmentSolution& solution,
-    InMemoryLog& memoryLogger) {
-  solution.initialGlobalObjective() = memoryLogger.getInitialObjective();
+    LogCollector& logCollector) {
+  auto data = logCollector.takeLoggedData();
+  validateDataForSolution(data);
+  solution.initialGlobalObjective() = std::move(data.objectiveSummaries.at(0));
   solution.initialObjective() =
       solution.initialGlobalObjective()->goals()->at(0);
-  solution.initialConstraint() = memoryLogger.getInitialConstraint();
-  solution.finalGlobalObjective() = memoryLogger.getFinalObjective();
+  solution.initialConstraint() = std::move(data.constraintSummaries.at(0));
+  solution.finalGlobalObjective() = std::move(data.objectiveSummaries.at(1));
   solution.finalObjective() = solution.finalGlobalObjective()->goals()->at(0);
-  solution.finalConstraint() = memoryLogger.getFinalConstraint();
-  solution.initialMetrics() = memoryLogger.getInitialMetrics();
-  solution.finalMetrics() = memoryLogger.getFinalMetrics();
-  solution.movesSummary() = memoryLogger.flushMoves();
-  for (auto& summary : memoryLogger.getSolverSummaries()) {
+  solution.finalConstraint() = std::move(data.constraintSummaries.at(1));
+  solution.initialMetrics() =
+      data.metrics.empty() ? thrift::Metrics() : std::move(data.metrics.at(0));
+  solution.finalMetrics() =
+      data.metrics.empty() ? thrift::Metrics() : std::move(data.metrics.at(1));
+  solution.movesSummary() = std::move(data.moves);
+  for (auto& summary : data.solverSummaries) {
     SolverReport solverReport;
     solverReport.endReason() = summary.endReason;
     if (summary.evalStats) {
-      solverReport.evalStats() = *(summary.evalStats);
+      solverReport.evalStats() = std::move(*summary.evalStats);
     }
     if (summary.moveStats) {
-      solverReport.moveStats() = *(summary.moveStats);
+      solverReport.moveStats() = std::move(*summary.moveStats);
     }
     if (summary.stagesSummaries) {
-      solverReport.stagesSummaries() = *summary.stagesSummaries;
+      solverReport.stagesSummaries() = std::move(*summary.stagesSummaries);
     }
     solution.solverSummaries()->push_back(std::move(solverReport));
   }
   solution.finalEvaluationSummary().from_optional(
-      memoryLogger.getFinalEvaluationSummary());
+      std::move(data.finalEvaluationSummary));
   solution.problemProfile()->localSearchProfiles() =
-      memoryLogger.getLocalSearchProfiles();
-  for (auto& metadata : memoryLogger.getSpecMetadata()) {
-    solution.specNameToMetadata()->emplace(*metadata.specName(), metadata);
+      std::move(data.localSearchProfiles);
+  for (auto& metadata : data.specMetadata) {
+    auto specName = *metadata.specName();
+    solution.specNameToMetadata()->emplace(
+        std::move(specName), std::move(metadata));
   }
 }
 

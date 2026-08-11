@@ -14,7 +14,6 @@
 
 #pragma once
 
-#include "algopt/rebalancer/common/log/InMemoryLog.h"
 #include "algopt/rebalancer/common/log/LogCollector.h"
 #include "algopt/rebalancer/common/log/RebalancerLog.h"
 #include "algopt/rebalancer/entities/Universe.h"
@@ -74,9 +73,9 @@ class CoreSolver {
       const entities::Universe& universe,
       const std::string& decompositionScopeName);
 
-  static void appendLoggedData(
+  static void populateSolutionFromLogs(
       AssignmentSolution& solution,
-      InMemoryLog& memoryLogger);
+      LogCollector& logCollector);
 };
 
 } // namespace interface
