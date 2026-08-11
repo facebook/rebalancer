@@ -2,7 +2,6 @@
 
 #include "algopt/rebalancer/algopt_common/Timer.h"
 #include "algopt/rebalancer/algopt_common/Utils.h"
-#include "algopt/rebalancer/common/CoroUtils.h"
 #include "algopt/rebalancer/entities/Identifiers.h"
 #include "algopt/rebalancer/interface/serialization/Serializer.h"
 #include "algopt/rebalancer/interface/thrift/gen-cpp2/Types_types.h"
@@ -15,6 +14,7 @@
 #include "rebalancer/explorer/cpp_server/lib/MetricsTabulator.h"
 #include "rebalancer/explorer/if/gen-cpp2/explorer_types.h"
 
+#include <folly/coro/BlockingWait.h>
 #include <folly/executors/CPUThreadPoolExecutor.h>
 #include <folly/futures/Future.h>
 #include <folly/system/HardwareConcurrency.h>
@@ -28,10 +28,15 @@
 
 #include <algorithm>
 #include <iterator>
-#include <queue>
+#include <optional>
+#include <stack>
 #include <stdexcept>
 #include <string>
 #include <vector>
+
+namespace facebook::rebalancer::explorer {
+
+using namespace facebook::rebalancer::entities;
 
 namespace {
 // Constants for exportTable
@@ -49,11 +54,116 @@ const static std::string kObjectiveColDesc =
     "Value w.r.t. moveSet i is the change in value of this objective as a result of applying moveSet i";
 const static std::string kMoveSetColDesc =
     "MoveSet i is the set of moves applied together during the i-th step of local search.";
+
+enum class VisitPhase { ENTER, EXIT };
+
+struct ExpressionVisit {
+  const Expression* expression;
+  VisitPhase phase;
+};
+
+using ExpressionId = int64_t;
+
+struct SearchEntityIds {
+  std::optional<ContainerId> containerId;
+  std::optional<ObjectId> objectId;
+};
+
+struct TreeSearchResult {
+  bool entityFound;
+  Set<ExpressionId> matchingChildIds;
+};
+
+SearchEntityIds resolveEntityIds(
+    const std::string& query,
+    const Universe& universe) {
+  SearchEntityIds result;
+  try {
+    result.containerId = universe.getContainerId(query);
+  } catch (const std::out_of_range&) {
+  }
+  try {
+    result.objectId = universe.getObjectId(query);
+  } catch (const std::out_of_range&) {
+  }
+  return result;
+}
+
+bool referencesAnyEntity(
+    const Expression* expression,
+    const SearchEntityIds& entityIds) {
+  return (entityIds.containerId.has_value() &&
+          expression->references(*entityIds.containerId)) ||
+      (entityIds.objectId.has_value() &&
+       expression->references(*entityIds.objectId));
+}
+
+TreeSearchResult findMatchingChildren(
+    const Expression* root,
+    const std::string& query,
+    const Universe& universe) {
+  const auto entityIds = resolveEntityIds(query, universe);
+  TreeSearchResult result{
+      .entityFound =
+          entityIds.containerId.has_value() || entityIds.objectId.has_value(),
+      .matchingChildIds = {}};
+  if (!result.entityFound) {
+    return result;
+  }
+
+  // O(V + E) time and memory for the requested subgraph which is a DAG.
+  Map<const Expression*, bool> exprToMatches;
+  std::stack<ExpressionVisit> toVisit;
+  for (const auto& child : root->children()) {
+    toVisit.push({child.get(), VisitPhase::ENTER});
+  }
+
+  while (!toVisit.empty()) {
+    const auto [expression, phase] = toVisit.top();
+    toVisit.pop();
+    if (exprToMatches.contains(expression)) {
+      continue;
+    }
+
+    switch (phase) {
+      case VisitPhase::ENTER: {
+        if (referencesAnyEntity(expression, entityIds)) {
+          exprToMatches.emplace(expression, true);
+          break;
+        }
+
+        // Visit children before propagating their matches to this expression.
+        toVisit.push({expression, VisitPhase::EXIT});
+        for (const auto& child : expression->children()) {
+          toVisit.push({child.get(), VisitPhase::ENTER});
+        }
+
+        break;
+      }
+      case VisitPhase::EXIT: {
+        const auto& children = expression->children();
+        exprToMatches.emplace(
+            expression,
+            std::any_of(
+                children.begin(),
+                children.end(),
+                [&exprToMatches](const auto& child) {
+                  return exprToMatches.at(child.get());
+                }));
+
+        break;
+      }
+    }
+  }
+
+  for (const auto& child : root->children()) {
+    if (exprToMatches.at(child.get())) {
+      result.matchingChildIds.insert(child->getId());
+    }
+  }
+  return result;
+}
 } // namespace
-
-namespace facebook::rebalancer::explorer {
-
-using namespace facebook::rebalancer::entities;
 
 ModelServer::ModelServer(interface::Bundle&& bundle) {
   auto explorerModel = LoadModel::buildData(std::move(bundle));
@@ -103,18 +213,10 @@ ModelServer::ModelServer(interface::Bundle&& bundle) {
 
   initExpressionIdToPtr();
 
-  // Start initPropertiesIndex asynchronously - will be awaited in getTreeNode
-  startPropertiesIndexAsync();
-
   startMetricsAndObjectiveInitAsync();
 }
 
 ModelServer::~ModelServer() {
-  try {
-    waitForPropertiesIndex();
-  } catch (const std::exception& e) {
-    XLOG(ERR) << "Exception in waitForPropertiesIndex: " << e.what();
-  }
   try {
     waitForMetricsAndObjectiveInit();
   } catch (const std::exception& e) {
@@ -1246,74 +1348,28 @@ EditProblemResponse ModelServer::editProblem(
 #endif
 }
 
-Set<int64_t> ModelServer::getReachableAncestors(
-    const std::vector<Expression*>& startNodes) const {
-  Set<int64_t> result;
-  std::queue<Expression*> toVisit;
-
-  // Initialize queue with all start nodes
-  for (auto* node : startNodes) {
-    toVisit.push(node);
-  }
-
-  const auto& nodeToParents = problem_->getOrchestrator().getNodeToParents();
-  while (!toVisit.empty()) {
-    auto* current = toVisit.front();
-    toVisit.pop();
-
-    if (!result.insert(current->getId()).second) {
-      continue;
-    }
-
-    if (auto* parentsPtr = folly::get_ptr(nodeToParents, current)) {
-      for (const auto& parent : *parentsPtr) {
-        toVisit.push(parent);
-      }
-    }
-  }
-
-  return result;
-}
-
 TreeNodeResponse ModelServer::getTreeNode(
     const TreeNodeRequest& request) const {
   // Ensure initObjectiveNameToExpr() has completed before evaluating
   // expressions
   waitForMetricsAndObjectiveInit();
-  Set<int64_t> relatedNodes;
-  if (request.search()->query().has_value()) {
-    const auto& searchQuery = *request.search()->query();
+  const auto* expression = expressionIdToPtr_.at(*request.expressionId());
 
-    // Wait for entityIdToNodes_ initialization (started async in constructor)
-    waitForPropertiesIndex();
-
-    // Collect all matching leaf nodes first
-    std::vector<Expression*> matchingNodes;
-
-    // Helper to try finding an entity by name and add matching nodes
-    const auto tryFindEntity = [&](auto getEntityId) {
-      try {
-        if (auto* exprs =
-                folly::get_ptr(entityIdToNodes_, toEntityId(getEntityId()))) {
-          matchingNodes.insert(
-              matchingNodes.end(), exprs->begin(), exprs->end());
-        }
-      } catch (const std::out_of_range&) {
-      }
-    };
-
-    tryFindEntity([&] { return universe_->getContainerId(searchQuery); });
-    tryFindEntity([&] { return universe_->getObjectId(searchQuery); });
-
-    if (matchingNodes.empty()) {
-      XLOG(INFO) << "getTreeNode called with search query: "
-                 << *request.search()->query() << " not found";
+  auto queryRef = request.search()->query();
+  std::optional<Set<ExpressionId>> matchingChildIds;
+  if (queryRef.has_value() && !queryRef->empty()) {
+    auto searchResult = findMatchingChildren(expression, *queryRef, *universe_);
+    std::string_view searchStatus;
+    if (!searchResult.entityFound) {
+      searchStatus = "unknown entity";
+    } else if (searchResult.matchingChildIds.empty()) {
+      searchStatus = "no matching children";
     } else {
-      // Single BFS to find all reachable ancestors
-      relatedNodes = getReachableAncestors(matchingNodes);
-      XLOG(INFO) << "getTreeNode called with search query: "
-                 << *request.search()->query() << " found";
+      searchStatus = "found";
     }
+    XLOG(INFO) << "getTreeNode called with search query: " << *queryRef << ' '
+               << searchStatus;
+    matchingChildIds = std::move(searchResult.matchingChildIds);
   }
 
   const auto computeBoundAndAddToProperties = [](const Expression* expr,
@@ -1335,7 +1391,6 @@ TreeNodeResponse ModelServer::getTreeNode(
     }
   };
 
-  auto expression = expressionIdToPtr_.at(*request.expressionId());
   Context sourceContext;
   sourceContext.changes() = getChangesFromInitial(*request.sourceAssignment());
 
@@ -1359,14 +1414,9 @@ TreeNodeResponse ModelServer::getTreeNode(
   properties = replaceIdsWithNames(expression->getProperties());
   computeBoundAndAddToProperties(expression, properties, sourceContext);
 
-  const bool filterBySearch =
-      apache::thrift::is_non_optional_field_set_manually_or_by_serializer(
-          request.search()) &&
-      request.search()->query().has_value() &&
-      !request.search()->query().value().empty();
-
   for (const auto& child : expression->children()) {
-    if (filterBySearch && !relatedNodes.contains(child->getId())) {
+    if (matchingChildIds.has_value() &&
+        !matchingChildIds->contains(child->getId())) {
       continue;
     }
     TreeNode node;
@@ -1447,105 +1497,6 @@ void ModelServer::initExpressionIdToPtr(Expression* expression) {
   for (const auto& child : expression->children()) {
     initExpressionIdToPtr(child.get());
   }
-}
-
-namespace {
-// Process a single node's properties and return entity-to-node pairs
-std::vector<std::pair<EntityId, Expression*>> getNodeEntityPairs(
-    Expression* node) {
-  std::vector<std::pair<EntityId, Expression*>> entries;
-  const auto properties = node->getProperties();
-  const auto& propsMap = *properties.properties();
-
-  for (const auto& [propName, propValue] : propsMap) {
-    // Check for single container ID
-    if (propValue.valueContainerId().has_value()) {
-      entries.emplace_back(
-          EntityId(propValue.valueContainerId()->value().value()), node);
-    }
-
-    // Check for container ID list
-    if (propValue.valueContainerIdList().has_value()) {
-      for (auto containerInt :
-           propValue.valueContainerIdList()->value().value()) {
-        entries.emplace_back(EntityId(containerInt), node);
-      }
-    }
-
-    // Check for single object ID
-    if (propValue.valueObjectId().has_value()) {
-      entries.emplace_back(
-          EntityId(propValue.valueObjectId()->value().value()), node);
-    }
-
-    // Check for object ID to double map (keys are object IDs)
-    if (propValue.valueObjectIdDoubleMap().has_value()) {
-      for (const auto& [objectInt, _] :
-           propValue.valueObjectIdDoubleMap()->value().value()) {
-        entries.emplace_back(EntityId(objectInt), node);
-      }
-    }
-  }
-  return entries;
-}
-} // namespace
-
-// Coroutine that processes all nodes using CoroUtils batching
-static folly::coro::Task<void> initPropertiesIndexCoro(
-    const std::vector<Expression*>& postOrder,
-    entities::Map<explorer::EntityId, std::vector<Expression*>>&
-        entityIdToNodes) {
-  using EntryVec = std::vector<std::pair<explorer::EntityId, Expression*>>;
-
-  auto result = co_await CoroUtils::runEachAndGetAccumulatedWithBatching(
-      postOrder,
-      [](auto it) -> EntryVec { return getNodeEntityPairs(*it); },
-      [](EntryVec& accumulated, const EntryVec& batch) {
-        accumulated.insert(accumulated.end(), batch.begin(), batch.end());
-      });
-
-  // Populate the map from accumulated results
-  for (auto& [entityId, node] : result) {
-    entityIdToNodes[entityId].push_back(node);
-  }
-  co_return;
-}
-
-void ModelServer::initPropertiesIndex() {
-  // Traverse all nodes in postOrder and check their properties for containers
-  // and objects. Process nodes in parallel batches for better performance.
-  const auto& postOrder = problem_->getOrchestrator().getNodesInPostorder();
-
-  // Use blocking wait with a CPU executor. CoroUtils will automatically
-  // compute batch sizes based on the number of threads available.
-  auto executor = std::make_shared<folly::CPUThreadPoolExecutor>(
-      folly::available_concurrency());
-  folly::coro::blockingWait(
-      folly::coro::co_withExecutor(
-          executor.get(),
-          initPropertiesIndexCoro(postOrder, entityIdToNodes_)));
-}
-
-void ModelServer::startPropertiesIndexAsync() {
-  const auto& postOrder = problem_->getOrchestrator().getNodesInPostorder();
-  propertiesIndexFuture_ = co_withExecutor(
-                               executor_.get(),
-                               folly::coro::co_invoke(
-                                   [this, postOrder = std::cref(postOrder)]()
-                                       -> folly::coro::Task<folly::Unit> {
-                                     co_await initPropertiesIndexCoro(
-                                         postOrder.get(), entityIdToNodes_);
-                                     co_return folly::unit;
-                                   }))
-                               .start();
-}
-
-void ModelServer::waitForPropertiesIndex() const {
-  folly::call_once(propertiesIndexOnceFlag_, [this]() {
-    if (propertiesIndexFuture_.valid()) {
-      std::move(propertiesIndexFuture_).get();
-    }
-  });
 }
 
 void ModelServer::runMetricsAndObjectiveInit() {

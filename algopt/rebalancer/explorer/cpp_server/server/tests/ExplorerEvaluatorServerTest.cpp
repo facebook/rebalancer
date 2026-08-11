@@ -7,6 +7,7 @@
 #include <gtest/gtest.h>
 
 #include <memory>
+#include <set>
 #include <string>
 
 using namespace facebook::rebalancer::entities;
@@ -304,6 +305,49 @@ TEST_F(ExplorerEvaluatorServerTest, GetTreeNode) {
       *child1Properties.at("containers").valueContainerNameList()->value());
   EXPECT_EQ(0.0, *child1Properties.at("lower bound").valueDouble()->value());
   EXPECT_EQ(2.0, *child1Properties.at("upper bound").valueDouble()->value());
+}
+
+TEST_F(ExplorerEvaluatorServerTest, GetTreeNodeSearch) {
+  Assignment assignment;
+  assignment.base() = AssignmentBase::INITIAL;
+  const auto evaluation = model_->evaluate(assignment);
+  const auto& expression = getExpression(
+      *evaluation.expressions(),
+      "minimize movement",
+      ExpressionType::OBJECTIVE);
+
+  TreeNodeRequest request;
+  request.expressionId() = *expression.id();
+  request.childrenPage()->offset() = 0;
+  request.childrenPage()->limit() = 10;
+  request.childrenOrderDirection() = OrderDirection::ASCENDING;
+  request.childrenOrderMetric() = TreeNodeOrderMetric::SOURCE_VALUE;
+  request.destinationAssignment()->base() = AssignmentBase::FINAL;
+
+  const auto getChildIds = [&] {
+    const auto result = model_->getTreeNode(request);
+    std::set<int64_t> childIds;
+    for (const auto& child : *result.children()) {
+      childIds.insert(*child.expressionId());
+    }
+    EXPECT_EQ(result.children()->size(), childIds.size());
+    return childIds;
+  };
+
+  EXPECT_EQ(10, getChildIds().size());
+
+  request.search() = Search();
+  request.search()->query() = "host0";
+  // `host0` matches its `AFTER` and `STAYED` expressions.
+  EXPECT_EQ(2, getChildIds().size());
+
+  request.search()->query() = "task0";
+  // `task_count` defaults to `1`, so `task0` matches `AFTER` for all four hosts
+  // and out-of-scope, plus `STAYED(host0)`, where `task0` is explicit.
+  EXPECT_EQ(6, getChildIds().size());
+
+  request.search()->query() = "unknown entity";
+  EXPECT_TRUE(getChildIds().empty());
 }
 
 TEST_F(ExplorerEvaluatorServerTest, MetricsTest) {

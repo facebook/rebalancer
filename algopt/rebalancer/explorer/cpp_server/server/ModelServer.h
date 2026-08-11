@@ -146,9 +146,6 @@ class ModelServer {
   void initObjectiveNameToExpr();
   void startTableDataAsync(entities::Map<std::string, Table> tableData);
   void waitForTableData() const;
-  void initPropertiesIndex();
-  entities::Set<int64_t> getReachableAncestors(
-      const std::vector<Expression*>& startNodes) const;
   std::optional<folly::F14FastMap<std::string, std::vector<double>>>
   computeObjectiveToChangePerMoveSet() const;
 
@@ -222,17 +219,6 @@ class ModelServer {
   folly::coro::AsyncScope asyncScope_;
   TablePromises tablePromises_;
   std::shared_ptr<folly::CPUThreadPoolExecutor> executor_;
-
-  // entityIdToNodes_ mapping from entityId (container or object) to expressions
-  // that have that entity in their properties (based on getProperties())
-  // Initialized asynchronously in constructor, waited on first access
-  mutable folly::SemiFuture<folly::Unit> propertiesIndexFuture_;
-  mutable folly::once_flag propertiesIndexOnceFlag_;
-  mutable entities::Map<explorer::EntityId, std::vector<Expression*>>
-      entityIdToNodes_;
-
-  void startPropertiesIndexAsync();
-  void waitForPropertiesIndex() const;
 
   // Bundles metrics->fullApply() + initObjectiveNameToExpr() into a single
   // async task that runs them serially.
