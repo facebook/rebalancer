@@ -161,7 +161,7 @@ ExclusiveGroupsSpecBuilder::constraints(
   metadata.exclusiveGroupsTagging()->scopeItemToGroup() =
       std::map<std::string, std::string>(
           scopeItemGroupAssignment.begin(), scopeItemGroupAssignment.end());
-  logger_->log(metadata);
+  logger_->log(std::move(metadata));
 
   std::vector<std::string> taggingInfo;
   taggingInfo.reserve(scopeItemGroupAssignment.size());

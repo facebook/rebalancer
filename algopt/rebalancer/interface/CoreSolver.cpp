@@ -145,13 +145,13 @@ void logSummary(
         singleObjective.getSummary());
   }
   finalGlobalObjectiveSummary.solved() = solved;
-  logger.log(finalGlobalObjectiveSummary);
+  logger.log(std::move(finalGlobalObjectiveSummary));
 
   // Constraint summary.
   auto finalConstraintSummary =
       materialized.labeledUserConstraints.getSummary();
   finalConstraintSummary.solved() = solved;
-  logger.log(finalConstraintSummary);
+  logger.log(std::move(finalConstraintSummary));
 
   // log metrics if they were collected
   if (materialized.metrics) {

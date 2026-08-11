@@ -412,14 +412,14 @@ bool CoreLocalSearchSolve::improveHotContainer(
     }
 
     const auto numMoves = moveResult.getMoveSet().size();
-    const auto& movesSummary = MovesSummaryHelper::makeMovesSummary(
+    auto movesSummary = MovesSummaryHelper::makeMovesSummary(
         problem_,
         moveResult,
         perMoveStatsAggregator_,
         solveParams_.stageId,
         solveState_.cyclesStarted);
-    problem_.configs.logger->log(movesSummary);
-    moveTimes_.emplace_back(timer_.getSeconds(), movesSummary.moves()->size());
+    problem_.configs.logger->log(std::move(movesSummary));
+    moveTimes_.emplace_back(timer_.getSeconds(), numMoves);
 
     lastImprovedTime = timer_.getSeconds();
 

@@ -34,7 +34,7 @@ class LocalSearchProfiler {
 
   const std::vector<double>& getCurrentValue() const;
 
-  const std::vector<interface::LocalSearchProfile>& getProfiles() const;
+  std::vector<interface::LocalSearchProfile> takeProfiles();
 
   int getMoveTypeIndex(const std::string& moveTypeName) const;
 

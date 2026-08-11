@@ -78,9 +78,8 @@ const std::vector<double>& LocalSearchProfiler::getCurrentValue() const {
   return currentValue_;
 }
 
-const std::vector<LocalSearchProfile>& LocalSearchProfiler::getProfiles()
-    const {
-  return profiles_;
+std::vector<LocalSearchProfile> LocalSearchProfiler::takeProfiles() {
+  return std::move(profiles_);
 }
 
 int LocalSearchProfiler::getMoveTypeIndex(

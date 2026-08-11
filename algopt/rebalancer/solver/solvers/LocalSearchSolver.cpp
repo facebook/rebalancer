@@ -80,8 +80,8 @@ bool LocalSearchSolver::solve(Problem& p, Profile /* unused */) {
   };
 
   p.configs.logger->log(std::move(solverSummary));
-  for (auto& profile : profiler.getProfiles()) {
-    p.configs.logger->log(profile);
+  for (auto& profile : profiler.takeProfiles()) {
+    p.configs.logger->log(std::move(profile));
   }
 
   p.configs.logger->log(coreLocalSearchSolve.makeFinalEvaluationSummary());

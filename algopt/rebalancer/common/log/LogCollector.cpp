@@ -43,16 +43,16 @@ LogCollector::LogCollector(std::shared_ptr<RebalancerLog> logger) {
   loggers_.push_back(std::move(logger));
 }
 
-void LogCollector::log(const interface::GlobalObjectiveSummary& info) {
-  notifyAndStore(info, &Data::objectiveSummaries);
+void LogCollector::log(interface::GlobalObjectiveSummary info) {
+  notifyAndStore(std::move(info), &Data::objectiveSummaries);
 }
 
-void LogCollector::log(const interface::ConstraintSummary& info) {
-  notifyAndStore(info, &Data::constraintSummaries);
+void LogCollector::log(interface::ConstraintSummary info) {
+  notifyAndStore(std::move(info), &Data::constraintSummaries);
 }
 
-void LogCollector::log(const interface::MovesSummary& info) {
-  notifyAndStore(info, &Data::moves);
+void LogCollector::log(interface::MovesSummary info) {
+  notifyAndStore(std::move(info), &Data::moves);
 }
 
 void LogCollector::log(SolverSummary info) {
@@ -65,16 +65,16 @@ void LogCollector::log(interface::FinalEvaluationSummary info) {
       [&](Data& data) { data.finalEvaluationSummary = std::move(info); });
 }
 
-void LogCollector::log(const interface::LocalSearchProfile& info) {
-  notifyAndStore(info, &Data::localSearchProfiles);
+void LogCollector::log(interface::LocalSearchProfile info) {
+  notifyAndStore(std::move(info), &Data::localSearchProfiles);
 }
 
-void LogCollector::log(const interface::SpecMetadata& info) {
-  notifyAndStore(info, &Data::specMetadata);
+void LogCollector::log(interface::SpecMetadata info) {
+  notifyAndStore(std::move(info), &Data::specMetadata);
 }
 
-void LogCollector::log(const interface::thrift::Metrics& metrics) {
-  notifyAndStore(metrics, &Data::metrics);
+void LogCollector::log(interface::thrift::Metrics metrics) {
+  notifyAndStore(std::move(metrics), &Data::metrics);
 }
 
 void LogCollector::setLoggingLabel(const std::string& label) {

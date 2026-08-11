@@ -56,7 +56,7 @@ TEST(LocalSearchProfilerTest, LocalSearchProfiler) {
 
   EXPECT_EQ(std::vector<double>({33.0}), profiler.getCurrentValue());
 
-  auto& profiles = profiler.getProfiles();
+  auto profiles = profiler.takeProfiles();
   auto& profile = profiles.at(0);
 
   auto& names = *profile.moveTypeNames();
@@ -120,7 +120,7 @@ TEST(LocalSearchProfilerTest, MoveTypeProfiler) {
     move.updateValue({33.0});
   }
 
-  auto& profiles = profiler.getProfiles();
+  auto profiles = profiler.takeProfiles();
   auto& profile = profiles.at(0);
 
   auto& events = *profile.moveTypeEvents();

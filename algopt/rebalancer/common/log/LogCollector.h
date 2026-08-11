@@ -55,14 +55,14 @@ class LogCollector final {
     notify(info);
   }
 
-  void log(const interface::GlobalObjectiveSummary& info);
-  void log(const interface::ConstraintSummary& info);
-  void log(const interface::MovesSummary& info);
+  void log(interface::GlobalObjectiveSummary info);
+  void log(interface::ConstraintSummary info);
+  void log(interface::MovesSummary info);
   void log(SolverSummary info);
   void log(interface::FinalEvaluationSummary info);
-  void log(const interface::LocalSearchProfile& info);
-  void log(const interface::SpecMetadata& info);
-  void log(const interface::thrift::Metrics& metrics);
+  void log(interface::LocalSearchProfile info);
+  void log(interface::SpecMetadata info);
+  void log(interface::thrift::Metrics metrics);
 
   void setLoggingLabel(const std::string& label);
 

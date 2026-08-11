@@ -20,6 +20,7 @@
 #include <memory>
 #include <optional>
 #include <thread>
+#include <utility>
 #include <vector>
 
 namespace facebook::rebalancer {
@@ -42,7 +43,7 @@ class RecordingLog final : public RebalancerLog {
 TEST(LogCollectorTest, RetainsSolverSummaryAndForwardsItToLogs) {
   const auto log = std::make_shared<RecordingLog>();
   LogCollector collector(log);
-  const SolverSummary summary{
+  SolverSummary summary{
       .solverType = SolverType::LOCAL_SEARCH,
       .endReason = interface::EndReason::UNABLE_TO_FIND_IMPROVING_MOVES,
       .auxInfo = std::nullopt,
@@ -51,13 +52,15 @@ TEST(LogCollectorTest, RetainsSolverSummaryAndForwardsItToLogs) {
       .stagesSummaries = std::nullopt,
   };
 
-  collector.log(summary);
+  const auto expectedEndReason = summary.endReason;
+
+  collector.log(std::move(summary));
   const auto data = collector.takeLoggedData();
 
   ASSERT_TRUE(log->solverSummary.has_value());
-  EXPECT_EQ(log->solverSummary->endReason, summary.endReason);
+  EXPECT_EQ(log->solverSummary->endReason, expectedEndReason);
   ASSERT_EQ(data.solverSummaries.size(), 1);
-  EXPECT_EQ(data.solverSummaries.front().endReason, summary.endReason);
+  EXPECT_EQ(data.solverSummaries.front().endReason, expectedEndReason);
 }
 
 TEST(LogCollectorTest, RetainsLogsWrittenConcurrently) {

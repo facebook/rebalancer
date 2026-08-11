@@ -162,8 +162,8 @@ bool LocalSearchStageSolver::solve(Problem& p, Profile /* unused */) {
     p.configs.logger->log(std::move(solverSummary));
     p.configs.logger->log(std::move(finalEvaluationSummary));
 
-    for (auto& profile : profiler.getProfiles()) {
-      p.configs.logger->log(profile);
+    for (auto& profile : profiler.takeProfiles()) {
+      p.configs.logger->log(std::move(profile));
     }
   };
 
