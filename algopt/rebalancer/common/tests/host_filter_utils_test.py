@@ -268,8 +268,7 @@ class TestHostFilterUtils(BaseFacebookTestCase):
     @async_test
     async def test_query_serf_for_asset_ids(
         self,
-        # pyre-fixme[2]: Parameter must be annotated.
-        mock_serf_client,
+        mock_serf_client: MagicMock,
     ) -> None:
         client = AsyncMock()
         client.getDevices.return_value = [
