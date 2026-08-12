@@ -77,6 +77,16 @@ void LogCollector::log(interface::thrift::Metrics metrics) {
   notifyAndStore(std::move(metrics), &Data::metrics);
 }
 
+size_t LogCollector::getTotalMoveCount() const {
+  return data_.withRLock([](const Data& data) {
+    size_t total = 0;
+    for (const auto& summary : data.moves) {
+      total += summary.moves()->size();
+    }
+    return total;
+  });
+}
+
 LogCollector::Data LogCollector::takeLoggedData() {
   return data_.withWLock([](Data& data) { return std::move(data); });
 }

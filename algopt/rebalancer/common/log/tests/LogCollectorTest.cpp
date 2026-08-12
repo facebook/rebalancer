@@ -101,6 +101,19 @@ TEST(LogCollectorTest, ForwardsDataToEveryLog) {
   }
 }
 
+TEST(LogCollectorTest, CountsMovesAcrossEveryLoggedSummary) {
+  LogCollector collector;
+  interface::MovesSummary firstSummary;
+  firstSummary.moves()->resize(2);
+  interface::MovesSummary secondSummary;
+  secondSummary.moves()->resize(1);
+
+  collector.log(std::move(firstSummary));
+  collector.log(std::move(secondSummary));
+
+  EXPECT_EQ(collector.getTotalMoveCount(), 3);
+}
+
 TEST(LogCollectorTest, RejectsNullLogs) {
   const std::shared_ptr<RebalancerLog> nullLog;
   std::vector<std::shared_ptr<RebalancerLog>> logsWithNull{

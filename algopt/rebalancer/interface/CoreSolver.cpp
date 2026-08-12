@@ -110,26 +110,20 @@ void printAndLogProblemDefinition(
   logCollector.log(problemDefinition);
 }
 
-void logSolutionStats(
-    const AssignmentSolution& solution,
-    LogCollector& logCollector,
-    const Problem& problem) {
+SolutionStats makeSolutionStats(
+    const ProblemProfile& problemProfile,
+    size_t equivalenceSetCount,
+    size_t totalMoveCount) {
   SolutionStats solutionStats;
-  solutionStats.equivalentSetCount = problem.getEquivalenceSets().size();
+  solutionStats.equivalentSetCount = static_cast<int>(equivalenceSetCount);
+  solutionStats.totalMoves = static_cast<int>(totalMoveCount);
 
-  solutionStats.totalMoves = 0;
-  if (solution.movesSummary().has_value()) {
-    for (const auto& movesSummary : *solution.movesSummary()) {
-      solutionStats.totalMoves += movesSummary.moves()->size();
-    }
-  }
-
-  if (solution.problemProfile()->optimalSolverProfile()) {
+  if (auto optimalSolverProfile = problemProfile.optimalSolverProfile()) {
     solutionStats.relativeObjectiveGap =
-        *solution.problemProfile()->optimalSolverProfile()->gap()->relative();
+        *optimalSolverProfile->gap()->relative();
   }
 
-  logCollector.log(solutionStats);
+  return solutionStats;
 }
 
 void logSummary(
@@ -404,15 +398,19 @@ AssignmentSolution CoreSolver::materializeAndSolve(
         *solution.assignment(), finalObjectIds, containerName);
   }
 
-  populateSolutionFromLogs(solution, *logCollector);
-
   if (*problemSpec.publishEquivalenceSetsInfo()) {
     solution.equivalenceSetInfo() = problem.makeEquivalenceSetInfo();
   }
 
   solution.numContainers() = problem.containers.size();
 
-  logSolutionStats(solution, *logCollector, problem);
+  logCollector->log(makeSolutionStats(
+      *solution.problemProfile(),
+      problem.getEquivalenceSets().size(),
+      logCollector->getTotalMoveCount()));
+
+  populateSolutionFromLogs(solution, *logCollector);
+
   return solution;
 }
 

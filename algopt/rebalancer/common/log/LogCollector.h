@@ -64,6 +64,8 @@ class LogCollector final {
   void log(interface::SpecMetadata info);
   void log(interface::thrift::Metrics metrics);
 
+  size_t getTotalMoveCount() const;
+
   Data takeLoggedData();
 
  private:
