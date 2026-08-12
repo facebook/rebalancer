@@ -77,12 +77,6 @@ void LogCollector::log(interface::thrift::Metrics metrics) {
   notifyAndStore(std::move(metrics), &Data::metrics);
 }
 
-void LogCollector::setLoggingLabel(const std::string& label) {
-  for (const auto& logger : loggers_) {
-    logger->setLoggingLabel(label);
-  }
-}
-
 LogCollector::Data LogCollector::takeLoggedData() {
   return data_.withWLock([](Data& data) { return std::move(data); });
 }

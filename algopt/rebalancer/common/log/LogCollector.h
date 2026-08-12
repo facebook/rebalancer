@@ -64,8 +64,6 @@ class LogCollector final {
   void log(interface::SpecMetadata info);
   void log(interface::thrift::Metrics metrics);
 
-  void setLoggingLabel(const std::string& label);
-
   Data takeLoggedData();
 
  private:
