@@ -29,12 +29,14 @@ enum Intent {
   MAX = 0,
 }
 
+@hack.MigrationBlockingAllowInheritance
 struct AllowedWorsening {
   1: double percent = 0.0;
   2: double absolute = 0.0;
   3: Intent intent = Intent.MAX;
 }
 
+@hack.MigrationBlockingAllowInheritance
 struct HigherPriorityObjectivesConfig {
   // for each tuple position i, if obj_i is the objective in that position and if a value `d_i` is set for i, then it allows the
   // solver to worsen the objective to at most

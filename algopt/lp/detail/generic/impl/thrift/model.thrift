@@ -56,6 +56,7 @@ enum ConstraintType {
   LEQ_ZERO = 2,
 }
 
+@hack.MigrationBlockingAllowInheritance
 struct GenericVariable {
   1: string name;
   2: VariableType type;
@@ -66,18 +67,21 @@ struct GenericVariable {
   7: optional double threshold;
 }
 
+@hack.MigrationBlockingAllowInheritance
 struct GenericExpression {
   1: map<i64, double> linearCoeffs;
   2: map<i64, map<i64, double>> quadraticCoeffs;
   3: double constant;
 }
 
+@hack.MigrationBlockingAllowInheritance
 struct GenericConstraint {
   1: GenericExpression expr;
   3: ConstraintType type;
   4: string name;
 }
 
+@hack.MigrationBlockingAllowInheritance
 struct GenericProblem {
   1: list<GenericVariable> variables;
   2: list<GenericConstraint> constraints;
