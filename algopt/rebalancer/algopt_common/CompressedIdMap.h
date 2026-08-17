@@ -177,7 +177,8 @@ class CompressedIdMap {
     sparse_.emplace(key, std::move(value));
   }
 
-  [[nodiscard]] FOLLY_ALWAYS_INLINE ValueT getValue(KeyT key) const noexcept {
+  [[nodiscard]] FOLLY_ALWAYS_INLINE const ValueT& getValue(
+      KeyT key) const noexcept {
     const auto index = static_cast<std::size_t>(key);
     FOLLY_SAFE_CHECK(
         index < totalSize_,
@@ -187,7 +188,7 @@ class CompressedIdMap {
         totalSize_);
 
     return isDense_ ? dense_.values[index]
-                    : folly::get_default(sparse_, key, defaultValue_);
+                    : folly::get_ref_default(sparse_, key, defaultValue_);
   }
 
   [[nodiscard]] ValueT getDefaultValue() const noexcept {

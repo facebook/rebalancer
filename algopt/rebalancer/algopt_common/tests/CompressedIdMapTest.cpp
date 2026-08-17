@@ -21,6 +21,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <random>
+#include <type_traits>
 #include <vector>
 
 namespace facebook::algopt::tests {
@@ -64,6 +65,7 @@ void verifyMatches(
     const entities::Map<entities::ObjectId, double>& reference,
     const std::size_t totalSize,
     const double defaultValue) {
+  static_assert(std::is_reference_v<decltype(compressedId.getValue(id(0)))>);
   EXPECT_EQ(compressedId.getDefaultValue(), defaultValue);
   EXPECT_EQ(compressedId.totalSize(), totalSize);
   EXPECT_EQ(compressedId.nonDefaultSize(), reference.size());
