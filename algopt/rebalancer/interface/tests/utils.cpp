@@ -66,12 +66,7 @@ bool isOptimal(const SolverAlgoType solverAlgoType) {
 
 std::shared_ptr<folly::CPUThreadPoolExecutor> getTestExecutor(int numThreads) {
   return std::make_shared<folly::CPUThreadPoolExecutor>(
-      numThreads,
-      std::make_unique<folly::LifoSemMPMCQueue<
-          folly::CPUThreadPoolExecutor::CPUTask,
-          folly::QueueBehaviorIfFull::BLOCK>>(
-          folly::CPUThreadPoolExecutor::kDefaultMaxQueueSize),
-      std::make_shared<folly::NamedThreadFactory>("CPUThreadPool"));
+      numThreads, std::make_shared<folly::NamedThreadFactory>("CPUThreadPool"));
 }
 
 std::unique_ptr<ProblemSolver> initializeTestProblemSolver(

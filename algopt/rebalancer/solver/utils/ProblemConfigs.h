@@ -38,13 +38,7 @@ struct RunId {
 struct ProblemConfigs {
   // TODO: define threadPool as a wrappedExecutor
   std::shared_ptr<folly::ThreadPoolExecutor> threadPool =
-      std::make_shared<folly::CPUThreadPoolExecutor>(
-          20,
-          std::make_unique<folly::LifoSemMPMCQueue<
-              folly::CPUThreadPoolExecutor::CPUTask,
-              folly::QueueBehaviorIfFull::BLOCK>>(
-              folly::CPUThreadPoolExecutor::kDefaultMaxQueueSize),
-          std::make_shared<folly::NamedThreadFactory>("CPUThreadPool"));
+      std::make_shared<folly::CPUThreadPoolExecutor>(20);
   std::shared_ptr<LogCollector> logger =
       std::make_shared<LogCollector>(std::make_shared<StreamLog>());
   interface::MoveStatsSpec moveStatsSpec;

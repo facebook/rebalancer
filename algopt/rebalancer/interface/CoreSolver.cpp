@@ -50,13 +50,7 @@ using namespace facebook::rebalancer::interface;
 using namespace facebook::rebalancer::materializer;
 
 std::shared_ptr<folly::CPUThreadPoolExecutor> getSerialExecutor() {
-  return std::make_shared<folly::CPUThreadPoolExecutor>(
-      1,
-      std::make_unique<folly::LifoSemMPMCQueue<
-          folly::CPUThreadPoolExecutor::CPUTask,
-          folly::QueueBehaviorIfFull::BLOCK>>(
-          folly::CPUThreadPoolExecutor::kDefaultMaxQueueSize),
-      std::make_shared<folly::NamedThreadFactory>("CPUThreadPool"));
+  return std::make_shared<folly::CPUThreadPoolExecutor>(1);
 }
 
 void checkSummaryCount(size_t count, std::string_view name) {

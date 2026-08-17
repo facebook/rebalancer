@@ -16,8 +16,14 @@
 
 #include "algopt/rebalancer/tests/SolverTestUtils.h"
 
+#include <folly/container/irange.h>
 #include <folly/executors/CPUThreadPoolExecutor.h>
+#include <folly/synchronization/Baton.h>
 #include <gtest/gtest.h>
+
+#include <atomic>
+#include <chrono>
+#include <thread>
 
 using facebook::algopt::isSolverUnavailable;
 using facebook::algopt::solverName;
@@ -72,6 +78,45 @@ TEST_P(ProblemSolverTest, MakeCPUThreadPoolExecutor) {
   auto executor = ProblemSolver::makeCPUThreadPoolExecutor("TestPool", 4);
   ASSERT_NE(nullptr, executor);
   EXPECT_EQ(4, executor->numThreads());
+}
+
+TEST(ProblemSolverExecutorTest, AddDoesNotBlockBeyondDefaultQueueSize) {
+  // Tasks running on this pool schedule their own continuations back onto it,
+  // so a producer that parks waiting for queue capacity deadlocks the pool. A
+  // bounded queue accepts kDefaultMaxQueueSize tasks and then blocks; the
+  // margin covers any slack in the queue's real capacity.
+  const size_t taskCount = CPUThreadPoolExecutor::kDefaultMaxQueueSize + 1024;
+  const auto executor = ProblemSolver::makeCPUThreadPoolExecutor("TestPool", 1);
+
+  // Occupy the only worker so nothing drains the queue while it is filled.
+  Baton<> workerStarted;
+  Baton<> releaseWorker;
+  executor->add([&workerStarted, &releaseWorker] {
+    workerStarted.post();
+    releaseWorker.wait();
+  });
+  workerStarted.wait();
+
+  std::atomic<size_t> accepted{0};
+  Baton<> allAccepted;
+  std::thread producer([&] {
+    for ([[maybe_unused]] const auto i : folly::irange(taskCount)) {
+      executor->add([] {});
+      accepted.fetch_add(1, std::memory_order_relaxed);
+    }
+    allAccepted.post();
+  });
+  const bool acceptedAll = allAccepted.try_wait_for(std::chrono::seconds(30));
+  const size_t acceptedOnTimeout = accepted.load(std::memory_order_relaxed);
+
+  // Release the worker before joining: if the queue does block, the producer
+  // only makes progress once the worker starts freeing slots.
+  releaseWorker.post();
+  producer.join();
+  executor->join();
+
+  EXPECT_TRUE(acceptedAll) << "producer blocked after " << acceptedOnTimeout
+                           << " of " << taskCount << " tasks";
 }
 
 class ProblemSolverOptimalTest

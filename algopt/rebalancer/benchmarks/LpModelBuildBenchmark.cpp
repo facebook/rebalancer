@@ -34,12 +34,7 @@ enum SolverType {
 
 static std::shared_ptr<folly::CPUThreadPoolExecutor> get_serial_executor() {
   return std::make_shared<folly::CPUThreadPoolExecutor>(
-      1,
-      std::make_unique<folly::LifoSemMPMCQueue<
-          folly::CPUThreadPoolExecutor::CPUTask,
-          folly::QueueBehaviorIfFull::BLOCK>>(
-          CPUThreadPoolExecutor::kDefaultMaxQueueSize),
-      std::make_shared<folly::NamedThreadFactory>("CPUThreadPool"));
+      1, std::make_shared<folly::NamedThreadFactory>("CPUThreadPool"));
 }
 
 static void addBuildOnlyOptimalSolver(ProblemSolver& solver) {

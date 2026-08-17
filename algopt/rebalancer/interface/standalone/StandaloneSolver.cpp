@@ -229,10 +229,6 @@ static std::shared_ptr<folly::CPUThreadPoolExecutor> make_executor(
     int num_threads) {
   return std::make_shared<folly::CPUThreadPoolExecutor>(
       num_threads,
-      std::make_unique<folly::LifoSemMPMCQueue<
-          folly::CPUThreadPoolExecutor::CPUTask,
-          folly::QueueBehaviorIfFull::BLOCK>>(
-          folly::CPUThreadPoolExecutor::kDefaultMaxQueueSize),
       std::make_shared<folly::NamedThreadFactory>("CPUThreadPool"));
 }
 

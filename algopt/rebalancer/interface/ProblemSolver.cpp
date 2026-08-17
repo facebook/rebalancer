@@ -77,10 +77,6 @@ ProblemSolver::makeCPUThreadPoolExecutor(
     size_t numThreads) {
   return std::make_shared<folly::CPUThreadPoolExecutor>(
       numThreads,
-      std::make_unique<folly::LifoSemMPMCQueue<
-          folly::CPUThreadPoolExecutor::CPUTask,
-          folly::QueueBehaviorIfFull::BLOCK>>(
-          folly::CPUThreadPoolExecutor::kDefaultMaxQueueSize),
       std::make_shared<folly::NamedThreadFactory>(threadPoolNamePrefix));
 }
 

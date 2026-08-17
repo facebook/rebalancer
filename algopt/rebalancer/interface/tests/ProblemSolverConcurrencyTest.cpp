@@ -28,12 +28,7 @@ using namespace std;
 
 static shared_ptr<CPUThreadPoolExecutor> makeThreadPool(int threadCount) {
   return make_shared<CPUThreadPoolExecutor>(
-      threadCount,
-      make_unique<LifoSemMPMCQueue<
-          CPUThreadPoolExecutor::CPUTask,
-          QueueBehaviorIfFull::BLOCK>>(
-          CPUThreadPoolExecutor::kDefaultMaxQueueSize),
-      make_shared<NamedThreadFactory>("CPUThreadPool"));
+      threadCount, make_shared<NamedThreadFactory>("CPUThreadPool"));
 }
 
 static void runConcurrentTest(
