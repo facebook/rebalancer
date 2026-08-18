@@ -46,6 +46,10 @@ class LocalSearchStageSolver : public Solver {
 
   bool solve(Problem& p, Profile profile = std::nullopt) override;
 
+  const interface::LocalSearchStageSolverSpec& getConfigs() const {
+    return configs_;
+  }
+
   // all non-debug logs will be written to this file
   void setSolverOutputLogger(std::shared_ptr<SolverOutputLogger> logger);
 

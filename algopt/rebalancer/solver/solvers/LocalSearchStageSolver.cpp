@@ -63,11 +63,46 @@ double getStageSolveTimeSoFar(
   }
   return totalStageSolveTime;
 }
+
+void applyStageSolverConfigOverrides(
+    interface::LocalSearchStageSolverSpec& config) {
+  for (auto& stage : *config.stageSpecs()) {
+    auto& stageConfig = *stage.solverSpec();
+
+    // if value for following configs are set in
+    // LocalSearchStageSolverSpec, then it overwrites anything mentioned in
+    // any of the StageSpecs
+    if (config.recomputeContainerOrderingAfterEveryMove().has_value()) {
+      stageConfig.recomputeContainerOrderingAfterEveryMove() =
+          config.recomputeContainerOrderingAfterEveryMove().value();
+    }
+    if (config.exploreMovesFromContainersNotInObjective().has_value()) {
+      stageConfig.exploreMovesFromContainersNotInObjective() =
+          config.exploreMovesFromContainersNotInObjective().value();
+    }
+    if (config.hottestTraversalConfig().has_value()) {
+      stageConfig.hottestTraversalConfig() =
+          config.hottestTraversalConfig().value();
+    }
+
+    // if value for 'parallelExecutionConfig' is NOT set at stage level
+    // (LocalSearchSolverSpec), but IS set at stage solver level
+    // (LocalSearchStageSolverSpec), then use the stage solver level value as
+    // a fallback. This allows per-stage customization to take precedence.
+    if (!stageConfig.parallelExecutionConfig().has_value() &&
+        config.parallelExecutionConfig().has_value()) {
+      stageConfig.parallelExecutionConfig() =
+          config.parallelExecutionConfig().value();
+    }
+  }
+}
 } // namespace
 
 LocalSearchStageSolver::LocalSearchStageSolver(
     interface::LocalSearchStageSolverSpec configs)
-    : configs_(std::move(configs)) {}
+    : configs_(std::move(configs)) {
+  applyStageSolverConfigOverrides(configs_);
+}
 
 bool LocalSearchStageSolver::solve(Problem& p, Profile /* unused */) {
   const algopt::treeprof::EventRecorder solveEvent("Local Search with stages");
@@ -193,39 +228,6 @@ bool LocalSearchStageSolver::solve(Problem& p, Profile /* unused */) {
         std::max(0.0, maxGlobalTime - elapsedGlobalTime);
     auto multiStageTimeLimit =
         getMultiStageTime(configs_, stageId, stagesSummaries);
-
-    // if value for 'recomputeContainerOrderingAfterEveryMove' is set in
-    // LocalSearchStageSolverSpec, then it overwrites anything mentioned in
-    // any of the StageSpecs
-    if (configs_.recomputeContainerOrderingAfterEveryMove().has_value()) {
-      spec.recomputeContainerOrderingAfterEveryMove() =
-          configs_.recomputeContainerOrderingAfterEveryMove().value();
-    }
-
-    // if value for 'exploreMovesFromContainersNotInObjective' is set in
-    // LocalSearchStageSolverSpec, then it overwrites anything mentioned in
-    // any of the LocalSearchSolverSpec
-    if (configs_.exploreMovesFromContainersNotInObjective().has_value()) {
-      spec.exploreMovesFromContainersNotInObjective() =
-          configs_.exploreMovesFromContainersNotInObjective().value();
-    }
-
-    // if value for 'hottestTraversalConfig' is set in
-    // LocalSearchStageSolverSpec, then it overwrites anything mentioned in any
-    // of the LocalSearchSolverSpec
-    if (configs_.hottestTraversalConfig().has_value()) {
-      spec.hottestTraversalConfig() = configs_.hottestTraversalConfig().value();
-    }
-
-    // if value for 'parallelExecutionConfig' is NOT set at stage level
-    // (LocalSearchSolverSpec), but IS set at stage solver level
-    // (LocalSearchStageSolverSpec), then use the stage solver level value as
-    // a fallback. This allows per-stage customization to take precedence.
-    if (!spec.parallelExecutionConfig().has_value() &&
-        configs_.parallelExecutionConfig().has_value()) {
-      spec.parallelExecutionConfig() =
-          configs_.parallelExecutionConfig().value();
-    }
 
     // Update the solve time after considering the remaining global and
     // minimum stage times.
