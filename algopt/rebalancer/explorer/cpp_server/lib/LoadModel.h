@@ -25,31 +25,6 @@ struct EquivalenceSetsData {
   entities::Map<entities::ObjectId, std::string> objectIdToGroupName;
 };
 
-struct DynamicDimensionColumns {
-  explicit DynamicDimensionColumns(
-      const entities::Universe& universe,
-      const entities::ObjectScalarDimension& dimension,
-      const std::string& dimensionName,
-      const entities::Map<
-          entities::ContainerId,
-          std::vector<entities::ObjectId>>& finalAssignment);
-  // Columns for the object table. Contains
-  // values of the dimension for each
-  // object based on its initial and final assignment.
-  std::shared_ptr<Column> srcColumn; // w.r.t. initial assignment
-  std::shared_ptr<Column> dstColumn; // w.r.t. final assignment
-
-  // Columns for dynamic dimension table. Object-keyed dimensions contain one
-  // row for each {objectId, scopeItemId}; group-keyed dimensions contain one
-  // row for each {groupId, scopeItemId}.
-  std::shared_ptr<Column> objectNamesColumn;
-  std::shared_ptr<Column> scopeItemNamesColumn;
-  std::shared_ptr<Column> dimensionValuesColumn;
-
-  // contains a logical EntityId for each {objectId, scopeItemId} pair to
-  // identify the corresponding value of the dynamic dimension.
-  std::vector<EntityId> rowIds;
-};
 struct ExplorerModel {
   interface::AssignmentProblem problemSpec;
   std::shared_ptr<const entities::Universe> universe;
@@ -71,11 +46,12 @@ class LoadModel {
 
  public:
   static ExplorerModel buildData(interface::Bundle&& bundle);
+  static Table buildDynamicDimensionTable(
+      const entities::Universe& universe,
+      const entities::ObjectScalarDimension& dimension,
+      const std::string& dimensionName);
   static void initDynamicDimensionTables(
       const entities::Universe& universe,
-      const entities::Map<
-          entities::ContainerId,
-          std::vector<entities::ObjectId>>& finalAssignment,
       entities::Map<std::string, std::shared_ptr<folly::SharedPromise<Table>>>&
           tablePromises,
       folly::coro::AsyncScope& asyncScope,
@@ -93,17 +69,7 @@ class LoadModel {
       folly::coro::AsyncScope& asyncScope,
       std::shared_ptr<folly::CPUThreadPoolExecutor>& executor);
 
-  static void buildObjectDimensionCols(
-      const entities::Universe& universe,
-      const entities::Map<std::string, DynamicDimensionColumns>&
-          dynamicDimensions,
-      entities::Map<std::string, Table>& tableData);
-
   static void buildStaticObjectDimensionCols(
-      const entities::Universe& universe,
-      entities::Map<std::string, Table>& tableData);
-
-  static void buildDynamicObjectDimensionCols(
       const entities::Universe& universe,
       entities::Map<std::string, Table>& tableData);
 

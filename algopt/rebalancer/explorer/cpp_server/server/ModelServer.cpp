@@ -247,11 +247,7 @@ void ModelServer::startTableDataAsync(
 
                 if (!dynamicDimensionNames_.empty()) {
                   LoadModel::initDynamicDimensionTables(
-                      *universe_,
-                      finalAssignment_,
-                      tablePromises_,
-                      asyncScope_,
-                      executor_.get());
+                      *universe_, tablePromises_, asyncScope_, executor_.get());
                 }
 
                 auto objectsTableName = universe_->getObjectTypeName();

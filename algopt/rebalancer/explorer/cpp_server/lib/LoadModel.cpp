@@ -181,41 +181,21 @@ static Map<EntityId, DataCell> getObjectDimensionValues(
   return objectIdToDimensionValue;
 }
 
-//  Constructs dynamic dimension related columns.
-DynamicDimensionColumns::DynamicDimensionColumns(
+Table LoadModel::buildDynamicDimensionTable(
     const Universe& universe,
     const ObjectScalarDimension& dimension,
-    const std::string& dimensionName,
-    const Map<ContainerId, std::vector<ObjectId>>& finalAssignment) {
+    const std::string& dimensionName) {
   if (!dimension.isDynamic()) {
     throw std::runtime_error(
         fmt::format(
             "Expected to be called only for a dynamic dimension, called for {}.",
             dimensionName));
   }
-  // Construct two columns for objects table containing each object's value
-  // for this dimension based on initial and final assignment.
   DataCell defaultCell;
-  const Map<ContainerId, std::vector<ObjectId>>& initialAssignment =
-      universe.getContainers().getInitialAssignment();
-  srcColumn = std::make_shared<Column>(
-      getObjectDimensionValues(initialAssignment, dimension, universe),
-      defaultCell,
-      fmt::format("src.{}", dimensionName),
-      ColumnType::DIMENSION);
-
-  dstColumn = std::make_shared<Column>(
-      getObjectDimensionValues(finalAssignment, dimension, universe),
-      defaultCell,
-      fmt::format("dst.{}", dimensionName),
-      ColumnType::DIMENSION);
-
-  // Construct three columns for the dimension specific entity page containing
-  // object or group name, scope item name, and the corresponding value from the
-  // problem config.
   entities::Map<EntityId, DataCell> objectNames;
   entities::Map<EntityId, DataCell> scopeItemNames;
   entities::Map<EntityId, DataCell> dimensionValues;
+  std::vector<EntityId> rowIds;
 
   const ScopeId& scopeId = dimension.getScopeId();
   const Scope& scope = universe.getScope(scopeId);
@@ -224,7 +204,7 @@ DynamicDimensionColumns::DynamicDimensionColumns(
   const auto addRow = [&](const std::string& itemName,
                           const std::string& scopeItemName,
                           const double value) {
-    const EntityId entityId = toEntityId(rowIds.size());
+    const auto entityId = toEntityId(rowIds.size());
     rowIds.push_back(entityId);
     dimensionValues[entityId].doubleValue = value;
     objectNames[entityId].strValue = itemName;
@@ -258,14 +238,14 @@ DynamicDimensionColumns::DynamicDimensionColumns(
 
   const std::string& scopeName = universe.getEntityName(dimension.getScopeId());
 
-  objectNamesColumn = std::make_shared<Column>(
+  auto objectNamesColumn = std::make_shared<Column>(
       std::move(objectNames),
       defaultCell,
       std::move(itemColumnName),
       ColumnType::ENTITY_NAME,
       /*primaryKey=*/true);
 
-  scopeItemNamesColumn = std::make_shared<Column>(
+  auto scopeItemNamesColumn = std::make_shared<Column>(
       std::move(scopeItemNames),
       defaultCell,
       scopeName,
@@ -273,11 +253,17 @@ DynamicDimensionColumns::DynamicDimensionColumns(
       /*primaryKey=*/true);
 
   defaultCell.doubleValue = defaultValue;
-  dimensionValuesColumn = std::make_shared<Column>(
+  auto dimensionValuesColumn = std::make_shared<Column>(
       std::move(dimensionValues),
       std::move(defaultCell),
       dimensionName,
       ColumnType::DIMENSION);
+
+  Table table(std::move(rowIds));
+  table.insertColumn(std::move(objectNamesColumn));
+  table.insertColumn(std::move(scopeItemNamesColumn));
+  table.insertColumn(std::move(dimensionValuesColumn));
+  return table;
 }
 
 void LoadModel::buildStaticObjectDimensionCols(
@@ -792,21 +778,14 @@ folly::coro::Task<void> buildDynamicTableAsync(
     DimensionId dimId,
     int index,
     std::string dimName,
-    const Map<entities::ContainerId, std::vector<entities::ObjectId>>&
-        finalAssignment,
     std::shared_ptr<folly::SharedPromise<Table>> promise) {
   try {
     const ObjectDimension& dimension =
         universe.getObjects().getDimension(dimId);
     const ObjectScalarDimension& scalarDimension = dimension.at(index);
-    DynamicDimensionColumns columns(
-        universe, scalarDimension, dimName, finalAssignment);
-    Table table(std::move(columns.rowIds));
-    table.insertColumn(std::move(columns.objectNamesColumn));
-    table.insertColumn(std::move(columns.scopeItemNamesColumn));
-    table.insertColumn(std::move(columns.dimensionValuesColumn));
-
-    promise->setValue(std::move(table));
+    promise->setValue(
+        LoadModel::buildDynamicDimensionTable(
+            universe, scalarDimension, dimName));
   } catch (...) {
     promise->setException(folly::exception_wrapper(std::current_exception()));
   }
@@ -818,8 +797,6 @@ folly::coro::Task<void> buildDynamicTableAsync(
 // scope item names and one for the corresponding value.
 void LoadModel::initDynamicDimensionTables(
     const Universe& universe,
-    const Map<entities::ContainerId, std::vector<entities::ObjectId>>&
-        finalAssignment,
     Map<std::string, std::shared_ptr<folly::SharedPromise<Table>>>&
         tablePromises,
     folly::coro::AsyncScope& asyncScope,
@@ -840,8 +817,7 @@ void LoadModel::initDynamicDimensionTables(
         asyncScope.add(
             folly::coro::co_withExecutor(
                 executor,
-                buildDynamicTableAsync(
-                    universe, dimId, i, dimName, finalAssignment, promise)));
+                buildDynamicTableAsync(universe, dimId, i, dimName, promise)));
       }
     }
   }

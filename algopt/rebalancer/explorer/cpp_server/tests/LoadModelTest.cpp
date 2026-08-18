@@ -337,7 +337,7 @@ TEST(LoadModelTest, Basic) {
   }
 }
 
-TEST(LoadModelTest, DynamicDimensionColumnsUseGroupRowsForCompactStorage) {
+TEST(LoadModelTest, DynamicDimensionTableUsesGroupRowsForCompactStorage) {
   UniverseProblemBuilder builder(
       std::make_unique<AsyncConfig>(getTestExecutor(/*numThreads=*/true)));
   builder.setObjectName("host");
@@ -385,25 +385,23 @@ TEST(LoadModelTest, DynamicDimensionColumnsUseGroupRowsForCompactStorage) {
   const auto& compactDimension = compactObjectDimension.only();
   EXPECT_EQ(nullptr, compactDimension.values(zone0Id).asMapOrNull());
 
-  const DynamicDimensionColumns columns(
-      *universe,
-      compactDimension,
-      "load",
-      universe->getContainers().getInitialAssignment());
+  const auto table = LoadModel::buildDynamicDimensionTable(
+      *universe, compactDimension, "load");
+  const auto objectNames = Utils::fetchColumn(table.getColumnData(), "service");
+  const auto scopeItemNames = Utils::fetchColumn(table.getColumnData(), "zone");
+  const auto dimensionValues =
+      Utils::fetchColumn(table.getColumnData(), "load");
 
-  EXPECT_EQ("service", columns.objectNamesColumn->getColumnName());
-  ASSERT_EQ(2, columns.rowIds.size());
+  EXPECT_EQ(3, table.getColumnData().size());
+  ASSERT_EQ(2, table.getRowIds().size());
   const EntityId defaultRow(0);
   const EntityId groupRow(1);
-  EXPECT_EQ(
-      DataCell("default"), columns.objectNamesColumn->getValue(defaultRow));
-  EXPECT_EQ(
-      DataCell("default"), columns.scopeItemNamesColumn->getValue(defaultRow));
-  EXPECT_EQ(DataCell(1.0), columns.dimensionValuesColumn->getValue(defaultRow));
-  EXPECT_EQ(DataCell("web"), columns.objectNamesColumn->getValue(groupRow));
-  EXPECT_EQ(
-      DataCell("zone0"), columns.scopeItemNamesColumn->getValue(groupRow));
-  EXPECT_EQ(DataCell(7.0), columns.dimensionValuesColumn->getValue(groupRow));
+  EXPECT_EQ(DataCell("default"), objectNames->getValue(defaultRow));
+  EXPECT_EQ(DataCell("default"), scopeItemNames->getValue(defaultRow));
+  EXPECT_EQ(DataCell(1.0), dimensionValues->getValue(defaultRow));
+  EXPECT_EQ(DataCell("web"), objectNames->getValue(groupRow));
+  EXPECT_EQ(DataCell("zone0"), scopeItemNames->getValue(groupRow));
+  EXPECT_EQ(DataCell(7.0), dimensionValues->getValue(groupRow));
 }
 
 TEST(ModelTest, MoveGroupTogether) {
