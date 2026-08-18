@@ -348,44 +348,37 @@ static Map<ContainerId, ScopeItemId> getContainerToScopeItemId(
   return containerToScopeItemId;
 }
 
-static void buildScopeDimensionCols(
+static std::vector<std::shared_ptr<const Column>> buildScopeDimensionCols(
     const Universe& universe,
-    Map<std::string, Table>& tableData) {
-  /* Create dimension rows for all scope. */
-  Map<std::string, std::vector<std::shared_ptr<const Column>>> scopeToColumnVec;
-  for (auto scopeId : universe.getScopeIds()) {
-    auto& scope = universe.getScope(scopeId);
-    auto& scopeName = universe.getEntityName(scopeId);
-    for (auto dimId : scope.getDimensionIds()) {
-      auto& scopeDimension = scope.getDimension(dimId);
-      auto& dimName = universe.getEntityName(dimId);
+    ScopeId scopeId) {
+  const auto& scope = universe.getScope(scopeId);
+  std::vector<std::shared_ptr<const Column>> columns;
+  columns.reserve(scope.getDimensionIds().size());
+  const auto& scopeName = universe.getEntityName(scopeId);
+  for (const auto dimId : scope.getDimensionIds()) {
+    const auto& scopeDimension = scope.getDimension(dimId);
+    const auto& dimName = universe.getEntityName(dimId);
 
-      Map<EntityId, DataCell> scopeItemToCell;
-      for (auto& [scopeItemId, dimValue] :
-           scopeDimension.getNonDefaultValues()) {
-        auto rowId = toEntityId(scopeItemId);
-        if (scopeName == universe.getContainerTypeName()) {
-          // use container id if preparing column for container table
-          const auto& scopeItemName = universe.getEntityName(scopeItemId);
-          rowId = toEntityId(universe.getContainerId(scopeItemName));
-        }
-        scopeItemToCell[rowId].doubleValue = dimValue;
+    Map<EntityId, DataCell> scopeItemToCell;
+    const auto defaultValue = scopeDimension.getDefaultValue();
+    for (const auto& [scopeItemId, value] :
+         scopeDimension.getNonDefaultValues()) {
+      auto rowId = toEntityId(scopeItemId);
+      if (scopeName == universe.getContainerTypeName()) {
+        rowId = toEntityId(
+            universe.getContainerId(universe.getEntityName(scopeItemId)));
       }
-
-      DataCell defaultDimension(scopeDimension.getDefaultValue());
-      auto columnData = std::make_shared<Column>(
-          std::move(scopeItemToCell),
-          std::move(defaultDimension),
-          dimName,
-          ColumnType::DIMENSION);
-      scopeToColumnVec[scopeName].push_back(columnData);
+      scopeItemToCell[rowId].doubleValue = value;
     }
-  }
 
-  // insert columns
-  for (auto& [scopeName, columnVec] : scopeToColumnVec) {
-    tableData.at(scopeName).insertColumnsInSortedOrder(std::move(columnVec));
+    columns.push_back(
+        std::make_shared<Column>(
+            std::move(scopeItemToCell),
+            DataCell(defaultValue),
+            dimName,
+            ColumnType::DIMENSION));
   }
+  return columns;
 }
 
 static std::vector<std::shared_ptr<const Column>> buildAssignmentCols(
@@ -556,83 +549,73 @@ getScopeItemToInitialAndFinalRelativeUtils(
       scopeItemToInitialRelativeUtilCell, scopeItemToFinalRelativeUtilCell);
 }
 
-static void buildUtilizationCols(
+static std::vector<std::shared_ptr<const Column>> buildUtilizationCols(
     const Universe& universe,
-    Map<std::string, Table>& tableData,
+    ScopeId scopeId,
     const Map<ObjectId, ContainerId>& objectToInitialContainer,
     const Map<ObjectId, ContainerId>& objectToFinalContainer,
     std::shared_ptr<algopt::treeprof::ExecutorWrapper> executor) {
-  /* Create utilization rows for all scopes*/
-  Map<std::string, std::vector<std::shared_ptr<const Column>>>
-      scopeToUtilColumns;
-  for (auto scopeId : universe.getScopeIds()) {
-    XLOGF(
-        INFO,
-        "building utilization columns for scope '{}' w.r.t. {} dimensions",
-        universe.getEntityName(scopeId),
-        universe.getObjects().getDimensionIds().size());
+  XLOGF(
+      INFO,
+      "building utilization columns for scope '{}' w.r.t. {} dimensions",
+      universe.getEntityName(scopeId),
+      universe.getObjects().getDimensionIds().size());
 
-    auto containerToScopeItemId = getContainerToScopeItemId(universe, scopeId);
-    const auto dimensionIds = universe.getObjects().getDimensionIds();
-    folly::coro::blockingWait(
-        CoroUtils::runEachFuncAndUpdate(
-            dimensionIds.begin(),
-            dimensionIds.end(),
-            [&](auto it) -> std::optional<std::pair<
-                             Map<EntityId, DataCell>,
-                             Map<EntityId, DataCell>>> {
-              auto dimensionId = *it;
-              auto& objectDimension =
-                  universe.getObjects().getDimension(dimensionId);
-              const bool shouldSkipDim =
-                  objectDimension.at(0).isRoutingConfigBased() ||
-                  (objectDimension.at(0).isDynamic() &&
-                   objectDimension.at(0).getScopeId() != scopeId);
+  const auto containerToScopeItemId =
+      getContainerToScopeItemId(universe, scopeId);
+  const auto dimensionIds = universe.getObjects().getDimensionIds();
+  std::vector<std::shared_ptr<const Column>> columns;
+  folly::coro::blockingWait(
+      CoroUtils::runEachFuncAndUpdate(
+          dimensionIds.begin(),
+          dimensionIds.end(),
+          [&](auto it)
+              -> std::optional<
+                  std::pair<Map<EntityId, DataCell>, Map<EntityId, DataCell>>> {
+            const auto dimensionId = *it;
+            const auto& objectDimension =
+                universe.getObjects().getDimension(dimensionId);
+            const bool shouldSkipDim =
+                objectDimension.at(0).isRoutingConfigBased() ||
+                (objectDimension.at(0).isDynamic() &&
+                 objectDimension.at(0).getScopeId() != scopeId);
 
-              // skip dimension if it is routing config based or if it is a
-              // dynamic dimension defined on a different scope
-              if (shouldSkipDim) {
-                return std::nullopt;
-              }
+            // skip dimension if it is routing config based or if it is a
+            // dynamic dimension defined on a different scope
+            if (shouldSkipDim) {
+              return std::nullopt;
+            }
 
-              return getScopeItemToInitialAndFinalRelativeUtils(
-                  dimensionId,
-                  universe,
-                  scopeId,
-                  containerToScopeItemId,
-                  objectToInitialContainer,
-                  objectToFinalContainer);
-            },
-            [&scopeToUtilColumns, &universe, scopeId](
-                const auto& initialAndFinalUtilMaps, auto it) {
-              if (!initialAndFinalUtilMaps) {
-                return;
-              }
+            return getScopeItemToInitialAndFinalRelativeUtils(
+                dimensionId,
+                universe,
+                scopeId,
+                containerToScopeItemId,
+                objectToInitialContainer,
+                objectToFinalContainer);
+          },
+          [&columns, &universe](const auto& initialAndFinalUtilMaps, auto it) {
+            if (!initialAndFinalUtilMaps) {
+              return;
+            }
 
-              auto defaultUtil = DataCell(0.0);
-              auto& scopeName = universe.getEntityName(scopeId);
-              auto& dimensionName = universe.getEntityName(*it);
-              scopeToUtilColumns[scopeName].push_back(
-                  std::make_shared<Column>(
-                      initialAndFinalUtilMaps->first,
-                      defaultUtil,
-                      fmt::format("{}.initUtil", dimensionName),
-                      ColumnType::UTILIZATION));
+            const auto& dimensionName = universe.getEntityName(*it);
+            columns.push_back(
+                std::make_shared<Column>(
+                    initialAndFinalUtilMaps->first,
+                    DataCell(0.0),
+                    fmt::format("{}.initUtil", dimensionName),
+                    ColumnType::UTILIZATION));
 
-              scopeToUtilColumns[scopeName].push_back(
-                  std::make_shared<Column>(
-                      initialAndFinalUtilMaps->second,
-                      defaultUtil,
-                      fmt::format("{}.finalUtil", dimensionName),
-                      ColumnType::UTILIZATION));
-            },
-            executor));
-  }
-
-  // insert columns
-  for (auto& [scopeName, columnVec] : scopeToUtilColumns) {
-    tableData.at(scopeName).insertColumnsInSortedOrder(std::move(columnVec));
-  }
+            columns.push_back(
+                std::make_shared<Column>(
+                    initialAndFinalUtilMaps->second,
+                    DataCell(0.0),
+                    fmt::format("{}.finalUtil", dimensionName),
+                    ColumnType::UTILIZATION));
+          },
+          executor));
+  return columns;
 }
 
 static std::vector<std::shared_ptr<const Column>> buildMovableCols(
@@ -696,48 +679,126 @@ static std::shared_ptr<const Column> buildObjectCol(const Universe& universe) {
       /*primaryKey=*/true);
 }
 
-static void buildContainerAndScopeItemCols(
+static std::shared_ptr<const Column> buildContainerScopeColumn(
     const Universe& universe,
-    Map<std::string, Table>& tableData) {
-  /* Build container column */
-  for (auto scopeId : universe.getScopeIds()) {
-    auto& scope = universe.getScope(scopeId);
-    auto& scopeName = universe.getEntityName(scopeId);
-    const ColumnType colType = (scopeName == universe.getContainerTypeName())
-        ? ColumnType::ENTITY_NAME
-        : ColumnType::SCOPE;
-
-    Map<EntityId, DataCell> containerToCell;
-    Map<EntityId, DataCell> scopeItemToCell;
-    for (auto scopeItemId : scope.getScopeItemIds()) {
-      auto& scopeItemName = universe.getEntityName(scopeItemId);
-      DataCell cell(scopeItemName);
-      for (auto containerId : scope.getContainerIds(scopeItemId)) {
-        containerToCell[toEntityId(containerId)] = cell;
-      }
-      scopeItemToCell[toEntityId(scopeItemId)] = std::move(cell);
-    }
-    DataCell defaultCell("");
-    auto columnData = std::make_shared<Column>(
-        std::move(containerToCell),
-        defaultCell,
-        scopeName,
-        colType,
-        /*primaryKey=*/(scopeName == universe.getContainerTypeName()));
-    tableData.at(universe.getContainerTypeName()).insertColumn(columnData);
-
-    // add column for scope (one column per scope table).
-    if (scopeName != universe.getContainerTypeName()) {
-      const std::shared_ptr<Column> scopeData = std::make_shared<Column>(
-          std::move(scopeItemToCell),
-          std::move(defaultCell),
-          scopeName,
-          ColumnType::ENTITY_NAME,
-          /*primaryKey=*/true);
-      tableData.at(scopeName).insertColumn(scopeData);
+    ScopeId scopeId) {
+  const auto& scope = universe.getScope(scopeId);
+  const auto& scopeName = universe.getEntityName(scopeId);
+  Map<EntityId, DataCell> containerIdToCell;
+  for (const auto scopeItemId : scope.getScopeItemIds()) {
+    const DataCell value(universe.getEntityName(scopeItemId));
+    for (const auto containerId : scope.getContainerIds(scopeItemId)) {
+      containerIdToCell[toEntityId(containerId)] = value;
     }
   }
+  const auto isContainer = scopeName == universe.getContainerTypeName();
+  return std::make_shared<Column>(
+      std::move(containerIdToCell),
+      DataCell(""),
+      scopeName,
+      isContainer ? ColumnType::ENTITY_NAME : ColumnType::SCOPE,
+      /*primaryKey=*/isContainer);
 }
+
+static std::shared_ptr<const Column> buildScopeNameColumn(
+    const Universe& universe,
+    const ScopeId scopeId) {
+  Map<EntityId, DataCell> scopeItemIdToCell;
+  for (const auto scopeItemId : universe.getScope(scopeId).getScopeItemIds()) {
+    scopeItemIdToCell[toEntityId(scopeItemId)] =
+        DataCell(universe.getEntityName(scopeItemId));
+  }
+  return std::make_shared<Column>(
+      std::move(scopeItemIdToCell),
+      DataCell(""),
+      universe.getEntityName(scopeId),
+      ColumnType::ENTITY_NAME,
+      /*primaryKey=*/true);
+}
+
+static Table buildContainerTable(
+    const Universe& universe,
+    const Map<ObjectId, ContainerId>& objectToInitialContainer,
+    const Map<ObjectId, ContainerId>& objectToFinalContainer,
+    std::shared_ptr<algopt::treeprof::ExecutorWrapper> executor) {
+  const auto& containerIds = universe.getContainers().getContainerIds();
+  std::vector<EntityId> rowIds;
+  rowIds.reserve(containerIds.size());
+  for (const auto containerId : containerIds) {
+    rowIds.push_back(toEntityId(containerId));
+  }
+  Table table(std::move(rowIds));
+  for (const auto scopeId : universe.getScopeIds()) {
+    table.insertColumn(buildContainerScopeColumn(universe, scopeId));
+  }
+
+  const auto containerScopeId =
+      universe.getScopeId(universe.getContainerTypeName());
+  table.insertColumnsInSortedOrder(
+      buildScopeDimensionCols(universe, containerScopeId));
+  table.insertColumnsInSortedOrder(buildUtilizationCols(
+      universe,
+      containerScopeId,
+      objectToInitialContainer,
+      objectToFinalContainer,
+      std::move(executor)));
+  return table;
+}
+
+static Table buildScopeTable(
+    const Universe& universe,
+    const ScopeId scopeId,
+    const Map<ObjectId, ContainerId>& objectToInitialContainer,
+    const Map<ObjectId, ContainerId>& objectToFinalContainer,
+    std::shared_ptr<algopt::treeprof::ExecutorWrapper> executor) {
+  const auto& scopeItemIds = universe.getScope(scopeId).getScopeItemIds();
+  std::vector<EntityId> rowIds;
+  rowIds.reserve(scopeItemIds.size());
+  for (const auto scopeItemId : scopeItemIds) {
+    rowIds.push_back(toEntityId(scopeItemId));
+  }
+  Table table(std::move(rowIds));
+  table.insertColumn(buildScopeNameColumn(universe, scopeId));
+  table.insertColumnsInSortedOrder(buildScopeDimensionCols(universe, scopeId));
+  table.insertColumnsInSortedOrder(buildUtilizationCols(
+      universe,
+      scopeId,
+      objectToInitialContainer,
+      objectToFinalContainer,
+      std::move(executor)));
+  return table;
+}
+
+static Map<std::string, Table> buildPrebuiltTables(
+    const Universe& universe,
+    const Map<ObjectId, ContainerId>& objectToInitialContainer,
+    const Map<ObjectId, ContainerId>& objectToFinalContainer,
+    const std::shared_ptr<algopt::treeprof::ExecutorWrapper>& executor) {
+  Map<std::string, Table> tableNameToTable;
+  tableNameToTable.emplace(
+      universe.getContainerTypeName(),
+      buildContainerTable(
+          universe,
+          objectToInitialContainer,
+          objectToFinalContainer,
+          executor));
+  for (const auto scopeId : universe.getScopeIds()) {
+    const auto& scopeName = universe.getEntityName(scopeId);
+    if (scopeName == universe.getContainerTypeName()) {
+      continue;
+    }
+    tableNameToTable.emplace(
+        scopeName,
+        buildScopeTable(
+            universe,
+            scopeId,
+            objectToInitialContainer,
+            objectToFinalContainer,
+            executor));
+  }
+  return tableNameToTable;
+}
+
 // copy-pasted from problemsolverfactoy
 static int get_core_count() {
   return folly::available_concurrency();
@@ -937,36 +998,6 @@ folly::coro::Task<Table> LoadModel::buildObjectTable(
   co_return table;
 }
 
-// Initializes the prebuilt container and scope tables.
-static void initPrebuiltTables(
-    const Universe& universe,
-    Map<std::string, Table>& prebuiltTables) {
-  auto toEntityIds = [](const auto& ids) {
-    std::vector<EntityId> rowIds;
-    rowIds.reserve(ids.size());
-    for (const auto& id : ids) {
-      rowIds.push_back(toEntityId(id));
-    }
-    return rowIds;
-  };
-
-  // add container table
-  prebuiltTables.emplace(
-      universe.getContainerTypeName(),
-      Table(toEntityIds(universe.getContainers().getContainerIds())));
-
-  // add scope tables
-  for (auto scopeId : universe.getScopeIds()) {
-    auto& scopeName = universe.getEntityName(scopeId);
-    if (scopeName == universe.getContainerTypeName()) {
-      continue;
-    }
-    prebuiltTables.emplace(
-        scopeName,
-        Table(toEntityIds(universe.getScope(scopeId).getScopeItemIds())));
-  }
-}
-
 ExplorerModel LoadModel::buildData(interface::Bundle&& bundle) {
   auto executor = std::make_shared<folly::CPUThreadPoolExecutor>(
       get_core_count(),
@@ -1012,21 +1043,11 @@ ExplorerModel LoadModel::buildData(interface::Bundle&& bundle) {
   auto equivalenceSetsData =
       buildEquivalenceSetData(problem->makeEquivalenceSetInfo(), *universe);
 
-  // Initialize the prebuilt tables
-  Map<std::string, Table> prebuiltTables;
-  initPrebuiltTables(*universe, prebuiltTables);
-
-  buildContainerAndScopeItemCols(*universe, prebuiltTables);
-
-  // Build scope dimension
-  buildScopeDimensionCols(*universe, prebuiltTables);
-
-  // Build scope utilization
   auto [objectToInitialContainer, objectToFinalContainer] =
       buildObjectToContainer(finalAssignment, *universe);
-  buildUtilizationCols(
+
+  auto prebuiltTables = buildPrebuiltTables(
       *universe,
-      prebuiltTables,
       objectToInitialContainer,
       objectToFinalContainer,
       wrappedExecutor);
