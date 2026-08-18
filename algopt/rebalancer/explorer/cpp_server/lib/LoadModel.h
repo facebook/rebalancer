@@ -46,6 +46,13 @@ class LoadModel {
 
  public:
   static ExplorerModel buildData(interface::Bundle&& bundle);
+  static folly::coro::Task<Table> buildObjectTable(
+      const entities::Universe& universe,
+      const entities::Map<
+          entities::ContainerId,
+          std::vector<entities::ObjectId>>& finalAssignment,
+      const EquivalenceSetsData& equivalenceSetsData,
+      folly::Executor* executor);
   static Table buildDynamicDimensionTable(
       const entities::Universe& universe,
       const entities::ObjectScalarDimension& dimension,
@@ -57,34 +64,8 @@ class LoadModel {
       folly::coro::AsyncScope& asyncScope,
       folly::Executor* executor);
 
-  // Builds and inserts dynamic dimension columns (srcColumn, dstColumn)
-  // into the objects table asynchronously. This is fully independent of
-  // initDynamicDimensionTables and computes the columns from scratch.
-  static folly::coro::Task<void> initDynamicObjectDimensionColsAsync(
-      const entities::Universe& universe,
-      const entities::Map<
-          entities::ContainerId,
-          std::vector<entities::ObjectId>>& finalAssignment,
-      entities::Map<std::string, Table>& tableData,
-      folly::coro::AsyncScope& asyncScope,
-      std::shared_ptr<folly::CPUThreadPoolExecutor>& executor);
-
-  static void buildStaticObjectDimensionCols(
-      const entities::Universe& universe,
-      entities::Map<std::string, Table>& tableData);
-
   static std::vector<std::string> getDynamicDimensionNames(
       const entities::Universe& universe);
-
-  static std::vector<std::shared_ptr<const Column>> buildPartitionCols(
-      const entities::Universe& universe,
-      const EquivalenceSetsData& eqSetsData);
-
-  static std::vector<std::shared_ptr<const Column>> buildAssignmentCols(
-      const entities::Universe& universe,
-      const entities::Map<
-          entities::ContainerId,
-          std::vector<entities::ObjectId>>& finalAssignment);
 };
 
 } // namespace facebook::rebalancer::explorer

@@ -144,7 +144,7 @@ class ModelServer {
   void initExpressionIdToPtr();
   void initExpressionIdToPtr(Expression* expression);
   void initObjectiveNameToExpr();
-  void startTableDataAsync(entities::Map<std::string, Table> tableData);
+  void startTableDataAsync(entities::Map<std::string, Table> prebuiltTables);
   void waitForTableData() const;
   std::optional<folly::F14FastMap<std::string, std::vector<double>>>
   computeObjectiveToChangePerMoveSet() const;

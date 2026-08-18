@@ -118,7 +118,7 @@ static std::shared_ptr<Universe> buildUniverse(
   throw std::runtime_error("Universe missing in problem");
 }
 
-std::vector<std::shared_ptr<const Column>> LoadModel::buildPartitionCols(
+static std::vector<std::shared_ptr<const Column>> buildPartitionCols(
     const Universe& universe,
     const EquivalenceSetsData& eqSetsData) {
   std::vector<std::shared_ptr<const Column>> columns;
@@ -266,9 +266,8 @@ Table LoadModel::buildDynamicDimensionTable(
   return table;
 }
 
-void LoadModel::buildStaticObjectDimensionCols(
-    const entities::Universe& universe,
-    entities::Map<std::string, Table>& tableData) {
+static std::vector<std::shared_ptr<const Column>>
+buildStaticObjectDimensionCols(const entities::Universe& universe) {
   std::vector<std::shared_ptr<const Column>> staticDimensionColumns;
 
   auto& initialAssignment = universe.getContainers().getInitialAssignment();
@@ -300,9 +299,7 @@ void LoadModel::buildStaticObjectDimensionCols(
       }
     }
   }
-  // Add all static dimension columns in order sorted by dimension name.
-  tableData.at(universe.getObjectTypeName())
-      .insertColumnsInSortedOrder(std::move(staticDimensionColumns));
+  return staticDimensionColumns;
 }
 
 static std::pair<Map<ObjectId, ContainerId>, Map<ObjectId, ContainerId>>
@@ -391,7 +388,7 @@ static void buildScopeDimensionCols(
   }
 }
 
-std::vector<std::shared_ptr<const Column>> LoadModel::buildAssignmentCols(
+static std::vector<std::shared_ptr<const Column>> buildAssignmentCols(
     const Universe& universe,
     const Map<ContainerId, std::vector<ObjectId>>& finalAssignment) {
   std::vector<std::shared_ptr<const Column>> columns;
@@ -638,10 +635,8 @@ static void buildUtilizationCols(
   }
 }
 
-static void buildMovableCol(
-    const Universe& universe,
-    Map<std::string, Table>& tableData) {
-  /* Parse avoidMovingConstraint and MoveInProgressConstraint */
+static std::vector<std::shared_ptr<const Column>> buildMovableCols(
+    const Universe& universe) {
   Map<EntityId, DataCell> objectToIsMovableCell;
   Map<EntityId, DataCell> objectToInProgressCell;
   for (auto constraintId : universe.getConstraints().getConstraintIds()) {
@@ -663,8 +658,8 @@ static void buildMovableCol(
     }
   }
 
-  auto& objectTable = tableData.at(universe.getObjectTypeName());
-  objectTable.insertColumn(
+  std::vector<std::shared_ptr<const Column>> columns;
+  columns.push_back(
       std::make_shared<Column>(
           std::move(objectToIsMovableCell),
           DataCell(1.0), // by default objects are movable
@@ -673,7 +668,7 @@ static void buildMovableCol(
 
   // only add column if there are movesInProgress
   if (!objectToInProgressCell.empty()) {
-    objectTable.insertColumn(
+    columns.push_back(
         std::make_shared<Column>(
             std::move(objectToInProgressCell),
             DataCell(0.0), // by default objects are not part of movesInProgress
@@ -682,12 +677,10 @@ static void buildMovableCol(
             /*isPrimaryKey=*/false,
             "1 when object is part of a MovesInProgressSpec, 0 otherwise"));
   }
+  return columns;
 }
 
-static void buildObjectCol(
-    const Universe& universe,
-    Map<std::string, Table>& tableData) {
-  /* Build object column */
+static std::shared_ptr<const Column> buildObjectCol(const Universe& universe) {
   auto& objectColumn = universe.getObjectTypeName();
   Map<EntityId, DataCell> objectCell;
   for (auto objectId : universe.getObjects().getObjectIds()) {
@@ -695,14 +688,12 @@ static void buildObjectCol(
     objectCell[toEntityId(objectId)] = std::move(cell);
   }
   DataCell defaultCell("");
-  auto columnData = std::make_shared<Column>(
+  return std::make_shared<Column>(
       std::move(objectCell),
       std::move(defaultCell),
       objectColumn,
       ColumnType::ENTITY_NAME,
       /*primaryKey=*/true);
-
-  tableData.at(objectColumn).insertColumn(columnData);
 }
 
 static void buildContainerAndScopeItemCols(
@@ -869,13 +860,12 @@ buildDynamicObjectDimensionColAsync(
   co_return result;
 }
 
-folly::coro::Task<void> LoadModel::initDynamicObjectDimensionColsAsync(
+static folly::coro::Task<std::vector<std::shared_ptr<const Column>>>
+buildDynamicObjectDimensionColsAsync(
     const Universe& universe,
     const Map<entities::ContainerId, std::vector<entities::ObjectId>>&
         finalAssignment,
-    Map<std::string, Table>& tableData,
-    folly::coro::AsyncScope& asyncScope,
-    std::shared_ptr<folly::CPUThreadPoolExecutor>& executor) {
+    folly::Executor* executor) {
   algopt::treeprof::EventRecorder event(
       "Build dynamic object dimension cols async");
 
@@ -883,8 +873,6 @@ folly::coro::Task<void> LoadModel::initDynamicObjectDimensionColsAsync(
   std::vector<
       folly::coro::TaskWithExecutor<std::vector<std::shared_ptr<const Column>>>>
       tasks;
-
-  auto& objectsTable = tableData.at(universe.getObjectTypeName());
 
   for (const DimensionId& dimId : universe.getObjects().getDimensionIds()) {
     const ObjectDimension& dimension =
@@ -896,7 +884,7 @@ folly::coro::Task<void> LoadModel::initDynamicObjectDimensionColsAsync(
         // Launch the coroutine on the thread pool
         tasks.push_back(
             folly::coro::co_withExecutor(
-                executor.get(),
+                executor,
                 buildDynamicObjectDimensionColAsync(
                     universe, dimId, i, dimName, finalAssignment)));
       }
@@ -913,19 +901,46 @@ folly::coro::Task<void> LoadModel::initDynamicObjectDimensionColsAsync(
     }
   }
 
-  // Insert all columns into the objects table
-  for (auto& col : allColumns) {
-    objectsTable.insertColumn(std::move(col));
-  }
-
   event.stop();
+  co_return allColumns;
 }
 
-// Initializes a table for objects, a table for containers and a table for
-// every scope.
-static void initTables(
+folly::coro::Task<Table> LoadModel::buildObjectTable(
     const Universe& universe,
-    Map<std::string, Table>& tableData) {
+    const Map<ContainerId, std::vector<ObjectId>>& finalAssignment,
+    const EquivalenceSetsData& equivalenceSetsData,
+    folly::Executor* executor) {
+  const auto& objectIds = universe.getObjects().getObjectIds();
+  std::vector<EntityId> rowIds;
+  rowIds.reserve(objectIds.size());
+  for (const auto objectId : objectIds) {
+    rowIds.push_back(toEntityId(objectId));
+  }
+
+  Table table(std::move(rowIds));
+  table.insertColumn(buildObjectCol(universe));
+  for (auto& column : buildMovableCols(universe)) {
+    table.insertColumn(std::move(column));
+  }
+  table.insertColumnsInSortedOrder(buildStaticObjectDimensionCols(universe));
+
+  for (auto& column : co_await buildDynamicObjectDimensionColsAsync(
+           universe, finalAssignment, executor)) {
+    table.insertColumn(std::move(column));
+  }
+
+  table.insertColumnsInSortedOrder(
+      buildPartitionCols(universe, equivalenceSetsData));
+  for (auto& column : buildAssignmentCols(universe, finalAssignment)) {
+    table.insertColumn(std::move(column));
+  }
+  co_return table;
+}
+
+// Initializes the prebuilt container and scope tables.
+static void initPrebuiltTables(
+    const Universe& universe,
+    Map<std::string, Table>& prebuiltTables) {
   auto toEntityIds = [](const auto& ids) {
     std::vector<EntityId> rowIds;
     rowIds.reserve(ids.size());
@@ -935,13 +950,8 @@ static void initTables(
     return rowIds;
   };
 
-  // add object table
-  tableData.emplace(
-      universe.getObjectTypeName(),
-      Table(toEntityIds(universe.getObjects().getObjectIds())));
-
   // add container table
-  tableData.emplace(
+  prebuiltTables.emplace(
       universe.getContainerTypeName(),
       Table(toEntityIds(universe.getContainers().getContainerIds())));
 
@@ -951,7 +961,7 @@ static void initTables(
     if (scopeName == universe.getContainerTypeName()) {
       continue;
     }
-    tableData.emplace(
+    prebuiltTables.emplace(
         scopeName,
         Table(toEntityIds(universe.getScope(scopeId).getScopeItemIds())));
   }
@@ -1002,24 +1012,21 @@ ExplorerModel LoadModel::buildData(interface::Bundle&& bundle) {
   auto equivalenceSetsData =
       buildEquivalenceSetData(problem->makeEquivalenceSetInfo(), *universe);
 
-  // Initialize all required tables
-  Map<std::string, Table> tableData_;
-  initTables(*universe, tableData_);
+  // Initialize the prebuilt tables
+  Map<std::string, Table> prebuiltTables;
+  initPrebuiltTables(*universe, prebuiltTables);
 
-  // Build object and container column
-  buildObjectCol(*universe, tableData_);
-  buildContainerAndScopeItemCols(*universe, tableData_);
-  buildMovableCol(*universe, tableData_);
+  buildContainerAndScopeItemCols(*universe, prebuiltTables);
 
   // Build scope dimension
-  buildScopeDimensionCols(*universe, tableData_);
+  buildScopeDimensionCols(*universe, prebuiltTables);
 
   // Build scope utilization
   auto [objectToInitialContainer, objectToFinalContainer] =
       buildObjectToContainer(finalAssignment, *universe);
   buildUtilizationCols(
       *universe,
-      tableData_,
+      prebuiltTables,
       objectToInitialContainer,
       objectToFinalContainer,
       wrappedExecutor);
@@ -1029,7 +1036,7 @@ ExplorerModel LoadModel::buildData(interface::Bundle&& bundle) {
   ExplorerModel explorerModel = {
       .problemSpec = std::move(problemSpec),
       .universe = std::move(universe),
-      .tableData = std::move(tableData_),
+      .tableData = std::move(prebuiltTables),
       .finalAssignment = std::move(finalAssignment),
       .solution = std::move(solution),
       .materialized = std::move(materialized),

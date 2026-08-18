@@ -60,19 +60,32 @@ void colNameAndTypeAreAsExpected(
   }
 }
 
+void addObjectTable(ExplorerModel& model) {
+  auto executor = getTestExecutor();
+  auto table = folly::coro::blockingWait(
+      LoadModel::buildObjectTable(
+          *model.universe,
+          model.finalAssignment,
+          model.equivalenceSetsData,
+          executor.get()));
+  model.tableData.emplace(
+      model.universe->getObjectTypeName(), std::move(table));
+}
+
 TEST(LoadModelTest, Basic) {
   auto bundle = TestUtils::buildBundle();
   auto explorerModel = LoadModel::buildData(std::move(bundle));
+  addObjectTable(explorerModel);
   const auto& universe = *explorerModel.universe;
   const auto& tableData = std::move(explorerModel.tableData);
 
   // Verify column names and types for the host (object) table
-  // Note: src.dynamicLoad and dst.dynamicLoad are built in ModelServer, not
-  // LoadModel
   const std::map<std::string, ColumnType> expectedHostColumnNameAndType = {
       {"host", ColumnType::ENTITY_NAME},
       {"is_movable", ColumnType::INTEGER},
       {"host_count", ColumnType::DIMENSION},
+      {"src.dynamicLoad", ColumnType::DIMENSION},
+      {"dst.dynamicLoad", ColumnType::DIMENSION},
       {"network_0", ColumnType::DIMENSION},
       {"network_1", ColumnType::DIMENSION},
       {"network_2", ColumnType::DIMENSION},
@@ -467,6 +480,7 @@ TEST(ModelTest, MoveGroupTogether) {
   bundle.solution() = std::move(solution);
 
   auto explorerModel = LoadModel::buildData(std::move(bundle));
+  addObjectTable(explorerModel);
   const auto& universe = *explorerModel.universe;
   const auto& tableData = explorerModel.tableData;
 
@@ -544,6 +558,7 @@ TEST(LoadModelTest, IsMovableTest) {
   auto bundle = TestUtils::buildBundle(
       {.spec = std::move(spec), .inProgressSpec = std::move(inProgressSpec)});
   auto explorerModel = LoadModel::buildData(std::move(bundle));
+  addObjectTable(explorerModel);
   const auto& universe = *explorerModel.universe;
   const auto& tableData = explorerModel.tableData;
 
@@ -593,26 +608,21 @@ TEST(LoadModelTest, BasicWithNoSolutionObject) {
 
   auto bundle = TestUtils::buildBundle(buildOptions);
   auto explorerModel = LoadModel::buildData(std::move(bundle));
+  addObjectTable(explorerModel);
   const auto& universe = *explorerModel.universe;
   auto tableData = std::move(explorerModel.tableData);
-
-  // Object dimension columns, partition columns, and assignment columns are
-  // now built asynchronously in ModelServer, so buildData only produces the
-  // base object columns (entity name + movable flag). Call the public static
-  // methods here to verify they still produce the expected columns.
-  auto& objectsTable = tableData.at("host");
-  objectsTable.insertColumnsInSortedOrder(
-      LoadModel::buildPartitionCols(
-          universe, explorerModel.equivalenceSetsData));
-  for (auto& col : LoadModel::buildAssignmentCols(
-           universe, explorerModel.finalAssignment)) {
-    objectsTable.insertColumn(std::move(col));
-  }
 
   const std::set<std::string> expectedObjectColumnsSet = {
       "host",
       "is_movable",
+      "host_count",
+      "network_0",
+      "network_1",
+      "network_2",
+      "ram",
       "scheme",
+      "src.dynamicLoad",
+      "dst.dynamicLoad",
       "src.rack",
       "dst.rack",
       "src.row",

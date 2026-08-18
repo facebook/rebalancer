@@ -235,35 +235,26 @@ ModelServer::~ModelServer() {
 }
 
 void ModelServer::startTableDataAsync(
-    entities::Map<std::string, Table> tableData) {
+    entities::Map<std::string, Table> prebuiltTables) {
   tableDataFuture_ =
       co_withExecutor(
           executor_.get(),
           folly::coro::co_invoke(
-              [this, tableData = std::move(tableData)]() mutable
+              [this, prebuiltTables = std::move(prebuiltTables)]() mutable
                   -> folly::coro::Task<folly::Unit> {
-                LoadModel::buildStaticObjectDimensionCols(
-                    *universe_, tableData);
-
                 if (!dynamicDimensionNames_.empty()) {
                   LoadModel::initDynamicDimensionTables(
                       *universe_, tablePromises_, asyncScope_, executor_.get());
                 }
 
-                auto objectsTableName = universe_->getObjectTypeName();
-
-                for (auto it = tableData.begin(); it != tableData.end();) {
-                  if (it->first == objectsTableName) {
-                    ++it;
-                    continue;
-                  }
+                for (auto& [tableName, table] : prebuiltTables) {
                   auto promise =
                       std::make_shared<folly::SharedPromise<Table>>();
-                  promise->setValue(std::move(it->second));
-                  tablePromises_[it->first] = std::move(promise);
-                  it = tableData.erase(it);
+                  promise->setValue(std::move(table));
+                  tablePromises_[tableName] = std::move(promise);
                 }
 
+                const auto& objectsTableName = universe_->getObjectTypeName();
                 auto promise = std::make_shared<folly::SharedPromise<Table>>();
                 tablePromises_[objectsTableName] = promise;
 
@@ -271,33 +262,15 @@ void ModelServer::startTableDataAsync(
                     folly::coro::co_withExecutor(
                         executor_.get(),
                         folly::coro::co_invoke(
-                            [this,
-                             tableData = std::move(tableData),
-                             promise = std::move(promise)]() mutable
+                            [this, promise = std::move(promise)]() mutable
                                 -> folly::coro::Task<void> {
                               try {
-                                if (!dynamicDimensionNames_.empty()) {
-                                  co_await LoadModel::
-                                      initDynamicObjectDimensionColsAsync(
-                                          *universe_,
-                                          finalAssignment_,
-                                          tableData,
-                                          asyncScope_,
-                                          executor_);
-                                }
-
-                                auto& objectsTable = tableData.at(
-                                    universe_->getObjectTypeName());
-
-                                objectsTable.insertColumnsInSortedOrder(
-                                    LoadModel::buildPartitionCols(
-                                        *universe_, equivalenceSetsData_));
-                                for (auto& col : LoadModel::buildAssignmentCols(
-                                         *universe_, finalAssignment_)) {
-                                  objectsTable.insertColumn(std::move(col));
-                                }
-
-                                promise->setValue(std::move(objectsTable));
+                                promise->setValue(
+                                    co_await LoadModel::buildObjectTable(
+                                        *universe_,
+                                        finalAssignment_,
+                                        equivalenceSetsData_,
+                                        executor_.get()));
                               } catch (...) {
                                 promise->setException(
                                     folly::exception_wrapper(
