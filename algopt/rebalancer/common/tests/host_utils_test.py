@@ -178,7 +178,6 @@ class TestHostUtils(testutil.BaseFacebookTestCase):
                 name="host1",
             ),
             HostData(
-                # pyre-fixme[6]: For 1st param expected `dict[str, str]` but got
                 #  `dict[str, Optional[str]]`.
                 serf_to_match={
                     # pyrefly: ignore [bad-assignment]
@@ -193,7 +192,6 @@ class TestHostUtils(testutil.BaseFacebookTestCase):
                 name="host2",
             ),
             HostData(
-                # pyre-fixme[6]: For 1st param expected `dict[str, str]` but got
                 #  `dict[str, Optional[str]]`.
                 serf_to_match={
                     # pyrefly: ignore [bad-assignment]
@@ -243,7 +241,6 @@ class TestHostUtils(testutil.BaseFacebookTestCase):
             ),
             "rack2": RackData(
                 name="rack2",
-                # pyre-fixme[6]: For 2nd param expected `dict[str, str]` but got
                 #  `dict[str, Optional[str]]`.
                 serf={
                     # pyrefly: ignore [bad-assignment]

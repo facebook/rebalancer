@@ -28,7 +28,6 @@ class TestUtils(testutil.BaseFacebookTestCase):
 
             @_rebalancer_local_cache(cache_path=tmp_dir)
             def cached_inc(arg: str) -> int:
-                # pyre-fixme[16]: `TestUtils` has no attribute `x`.
                 self.x += 1
                 return self.x
 
@@ -62,12 +61,10 @@ class TestUtils(testutil.BaseFacebookTestCase):
 
     async def async_local_cache(self) -> None:
         with TemporaryDirectory() as tmp_dir:
-            # pyre-fixme[16]: `TestUtils` has no attribute `x`.
             self.x = 0
 
             @_rebalancer_local_cache(cache_path=tmp_dir)
             async def async_cached_inc(arg: str) -> int:
-                # pyre-fixme[16]: `TestUtils` has no attribute `x`.
                 self.x += 1
                 return self.x
 

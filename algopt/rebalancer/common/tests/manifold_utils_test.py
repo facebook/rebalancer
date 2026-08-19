@@ -142,7 +142,6 @@ class ManifoldUtilsTest(BaseFacebookTestCase):
         # file stream
         self.assertEqual(call_args[0][1], file_stream)
 
-    # pyre-fixme[56]: Pyre was not able to infer the type of argument `lambda () (({
     #  "file_name":"testfile.json","data":"test data text" }))` to decorator factory
     #  `libfb.py.testutil.data_provider`.
     @data_provider(lambda: ({"file_name": "testfile.json", "data": "test data text"},))

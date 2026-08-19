@@ -171,7 +171,6 @@ class StageMovesTest(unittest.TestCase):
         solver.addSolver(
             SolverSpecs(
                 localSearchStageSolverSpec=LocalSearchStageSolverSpec(
-                    # pyre-fixme[16]: `StageMovesTest` has no attribute `stageSpecs`.
                     stageSpecs=self.stageSpecs,
                     exploreMovesFromContainersNotInObjective=True,
                 )
@@ -199,7 +198,6 @@ class StageMovesTest(unittest.TestCase):
         solver.addSolver(
             SolverSpecs(
                 localSearchStageSolverSpec=LocalSearchStageSolverSpec(
-                    # pyre-fixme[16]: `StageMovesTest` has no attribute `stageSpecs`.
                     stageSpecs=self.stageSpecs,
                     # exploreMovesFromContainersNotInObjective is unset by default, which means that in each stage
                     # the moves from containers not part of objective are not explored

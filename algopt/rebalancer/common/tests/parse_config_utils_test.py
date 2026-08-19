@@ -47,7 +47,6 @@ class ParseConfigUtilsTest(BaseFacebookTestCase):
     Test methods in parse utils
     """
 
-    # pyre-fixme[56]: Pyre was not able to infer the type of argument `lambda () (({ ...
     @data_provider(
         lambda: (
             {
@@ -65,7 +64,6 @@ class ParseConfigUtilsTest(BaseFacebookTestCase):
         result = parse_constraint_type(name)
         self.assertEqual(result, expected_type)
 
-    # pyre-fixme[56]: Pyre was not able to infer the type of argument `lambda () (({
     #  "name":"AvailabilityConstraint: max 1 hosts in sub_region_fd","is_useful":True
     #  }, { "name":"capacityconstraint: max 1 hosts in sub_region_fd","is_useful":False
     #  }))` to decorator factory `libfb.py.testutil.data_provider`.
@@ -128,7 +126,6 @@ class ParseConfigUtilsTest(BaseFacebookTestCase):
             },
         )
     )
-    # pyre-fixme[56]: Pyre was not able to infer the type of argument `lambda () (({ ...
     @data_provider(
         lambda: (
             {
@@ -195,7 +192,6 @@ class ParseConfigUtilsTest(BaseFacebookTestCase):
 
         tmp_dir.cleanup()
 
-    # pyre-fixme[56]: Pyre was not able to infer the type of argument `lambda () (({
     #  "file_name":"a.json","contents":{ "s1":["host1", "host2"],"s2":["host3",
     #  "host4"] },"expected":["host1", "host2", "host3", "host4"] }))` to decorator
     #  factory `libfb.py.testutil.data_provider`.
@@ -218,7 +214,6 @@ class ParseConfigUtilsTest(BaseFacebookTestCase):
 
         tmp_dir.cleanup()
 
-    # pyre-fixme[56]: Pyre was not able to infer the type of argument `lambda () (({
     #  "contents":["host1", "host2"] }, { "contents":[] }))` to decorator factory
     #  `libfb.py.testutil.data_provider`.
     @data_provider(lambda: ({"contents": ["host1", "host2"]}, {"contents": []}))

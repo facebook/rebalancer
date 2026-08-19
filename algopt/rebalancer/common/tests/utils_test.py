@@ -33,7 +33,6 @@ class TestUtils(testutil.BaseFacebookTestCase):
             hash(state)
         with self.assertRaises(NotImplementedError):
             # Deliberately call non-existent method
-            # pyre-ignore[58]: `==` not supported, but we want to test that
             state == 0  # noqa: B015
         other = utils.Holder(x="y")
         state += other
@@ -95,7 +94,6 @@ class TestUtils(testutil.BaseFacebookTestCase):
         inline = lambda: True  # noqa E731
         self.assertTrue(utils.isLambda(inline))
         self.assertFalse(utils.isLambda(realfunc))
-        # pyre-fixme[6]: For 1st argument expected `(_P) -> _R` but got `Type[map]`.
         self.assertFalse(utils.isLambda(map))
         with self.assertRaises(AttributeError):
             # pyre-fixme[6]: For 1st param expected `(...) -> Any` but got `bool`.
@@ -184,7 +182,6 @@ class TestUtils(testutil.BaseFacebookTestCase):
             {0: 1, 2: 3},
         )
         self.assertEqual(
-            # pyre-fixme[6]: For 1st param expected `Iterable[tuple[Variable[_T],
             #  Variable[_U]]]` but got `list[tuple[int, int]]`.
             utils.aggregatePairsByFirst([(0, 1), (0, 2), (3, 4)], sum),
             {0: 3, 3: 4},

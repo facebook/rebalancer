@@ -92,7 +92,6 @@ class _Cacher:
         logger=None,
     ) -> None:
         self.ttl = ttl
-        # pyre-fixme[4]: Attribute must be annotated.
         self.pickler = pickler
         cache_filename = "{cache_prefix}-{uid}-{fn_name}-{cache_version}.pickle".format(
             cache_prefix=cache_prefix,
@@ -106,7 +105,6 @@ class _Cacher:
         # pyre-fixme[6]: For 1st argument expected `Union[PathLike[str], str]` but
         #  got `Union[PathLike[bytes], PathLike[str], bytes, str]`.
         self.cache_path_ = os.path.join(cache_path, cache_filename)
-        # pyre-fixme[4]: Attribute must be annotated.
         self.logger_ = logger or logging.getLogger(__name__)
 
     def checked_cached_file(self) -> tuple[bool, Any]:
@@ -182,7 +180,6 @@ def _rebalancer_local_cache(
 
                 return val
 
-            # pyre-fixme[7]: Expected `typing.Callable[algopt.rebalancer.common.local_cache._P, Variable[_R]]` but got `typing.Callable(_rebalancer_local_cache.decorator.wrapper)[rebalancer.common.local_cache._P, Coroutine[typing.Any, typing.Any, Variable[_R]]]`.
             return wrapper
         else:
             # pyrefly: ignore [not-a-type]

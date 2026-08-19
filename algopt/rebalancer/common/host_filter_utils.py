@@ -154,7 +154,6 @@ async def gen_decomed_assets(
                 BinaryExpression(
                     name="cluster",
                     comparison=Operator.EQUAL,
-                    # pyre-fixme[6]: For 3rd argument expected
                     #  `Optional[Sequence[str]]` but got `list[Union[None, set[Any],
                     #  str]]`.
                     values=[decom_location.get("cluster")],
@@ -165,7 +164,6 @@ async def gen_decomed_assets(
                 BinaryExpression(
                     name="suite",
                     comparison=Operator.EQUAL,
-                    # pyre-fixme[6]: For 3rd argument expected
                     #  `Optional[Sequence[str]]` but got `list[Union[None, set[Any],
                     #  str]]`.
                     values=[decom_location.get("suite")],
@@ -176,7 +174,6 @@ async def gen_decomed_assets(
                 BinaryExpression(
                     name="datacenter",
                     comparison=Operator.EQUAL,
-                    # pyre-fixme[6]: For 3rd argument expected
                     #  `Optional[Sequence[str]]` but got `list[Union[None, set[Any],
                     #  str]]`.
                     values=[decom_location.get("datacenter")],
@@ -187,7 +184,6 @@ async def gen_decomed_assets(
                 BinaryExpression(
                     name="row",
                     comparison=Operator.IN,
-                    # pyre-fixme[6]: For 3rd argument expected
                     #  `Optional[Sequence[str]]` but got `Union[None, set[Any], str]`.
                     values=decom_location.get("row"),
                 )
@@ -197,7 +193,6 @@ async def gen_decomed_assets(
                 BinaryExpression(
                     name="rack",
                     comparison=Operator.IN,
-                    # pyre-fixme[6]: For 3rd argument expected
                     #  `Optional[Sequence[str]]` but got `Union[None, set[Any], str]`.
                     values=decom_location.get("rack_position"),
                 ),

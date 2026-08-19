@@ -31,27 +31,18 @@ DataMap = dict[str, Union[HostData, RackData, utils.Holder]]
 
 
 class StateHolder(utils.Holder):
-    # pyre-fixme[13]: Attribute `hosts_data` is never initialized.
     hosts_data: dict[str, HostData]
-    # pyre-fixme[13]: Attribute `racks_data` is never initialized.
     racks_data: dict[str, RackData]
-    # pyre-fixme[13]: Attribute `tasks_data` is never initialized.
     tasks_data: dict[str, TaskData]
-    # pyre-fixme[13]: Attribute `jobs_data` is never initialized.
     jobs_data: dict[str, JobData]
-    # pyre-fixme[13]: Attribute `serf_scopes` is never initialized.
     serf_scopes: dict[str, SerfScope]
     # pyre-fixme[13]: Attribute `config_map` is never initialized.
     config_map: dict[str, Any]
     folder: str = ""
-    # pyre-fixme[13]: Attribute `sub_region_fd` is never initialized.
     sub_region_fd: dict[str, SubRegionFDScope]
     run_uuid: str = ""
-    # pyre-fixme[13]: Attribute `power_dimensions` is never initialized.
     power_dimensions: list[str]
-    # pyre-fixme[13]: Attribute `network_dimensions` is never initialized.
     network_dimensions: list[str]
-    # pyre-fixme[13]: Attribute `groups_with_shortage` is never initialized.
     groups_with_shortage: set[str]
 
     def scopes(self) -> dict[str, ScopeT]:

@@ -26,7 +26,6 @@ BASE_PATH = "algopt.rebalancer.common.db_utils"
 
 
 class TestDBUtils(BaseFacebookTestCase):
-    # pyre-fixme[56]: Pyre was not able to infer the type of argument `lambda () (({ ...
     @data_provider(
         lambda: (
             {
@@ -149,7 +148,6 @@ class TestDBUtils(BaseFacebookTestCase):
         else:
             self.assertTrue("WHERE region = " not in call_arg)
 
-    # pyre-fixme[56]: Pyre was not able to infer the type of argument `lambda () (({ ...
     @data_provider(
         lambda: (
             {

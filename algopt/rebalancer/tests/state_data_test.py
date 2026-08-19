@@ -128,7 +128,6 @@ class TestStateData(BaseFacebookTestCase):
         #  `List[Holder]`.
         state_data.set_task_tw_resources(tasks_data, jobs_data, hosts_data)
 
-    # pyre-fixme[56]: Pyre was not able to infer the type of argument `lambda () ((({...
     @data_provider(
         lambda: (
             (
