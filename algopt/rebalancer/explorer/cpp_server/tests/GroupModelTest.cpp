@@ -1,5 +1,6 @@
 // (c) Facebook, Inc. and its affiliates. Confidential and proprietary.
 
+#include "algopt/rebalancer/algopt_common/TestUtils.h"
 #include "rebalancer/explorer/cpp_server/server/ModelServer.h"
 #include "rebalancer/explorer/cpp_server/tests/TestUtils.h"
 #include "rebalancer/explorer/if/gen-cpp2/explorer_types.h"
@@ -128,6 +129,16 @@ TEST_F(GroupModelTest, GroupModelWithFilter) {
   auto result = getData(*model, query);
   EXPECT_EQ("rack1", *result.rows()->front().cells()->front().stringValue());
   EXPECT_EQ(1, *result.totalCount());
+}
+
+TEST_F(GroupModelTest, RejectsNumericGroupByColumn) {
+  Group group;
+  group.columns() = {"ram"};
+  const auto query = TestUtils::prepareQuery(std::string("host"), group);
+
+  REBALANCER_EXPECT_RUNTIME_ERROR(
+      getData(*model, query),
+      "Group by requires a string column, but column 'ram' is numeric");
 }
 
 TEST_F(GroupModelTest, GroupModelMultipleColumns) {

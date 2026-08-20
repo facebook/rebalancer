@@ -6,7 +6,6 @@
 #include "rebalancer/explorer/cpp_server/lib/Utils.h"
 #include "rebalancer/explorer/if/gen-cpp2/explorer_types.h"
 
-#include <fmt/core.h>
 #include <re2/re2.h>
 
 #include <vector>
@@ -17,13 +16,8 @@ using namespace facebook::rebalancer::entities;
 
 static bool satisfiesNumericCondition(
     const Comparator comparator,
-    const DataCell& cell,
+    const double cellValue,
     const double targetValue) {
-  if (!cell.doubleValue) {
-    throw std::runtime_error(
-        "Numeric filter can only be applied to numeric columns.");
-  }
-  const auto cellValue = *cell.doubleValue;
   switch (comparator) {
     case Comparator::EQ:
       return algopt::Precision::isEqual(cellValue, targetValue);
@@ -45,19 +39,14 @@ static void applyFilterRuleRegex(
     const FilterRuleRegex& rule,
     std::vector<EntityId>& entityIds) {
   const auto& column = Utils::fetchColumn(columns, *rule.column());
+  column->requireString("Regex filter");
   entityIds.erase(
       std::remove_if(
           entityIds.begin(),
           entityIds.end(),
           [&column, &rule](auto entityId) {
-            const auto& cell = column->getValue(entityId);
-            if (cell.strValue == std::nullopt) {
-              throw std::runtime_error(
-                  fmt::format(
-                      "Regex filter can only be applied to string column. {} does not contain string value",
-                      column->getColumnName()));
-            }
-            return !re2::RE2::PartialMatch(*cell.strValue, *rule.regex());
+            return !re2::RE2::PartialMatch(
+                column->getStrView(entityId), *rule.regex());
           }),
       entityIds.end());
 }
@@ -67,15 +56,15 @@ static void applyFilterRuleNumeric(
     const FilterRuleNumeric& rule,
     std::vector<EntityId>& entityIds) {
   const auto& column = Utils::fetchColumn(columns, *rule.column());
+  column->requireNumeric("Numeric filter");
   entityIds.erase(
       std::remove_if(
           entityIds.begin(),
           entityIds.end(),
           [&column, &rule](auto entityId) {
-            const auto& cell = column->getValue(entityId);
-            const double targetValue = *rule.doubleValue();
+            const auto targetValue = *rule.doubleValue();
             return !satisfiesNumericCondition(
-                *rule.comparator(), cell, targetValue);
+                *rule.comparator(), column->getDouble(entityId), targetValue);
           }),
       entityIds.end());
 }
@@ -85,22 +74,16 @@ static void applyFilterStringAny(
     const FilterRuleStringAny& rule,
     std::vector<EntityId>& entityIds) {
   const auto& column = Utils::fetchColumn(columns, *rule.column());
+  column->requireString("Any filter");
   entityIds.erase(
       std::remove_if(
           entityIds.begin(),
           entityIds.end(),
           [&column, &rule](auto entityId) {
-            const auto& cell = column->getValue(entityId);
-            if (cell.strValue == std::nullopt) {
-              throw std::runtime_error(
-                  fmt::format(
-                      "Any filter can only be applied to string column. {} does not contain string value",
-                      column->getColumnName()));
-            }
+            const auto value = column->getStrView(entityId);
             return std::find(
-                       rule.values()->begin(),
-                       rule.values()->end(),
-                       *cell.strValue) == rule.values()->end();
+                       rule.values()->begin(), rule.values()->end(), value) ==
+                rule.values()->end();
           }),
       entityIds.end());
 }
@@ -110,19 +93,13 @@ static void applyFilterStringNe(
     const FilterRuleStringNe& rule,
     std::vector<EntityId>& entityIds) {
   const auto& column = Utils::fetchColumn(columns, *rule.column());
+  column->requireString("Not-equal filter");
   entityIds.erase(
       std::remove_if(
           entityIds.begin(),
           entityIds.end(),
           [&column, &rule](auto entityId) {
-            const auto& cell = column->getValue(entityId);
-            if (cell.strValue == std::nullopt) {
-              throw std::runtime_error(
-                  fmt::format(
-                      "Not equal filter can only be applied to string column. {} does not contain string value",
-                      column->getColumnName()));
-            }
-            return *cell.strValue == *rule.value();
+            return column->getStrView(entityId) == *rule.value();
           }),
       entityIds.end());
 }

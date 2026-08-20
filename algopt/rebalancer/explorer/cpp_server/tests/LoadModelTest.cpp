@@ -156,53 +156,42 @@ TEST(LoadModelTest, Basic) {
       // assert host0 is initially on rack0
       EXPECT_EQ(
           "rack0",
-          *column->getValue(toEntityId(universe.getObjectId("host0")))
-               .strValue);
+          column->getStrView(toEntityId(universe.getObjectId("host0"))));
 
       // ensure host 3 is on rack 1
       EXPECT_EQ(
           "rack1",
-          *column->getValue(toEntityId(universe.getObjectId("host3")))
-               .strValue);
+          column->getStrView(toEntityId(universe.getObjectId("host3"))));
     } else if (column->getColumnName() == "dst.rack") {
       // assert host0 is moved to rack2
       EXPECT_EQ(
           "rack2",
-          *column->getValue(toEntityId(universe.getObjectId("host0")))
-               .strValue);
+          column->getStrView(toEntityId(universe.getObjectId("host0"))));
     } else if (column->getColumnName() == "ram") {
       // assert normal object dimension
-      EXPECT_EQ(
-          128000,
-          *column->getValue(toEntityId(universe.getObjectId("host2")))
-               .doubleValue);
+      EXPECT_DOUBLE_EQ(
+          128000, column->getDouble(toEntityId(universe.getObjectId("host2"))));
     } else if (column->getColumnName() == "network") {
       // asset network dimension for host3 are added
-      EXPECT_EQ(
-          8.0,
-          *column->getValue(toEntityId(universe.getObjectId("host3")))
-               .doubleValue);
+      EXPECT_DOUBLE_EQ(
+          8.0, column->getDouble(toEntityId(universe.getObjectId("host3"))));
     } else if (column->getColumnName() == "scheme") {
       // assert partition data for object
       EXPECT_EQ(
           "twshared",
-          *column->getValue(toEntityId(universe.getObjectId("host3")))
-               .strValue);
+          column->getStrView(toEntityId(universe.getObjectId("host3"))));
       EXPECT_EQ(
           "cache",
-          *column->getValue(toEntityId(universe.getObjectId("host1")))
-               .strValue);
+          column->getStrView(toEntityId(universe.getObjectId("host1"))));
 
       // assert default partition is empty
       EXPECT_EQ(
-          "",
-          *column->getValue(toEntityId(universe.getObjectId("host2")))
-               .strValue);
+          "", column->getStrView(toEntityId(universe.getObjectId("host2"))));
     } else if (column->getColumnName() == kEquivSetPartition.data()) {
       const auto allObjectIds = universe.getObjects().getObjectIds();
       std::set<std::string> equivSetNames;
       for (auto objectId : allObjectIds) {
-        equivSetNames.insert(*column->getValue(toEntityId(objectId)).strValue);
+        equivSetNames.emplace(column->getStrView(toEntityId(objectId)));
       }
 
       // assert all objects are in the same equivalence set, since there is no
@@ -221,23 +210,18 @@ TEST(LoadModelTest, Basic) {
     if (column->getColumnName() == "msb") {
       EXPECT_EQ(
           "msb1",
-          *column->getValue(toEntityId(universe.getContainerId("rack2")))
-               .strValue);
+          column->getStrView(toEntityId(universe.getContainerId("rack2"))));
     } else if (column->getColumnName() == "row") {
       EXPECT_EQ(
           "row1",
-          *column->getValue(toEntityId(universe.getContainerId("rack2")))
-               .strValue);
+          column->getStrView(toEntityId(universe.getContainerId("rack2"))));
     } else if (column->getColumnName() == "network.initUtil") {
-      EXPECT_EQ(
+      EXPECT_DOUBLE_EQ(
           0.09,
-          *column->getValue(toEntityId(universe.getContainerId("rack0")))
-               .doubleValue);
+          column->getDouble(toEntityId(universe.getContainerId("rack0"))));
     } else if (column->getColumnName() == "host_count.initUtil") {
-      EXPECT_EQ(
-          3,
-          *column->getValue(toEntityId(universe.getContainerId("rack0")))
-               .doubleValue);
+      EXPECT_DOUBLE_EQ(
+          3, column->getDouble(toEntityId(universe.getContainerId("rack0"))));
     }
   }
 
@@ -248,18 +232,14 @@ TEST(LoadModelTest, Basic) {
     // Only the row column is a primary key.
     EXPECT_EQ(column->isPrimaryKey(), column->getColumnName() == "row");
     if (column->getColumnName() == "network.initUtil") {
-      EXPECT_EQ(
+      EXPECT_DOUBLE_EQ(
           9.0,
-          *column
-               ->getValue(
-                   toEntityId(universe.getScopeItemId(rowScopeId, "row0")))
-               .doubleValue);
-      EXPECT_EQ(
+          column->getDouble(
+              toEntityId(universe.getScopeItemId(rowScopeId, "row0"))));
+      EXPECT_DOUBLE_EQ(
           4.5,
-          *column
-               ->getValue(
-                   toEntityId(universe.getScopeItemId(rowScopeId, "row1")))
-               .doubleValue);
+          column->getDouble(
+              toEntityId(universe.getScopeItemId(rowScopeId, "row1"))));
     }
   }
 
@@ -270,82 +250,58 @@ TEST(LoadModelTest, Basic) {
     // Only the msb column is a primary key.
     EXPECT_EQ(column->isPrimaryKey(), column->getColumnName() == "msb");
     if (column->getColumnName() == "host_count.initUtil") {
-      EXPECT_EQ(
+      EXPECT_DOUBLE_EQ(
           4,
-          *column
-               ->getValue(
-                   toEntityId(universe.getScopeItemId(msbScopeId, "msb0")))
-               .doubleValue);
-      EXPECT_EQ(
+          column->getDouble(
+              toEntityId(universe.getScopeItemId(msbScopeId, "msb0"))));
+      EXPECT_DOUBLE_EQ(
           1,
-          *column
-               ->getValue(
-                   toEntityId(universe.getScopeItemId(msbScopeId, "msb1")))
-               .doubleValue);
+          column->getDouble(
+              toEntityId(universe.getScopeItemId(msbScopeId, "msb1"))));
     } else if (column->getColumnName() == "host_count.finalUtil") {
-      EXPECT_EQ(
+      EXPECT_DOUBLE_EQ(
           3,
-          *column
-               ->getValue(
-                   toEntityId(universe.getScopeItemId(msbScopeId, "msb0")))
-               .doubleValue);
-      EXPECT_EQ(
+          column->getDouble(
+              toEntityId(universe.getScopeItemId(msbScopeId, "msb0"))));
+      EXPECT_DOUBLE_EQ(
           2,
-          *column
-               ->getValue(
-                   toEntityId(universe.getScopeItemId(msbScopeId, "msb1")))
-               .doubleValue);
+          column->getDouble(
+              toEntityId(universe.getScopeItemId(msbScopeId, "msb1"))));
     } else if (column->getColumnName() == "network") {
-      EXPECT_EQ(
+      EXPECT_DOUBLE_EQ(
           1000.0,
-          *column
-               ->getValue(
-                   toEntityId(universe.getScopeItemId(msbScopeId, "msb0")))
-               .doubleValue);
-      EXPECT_EQ(
+          column->getDouble(
+              toEntityId(universe.getScopeItemId(msbScopeId, "msb0"))));
+      EXPECT_DOUBLE_EQ(
           0,
-          *column
-               ->getValue(
-                   toEntityId(universe.getScopeItemId(msbScopeId, "msb1")))
-               .doubleValue);
+          column->getDouble(
+              toEntityId(universe.getScopeItemId(msbScopeId, "msb1"))));
     } else if (column->getColumnName() == "network.initUtil") {
-      EXPECT_EQ(
+      EXPECT_DOUBLE_EQ(
           0.0115,
-          *column
-               ->getValue(
-                   toEntityId(universe.getScopeItemId(msbScopeId, "msb0")))
-               .doubleValue);
+          column->getDouble(
+              toEntityId(universe.getScopeItemId(msbScopeId, "msb0"))));
       EXPECT_TRUE(
-          std::isnan(*column
-                          ->getValue(toEntityId(
-                              universe.getScopeItemId(msbScopeId, "msb1")))
-                          .doubleValue));
+          std::isnan(column->getDouble(
+              toEntityId(universe.getScopeItemId(msbScopeId, "msb1")))));
     } else if (column->getColumnName() == "dynamicLoad.initUtil") {
-      EXPECT_EQ(
+      EXPECT_DOUBLE_EQ(
           13.0,
-          *column
-               ->getValue(
-                   toEntityId(universe.getScopeItemId(msbScopeId, "msb0")))
-               .doubleValue);
-      EXPECT_EQ(
+          column->getDouble(
+              toEntityId(universe.getScopeItemId(msbScopeId, "msb0"))));
+      EXPECT_DOUBLE_EQ(
           1.0,
-          *column
-               ->getValue(
-                   toEntityId(universe.getScopeItemId(msbScopeId, "msb1")))
-               .doubleValue);
+          column->getDouble(
+              toEntityId(universe.getScopeItemId(msbScopeId, "msb1"))));
     } else if (column->getColumnName() == "dynamicLoad.finalUtil") {
-      EXPECT_EQ(
+      EXPECT_DOUBLE_EQ(
           3.0,
-          *column
-               ->getValue(
-                   toEntityId(universe.getScopeItemId(msbScopeId, "msb0")))
-               .doubleValue);
-      EXPECT_EQ(
+          column->getDouble(
+              toEntityId(universe.getScopeItemId(msbScopeId, "msb0"))));
+      EXPECT_DOUBLE_EQ(
           2.0,
-          *column
-               ->getValue(
-                   toEntityId(universe.getScopeItemId(msbScopeId, "msb1")))
-               .doubleValue);
+          column->getDouble(
+              toEntityId(universe.getScopeItemId(msbScopeId, "msb1"))));
     }
   }
 }
@@ -409,12 +365,12 @@ TEST(LoadModelTest, DynamicDimensionTableUsesGroupRowsForCompactStorage) {
   ASSERT_EQ(2, table.getRowIds().size());
   const EntityId defaultRow(0);
   const EntityId groupRow(1);
-  EXPECT_EQ(DataCell("default"), objectNames->getValue(defaultRow));
-  EXPECT_EQ(DataCell("default"), scopeItemNames->getValue(defaultRow));
-  EXPECT_EQ(DataCell(1.0), dimensionValues->getValue(defaultRow));
-  EXPECT_EQ(DataCell("web"), objectNames->getValue(groupRow));
-  EXPECT_EQ(DataCell("zone0"), scopeItemNames->getValue(groupRow));
-  EXPECT_EQ(DataCell(7.0), dimensionValues->getValue(groupRow));
+  EXPECT_EQ("default", objectNames->getStrView(defaultRow));
+  EXPECT_EQ("default", scopeItemNames->getStrView(defaultRow));
+  EXPECT_DOUBLE_EQ(1.0, dimensionValues->getDouble(defaultRow));
+  EXPECT_EQ("web", objectNames->getStrView(groupRow));
+  EXPECT_EQ("zone0", scopeItemNames->getStrView(groupRow));
+  EXPECT_DOUBLE_EQ(7.0, dimensionValues->getDouble(groupRow));
 }
 
 TEST(ModelTest, MoveGroupTogether) {
@@ -490,53 +446,43 @@ TEST(ModelTest, MoveGroupTogether) {
       // assert host0 and host1 were initially at rack 0
       EXPECT_EQ(
           "rack0",
-          *column->getValue(toEntityId(universe.getObjectId("host0")))
-               .strValue);
+          column->getStrView(toEntityId(universe.getObjectId("host0"))));
       EXPECT_EQ(
           "rack0",
-          *column->getValue(toEntityId(universe.getObjectId("host1")))
-               .strValue);
+          column->getStrView(toEntityId(universe.getObjectId("host1"))));
       // host 3 remained at rack 0
       EXPECT_EQ(
           "rack0",
-          *column->getValue(toEntityId(universe.getObjectId("host3")))
-               .strValue);
+          column->getStrView(toEntityId(universe.getObjectId("host3"))));
       // host 4 moved from rack1
       EXPECT_EQ(
           "rack1",
-          *column->getValue(toEntityId(universe.getObjectId("host4")))
-               .strValue);
+          column->getStrView(toEntityId(universe.getObjectId("host4"))));
     } else if (column->getColumnName() == "dst.rack") {
       // assert host0 and host1 moved to rack1
       EXPECT_EQ(
           "rack1",
-          *column->getValue(toEntityId(universe.getObjectId("host0")))
-               .strValue);
+          column->getStrView(toEntityId(universe.getObjectId("host0"))));
       EXPECT_EQ(
           "rack1",
-          *column->getValue(toEntityId(universe.getObjectId("host1")))
-               .strValue);
+          column->getStrView(toEntityId(universe.getObjectId("host1"))));
       // host 3 remained at rack0
       EXPECT_EQ(
           "rack0",
-          *column->getValue(toEntityId(universe.getObjectId("host3")))
-               .strValue);
+          column->getStrView(toEntityId(universe.getObjectId("host3"))));
       // host 4 moved from rack2
       EXPECT_EQ(
           "rack2",
-          *column->getValue(toEntityId(universe.getObjectId("host4")))
-               .strValue);
+          column->getStrView(toEntityId(universe.getObjectId("host4"))));
     } else if (column->getColumnName() == kEquivSetPartition.data()) {
       // expect two equivalence sets, one for host0 and host1, and one for
       // host3 and host4
       EXPECT_EQ(
-          *column->getValue(toEntityId(universe.getObjectId("host0"))).strValue,
-          *column->getValue(toEntityId(universe.getObjectId("host1")))
-               .strValue);
+          column->getStrView(toEntityId(universe.getObjectId("host0"))),
+          column->getStrView(toEntityId(universe.getObjectId("host1"))));
       EXPECT_EQ(
-          *column->getValue(toEntityId(universe.getObjectId("host3"))).strValue,
-          *column->getValue(toEntityId(universe.getObjectId("host4")))
-               .strValue);
+          column->getStrView(toEntityId(universe.getObjectId("host3"))),
+          column->getStrView(toEntityId(universe.getObjectId("host4"))));
     }
   }
 }
@@ -571,32 +517,23 @@ TEST(LoadModelTest, IsMovableTest) {
   const auto& isMovableColumn = objectColumnData.at(1);
   EXPECT_EQ("is_movable", isMovableColumn->getColumnName());
   EXPECT_EQ(ColumnType::INTEGER, isMovableColumn->getColumnType());
-  EXPECT_EQ(
-      1,
-      *isMovableColumn->getValue(toEntityId(getObjectId("host0"))).doubleValue);
-  EXPECT_EQ(
-      0,
-      *isMovableColumn->getValue(toEntityId(getObjectId("host1"))).doubleValue);
-  EXPECT_EQ(
-      0,
-      *isMovableColumn->getValue(toEntityId(getObjectId("host3"))).doubleValue);
+  EXPECT_DOUBLE_EQ(
+      1, isMovableColumn->getDouble(toEntityId(getObjectId("host0"))));
+  EXPECT_DOUBLE_EQ(
+      0, isMovableColumn->getDouble(toEntityId(getObjectId("host1"))));
+  EXPECT_DOUBLE_EQ(
+      0, isMovableColumn->getDouble(toEntityId(getObjectId("host3"))));
 
   const auto& movesInProgressColumn = objectColumnData.at(2);
   EXPECT_EQ("has_move_in_progress", movesInProgressColumn->getColumnName());
   EXPECT_EQ(ColumnType::INTEGER, movesInProgressColumn->getColumnType());
   EXPECT_FALSE(movesInProgressColumn->isPrimaryKey());
-  EXPECT_EQ(
-      0,
-      *movesInProgressColumn->getValue(toEntityId(getObjectId("host0")))
-           .doubleValue);
-  EXPECT_EQ(
-      0,
-      *movesInProgressColumn->getValue(toEntityId(getObjectId("host1")))
-           .doubleValue);
-  EXPECT_EQ(
-      1,
-      *movesInProgressColumn->getValue(toEntityId(getObjectId("host3")))
-           .doubleValue);
+  EXPECT_DOUBLE_EQ(
+      0, movesInProgressColumn->getDouble(toEntityId(getObjectId("host0"))));
+  EXPECT_DOUBLE_EQ(
+      0, movesInProgressColumn->getDouble(toEntityId(getObjectId("host1"))));
+  EXPECT_DOUBLE_EQ(
+      1, movesInProgressColumn->getDouble(toEntityId(getObjectId("host3"))));
   EXPECT_EQ(
       "1 when object is part of a MovesInProgressSpec, 0 otherwise",
       movesInProgressColumn->getDescription());
@@ -680,26 +617,20 @@ TEST(LoadModelTest, BasicWithNoSolutionObject) {
     EXPECT_EQ(column->isPrimaryKey(), column->getColumnName() == "host");
     if (column->getColumnName() == "ram") {
       // assert normal object dimension
-      EXPECT_EQ(
-          128000,
-          *column->getValue(toEntityId(universe.getObjectId("host2")))
-               .doubleValue);
+      EXPECT_DOUBLE_EQ(
+          128000, column->getDouble(toEntityId(universe.getObjectId("host2"))));
     } else if (column->getColumnName() == "dst.dynamicLoad") {
       EXPECT_DOUBLE_EQ(
-          1.0,
-          *column->getValue(toEntityId(universe.getObjectId("host0")))
-               .doubleValue);
+          1.0, column->getDouble(toEntityId(universe.getObjectId("host0"))));
     } else if (column->getColumnName() == "network") {
       // assert network dimension for host3 are added
-      EXPECT_EQ(
-          8.0,
-          *column->getValue(toEntityId(universe.getObjectId("host3")))
-               .doubleValue);
+      EXPECT_DOUBLE_EQ(
+          8.0, column->getDouble(toEntityId(universe.getObjectId("host3"))));
     } else if (column->getColumnName() == kEquivSetPartition.data()) {
       const auto allObjectIds = universe.getObjects().getObjectIds();
       std::set<std::string> equivSetNames;
       for (auto objectId : allObjectIds) {
-        equivSetNames.insert(*column->getValue(toEntityId(objectId)).strValue);
+        equivSetNames.emplace(column->getStrView(toEntityId(objectId)));
       }
 
       // assert all objects are in the same equivalence set, since there is no
@@ -715,12 +646,10 @@ TEST(LoadModelTest, BasicWithNoSolutionObject) {
   auto rowScopeId = universe.getScopeId("row");
   for (auto& column : rowColumnData) {
     if (column->getColumnName() == "network.initUtil") {
-      EXPECT_EQ(
+      EXPECT_DOUBLE_EQ(
           9.0,
-          *column
-               ->getValue(
-                   toEntityId(universe.getScopeItemId(rowScopeId, "row0")))
-               .doubleValue);
+          column->getDouble(
+              toEntityId(universe.getScopeItemId(rowScopeId, "row0"))));
     }
   }
 
@@ -729,45 +658,33 @@ TEST(LoadModelTest, BasicWithNoSolutionObject) {
   auto msbScopeId = universe.getScopeId("msb");
   for (auto& column : msbScopeColumnData) {
     if (column->getColumnName() == "host_count.initUtil") {
-      EXPECT_EQ(
+      EXPECT_DOUBLE_EQ(
           4,
-          *column
-               ->getValue(
-                   toEntityId(universe.getScopeItemId(msbScopeId, "msb0")))
-               .doubleValue);
+          column->getDouble(
+              toEntityId(universe.getScopeItemId(msbScopeId, "msb0"))));
     } else if (column->getColumnName() == "host_count.finalUtil") {
       // note that this is zero because there is no solution object
-      EXPECT_EQ(
+      EXPECT_DOUBLE_EQ(
           0,
-          *column
-               ->getValue(
-                   toEntityId(universe.getScopeItemId(msbScopeId, "msb0")))
-               .doubleValue);
+          column->getDouble(
+              toEntityId(universe.getScopeItemId(msbScopeId, "msb0"))));
     } else if (column->getColumnName() == "network") {
-      EXPECT_EQ(
+      EXPECT_DOUBLE_EQ(
           1000.0,
-          *column
-               ->getValue(
-                   toEntityId(universe.getScopeItemId(msbScopeId, "msb0")))
-               .doubleValue);
-      EXPECT_EQ(
+          column->getDouble(
+              toEntityId(universe.getScopeItemId(msbScopeId, "msb0"))));
+      EXPECT_DOUBLE_EQ(
           0,
-          *column
-               ->getValue(
-                   toEntityId(universe.getScopeItemId(msbScopeId, "msb1")))
-               .doubleValue);
+          column->getDouble(
+              toEntityId(universe.getScopeItemId(msbScopeId, "msb1"))));
     } else if (column->getColumnName() == "network.initUtil") {
-      EXPECT_EQ(
+      EXPECT_DOUBLE_EQ(
           0.0115,
-          *column
-               ->getValue(
-                   toEntityId(universe.getScopeItemId(msbScopeId, "msb0")))
-               .doubleValue);
+          column->getDouble(
+              toEntityId(universe.getScopeItemId(msbScopeId, "msb0"))));
       EXPECT_TRUE(
-          std::isnan(*column
-                          ->getValue(toEntityId(
-                              universe.getScopeItemId(msbScopeId, "msb1")))
-                          .doubleValue));
+          std::isnan(column->getDouble(
+              toEntityId(universe.getScopeItemId(msbScopeId, "msb1")))));
     }
   }
 }

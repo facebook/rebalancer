@@ -49,7 +49,7 @@ createNewRowIds(
     std::vector<std::string> groupValue;
     groupValue.reserve(groupByTableColumns.size());
     for (const auto& col : groupByTableColumns) {
-      groupValue.push_back(*col->getValue(filteredRow).strValue);
+      groupValue.emplace_back(col->getStrView(filteredRow));
     }
     GroupValueCellStruct value{.groupCellValue = std::move(groupValue)};
     auto groupId = getGroupId(std::move(value), groupToNewRowIds, newRowIds);
@@ -69,7 +69,9 @@ static std::vector<std::shared_ptr<const Column>> extractGroupByColumns(
       groupByColumns.end(),
       std::back_inserter(groupByTableColumns),
       [&columns](const auto& columnName) {
-        return Utils::fetchColumn(columns, columnName);
+        auto column = Utils::fetchColumn(columns, columnName);
+        column->requireString("Group by");
+        return column;
       });
   return groupByTableColumns;
 }
@@ -92,7 +94,8 @@ Table GroupModel::applyGroup(const Group& group, Table table) {
       auto newRowId = origRowToGroupRow.at(origRowId);
       // different rows belonging to same group will have same value
       // for the column, hence its okay to refer to any value
-      groupEntityToCell[newRowId] = column->getValue(origRowId);
+      groupEntityToCell[newRowId] =
+          DataCell(std::string(column->getStrView(origRowId)));
     }
     auto groupColumn = std::make_shared<Column>(
         std::move(groupEntityToCell),
@@ -117,7 +120,7 @@ Table GroupModel::applyGroup(const Group& group, Table table) {
     Map<EntityId, DataCell> groupEntityToCell;
     for (auto origRowId : filteredRows) {
       const auto newRowId = origRowToGroupRow.at(origRowId);
-      const auto cellValue = *column->getValue(origRowId).doubleValue;
+      const auto cellValue = column->getDouble(origRowId);
       auto cellPtr = folly::get_ptr(groupEntityToCell, newRowId);
 
       // if colType is IDENTIFIER, then we just count the number of rows

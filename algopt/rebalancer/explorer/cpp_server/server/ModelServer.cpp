@@ -478,13 +478,10 @@ static Result prepareResult(const Table& table, size_t totalRows) {
     std::vector<CellData> cells;
     for (const auto& column : columns) {
       CellData cellData;
-      const auto& dataCell = column->getValue(entityId);
-      if (dataCell.strValue != std::nullopt) {
-        cellData.stringValue() = *dataCell.strValue;
-      } else if (dataCell.doubleValue != std::nullopt) {
-        cellData.doubleValue() = *dataCell.doubleValue;
+      if (column->isString()) {
+        cellData.stringValue() = column->getStrView(entityId);
       } else {
-        throw std::runtime_error("Column data not found");
+        cellData.doubleValue() = column->getDouble(entityId);
       }
       cells.push_back(std::move(cellData));
     }
@@ -514,26 +511,24 @@ static Table applyOrder(const Order& order, Table table) {
       Utils::fetchColumn(tableColumns, *orderRequest.name());
   const auto& orderDirection = *orderRequest.direction();
 
-  std::sort(
-      rowIds.begin(),
-      rowIds.end(),
-      [orderDirection, &orderTableColumn](EntityId id1, EntityId id2) {
-        auto& value1 = orderTableColumn->getValue(id1);
-        auto& value2 = orderTableColumn->getValue(id2);
-        if (value1.doubleValue != std::nullopt) {
-          if (orderDirection == OrderDirection::ASCENDING) {
-            return value1.doubleValue < value2.doubleValue;
-          } else {
-            return value1.doubleValue > value2.doubleValue;
-          }
-        } else {
-          if (orderDirection == OrderDirection::ASCENDING) {
-            return value1.strValue < value2.strValue;
-          } else {
-            return value1.strValue > value2.strValue;
-          }
-        }
-      });
+  const auto sortRows = [&](const auto getValue) {
+    std::sort(
+        rowIds.begin(),
+        rowIds.end(),
+        [orderDirection, &getValue](EntityId id1, EntityId id2) {
+          const auto value1 = getValue(id1);
+          const auto value2 = getValue(id2);
+          return orderDirection == OrderDirection::ASCENDING ? value1 < value2
+                                                             : value1 > value2;
+        });
+  };
+  if (orderTableColumn->isNumeric()) {
+    sortRows(
+        [&](const EntityId id) { return orderTableColumn->getDouble(id); });
+  } else {
+    sortRows(
+        [&](const EntityId id) { return orderTableColumn->getStrView(id); });
+  }
   table.updateRowIds(rowIds);
   return table;
 }
@@ -606,7 +601,7 @@ folly::coro::Task<TypeaheadResponse> ModelServer::getTypeahead(
     const auto table = co_await (*promisePtr)->getSemiFuture();
     const auto pk = table.getOnlyPrimaryKeyColumn();
     for (auto rowId : table.getRowIds()) {
-      addToMatchingRows(pk->getValue(rowId).toString());
+      addToMatchingRows(pk->toString(rowId));
     }
   } else if (partitionNames_.contains(entity)) {
     // check if it is equivalence set partition
@@ -1106,9 +1101,10 @@ ModelServer::getMetricDistribution(
   const auto& table = co_await (*promisePtr)->getSemiFuture();
   const auto& seriesColumn =
       Utils::fetchColumn(table.getColumnData(), *request.metric());
+  seriesColumn->requireNumeric("Metric distribution");
   std::vector<double> seriesValues;
   for (auto rowId : table.getRowIds()) {
-    seriesValues.push_back(*seriesColumn->getValue(rowId).doubleValue);
+    seriesValues.push_back(seriesColumn->getDouble(rowId));
   }
   std::sort(seriesValues.begin(), seriesValues.end(), std::greater<>());
 

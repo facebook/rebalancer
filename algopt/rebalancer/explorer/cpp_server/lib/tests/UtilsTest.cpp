@@ -5,6 +5,9 @@
 
 #include <gtest/gtest.h>
 
+#include <limits>
+#include <stdexcept>
+
 namespace entities = facebook::rebalancer::entities;
 
 namespace facebook::rebalancer::explorer::tests {
@@ -164,22 +167,22 @@ TEST_F(UtilsTest, TableBuilderBasic) {
   auto loadColumn = table.getColumnData()[1];
   auto containerColumn = table.getColumnData()[2];
 
-  EXPECT_EQ(*objectColumn->getValue(rowIds[0]).strValue, "task1");
-  EXPECT_EQ(*loadColumn->getValue(rowIds[0]).doubleValue, 30.0);
-  EXPECT_EQ(*containerColumn->getValue(rowIds[0]).strValue, "host1");
+  EXPECT_EQ(objectColumn->getStrView(rowIds[0]), "task1");
+  EXPECT_DOUBLE_EQ(loadColumn->getDouble(rowIds[0]), 30.0);
+  EXPECT_EQ(containerColumn->getStrView(rowIds[0]), "host1");
 
-  EXPECT_EQ(*objectColumn->getValue(rowIds[1]).strValue, "task2");
-  EXPECT_EQ(*loadColumn->getValue(rowIds[1]).doubleValue, 25.0);
-  EXPECT_EQ(*containerColumn->getValue(rowIds[1]).strValue, "host2");
+  EXPECT_EQ(objectColumn->getStrView(rowIds[1]), "task2");
+  EXPECT_DOUBLE_EQ(loadColumn->getDouble(rowIds[1]), 25.0);
+  EXPECT_EQ(containerColumn->getStrView(rowIds[1]), "host2");
 
-  EXPECT_EQ(*objectColumn->getValue(rowIds[2]).strValue, "task3");
-  EXPECT_EQ(*loadColumn->getValue(rowIds[2]).doubleValue, 35.0);
-  EXPECT_EQ(*containerColumn->getValue(rowIds[2]).strValue, "host3");
+  EXPECT_EQ(objectColumn->getStrView(rowIds[2]), "task3");
+  EXPECT_DOUBLE_EQ(loadColumn->getDouble(rowIds[2]), 35.0);
+  EXPECT_EQ(containerColumn->getStrView(rowIds[2]), "host3");
 
   // Verify default values for a non-existent row
-  EXPECT_EQ(*objectColumn->getValue(EntityId(999)).strValue, "unknown_task");
-  EXPECT_EQ(*loadColumn->getValue(EntityId(999)).doubleValue, 0.0);
-  EXPECT_EQ(*containerColumn->getValue(EntityId(999)).strValue, "unknown_host");
+  EXPECT_EQ(objectColumn->getStrView(EntityId(999)), "unknown_task");
+  EXPECT_DOUBLE_EQ(loadColumn->getDouble(EntityId(999)), 0.0);
+  EXPECT_EQ(containerColumn->getStrView(EntityId(999)), "unknown_host");
 }
 
 TEST_F(UtilsTest, TableBuilderEmptyTable) {
@@ -251,6 +254,14 @@ TEST_F(UtilsTest, ColumnTypeClassification) {
     EXPECT_FALSE(column.isNumeric());
     EXPECT_TRUE(column.isString());
   }
+
+  const Column unknown(
+      emptyMap,
+      DataCell(""),
+      "unknown",
+      static_cast<ColumnType>(std::numeric_limits<int>::max()));
+  REBALANCER_EXPECT_RUNTIME_ERROR(
+      unknown.isNumeric(), "Unknown column type: 2147483647");
 }
 
 TEST_F(UtilsTest, InsertColumnRejectsMissingValue) {
@@ -289,6 +300,25 @@ TEST_F(UtilsTest, InsertColumnRejectsMismatchedValueType) {
   REBALANCER_EXPECT_RUNTIME_ERROR(
       table.insertColumn(column),
       "Column 'Value' must have exactly one value matching its type for every table row");
+}
+
+TEST_F(UtilsTest, ColumnTypedAccessors) {
+  const entities::Map<EntityId, DataCell> emptyMap;
+  const EntityId rowId(0);
+  const Column numeric(emptyMap, DataCell(1.5), "numeric", ColumnType::DOUBLE);
+  const Column stringColumn(
+      emptyMap, DataCell("value"), "string", ColumnType::STRING);
+
+  EXPECT_DOUBLE_EQ(1.5, numeric.getDouble(rowId));
+  EXPECT_EQ("1.500000", numeric.toString(rowId));
+  EXPECT_EQ("value", stringColumn.getStrView(rowId));
+  EXPECT_EQ("value", stringColumn.toString(rowId));
+  REBALANCER_EXPECT_RUNTIME_ERROR(
+      numeric.getStrView(rowId),
+      "Reading a string value requires a string column, but column 'numeric' is numeric");
+  REBALANCER_EXPECT_RUNTIME_ERROR(
+      stringColumn.getDouble(rowId),
+      "Reading a double value requires a numeric column, but column 'string' is a string");
 }
 
 TEST_F(UtilsTest, InsertMultipleIdentifierColumnsViaInsertColumn) {

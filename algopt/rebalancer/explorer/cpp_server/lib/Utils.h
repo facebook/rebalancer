@@ -6,9 +6,12 @@
 #include "algopt/rebalancer/entities/Map.h"
 #include "rebalancer/explorer/if/gen-cpp2/explorer_types.h"
 
+#include <fmt/core.h>
+
 #include <optional>
 #include <ranges>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace facebook::rebalancer::explorer {
@@ -30,15 +33,6 @@ struct DataCell {
   explicit DataCell(std::string&& value) : strValue(std::move(value)) {}
   explicit DataCell(double value) : doubleValue(value) {}
 
-  std::string toString() const {
-    if (strValue.has_value()) {
-      return strValue.value();
-    } else if (doubleValue.has_value()) {
-      return std::to_string(doubleValue.value());
-    }
-    return "";
-  }
-
   bool operator==(const DataCell& other) const {
     return strValue == other.strValue && doubleValue == other.doubleValue;
   }
@@ -58,7 +52,10 @@ class Column {
       std::string description = kEmptyString,
       bool excludeFromAggregation = false);
 
-  const DataCell& getValue(EntityId entityId) const;
+  double getDouble(EntityId entityId) const;
+  std::string_view getStrView(EntityId entityId) const;
+  std::string toString(EntityId entityId) const;
+
   ColumnType getColumnType() const;
   const std::string& getColumnName() const;
   bool isPrimaryKey() const {
@@ -69,14 +66,17 @@ class Column {
   }
   const std::string& getDescription() const;
 
-  const entities::Map<EntityId, DataCell>& getNonDefaultValues() const;
-
   bool isNumeric() const;
   bool isString() const;
+  void requireNumeric(std::string_view operation) const;
+  void requireString(std::string_view operation) const;
 
  private:
   friend class Table;
+  friend class Utils;
 
+  const DataCell& cellAt(EntityId entityId) const;
+  bool matches(EntityId entityId, const DataCell& expected) const;
   bool hasValueMatchingType(EntityId entityId, bool expectsDouble) const;
   static bool valueMatchesType(const DataCell& value, bool expectsDouble);
 

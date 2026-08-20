@@ -1,5 +1,6 @@
 // (c) Facebook, Inc. and its affiliates. Confidential and proprietary.
 
+#include "algopt/rebalancer/algopt_common/TestUtils.h"
 #include "algopt/rebalancer/interface/Constants.h"
 #include "rebalancer/explorer/cpp_server/server/ModelServer.h"
 #include "rebalancer/explorer/cpp_server/tests/TestUtils.h"
@@ -281,6 +282,73 @@ TEST_F(FilterModelTest, QueryDataFilterMultiple) {
   auto result = getData(*model, query);
   EXPECT_EQ("host3", *result.rows()->front().cells()->front().stringValue());
   EXPECT_EQ(1, *result.totalCount());
+}
+
+TEST_F(FilterModelTest, TypeMismatchPreservesFilterContext) {
+  const auto expectError = [&](FilterRule rule,
+                               const std::string& expectedError) {
+    const std::vector<FilterRule> rules = {std::move(rule)};
+    const auto query = TestUtils::prepareQuery(std::string("host"), rules);
+    REBALANCER_EXPECT_RUNTIME_ERROR(getData(*model, query), expectedError);
+  };
+
+  FilterRuleRegex regex;
+  regex.column() = "ram";
+  regex.regex() = ".*";
+  FilterRule regexRule;
+  regexRule.regex() = std::move(regex);
+  expectError(
+      std::move(regexRule),
+      "Regex filter requires a string column, but column 'ram' is numeric");
+
+  FilterRuleNumeric numeric;
+  numeric.column() = "host";
+  numeric.doubleValue() = 1.0;
+  numeric.comparator() = Comparator::EQ;
+  FilterRule numericRule;
+  numericRule.numeric() = std::move(numeric);
+  expectError(
+      std::move(numericRule),
+      "Numeric filter requires a numeric column, but column 'host' is a string");
+
+  FilterRuleStringAny any;
+  any.column() = "ram";
+  any.values() = {"1"};
+  FilterRule anyRule;
+  anyRule.stringAny() = std::move(any);
+  expectError(
+      std::move(anyRule),
+      "Any filter requires a string column, but column 'ram' is numeric");
+
+  FilterRuleStringNe notEqual;
+  notEqual.column() = "ram";
+  notEqual.value() = "1";
+  FilterRule notEqualRule;
+  notEqualRule.stringNe() = std::move(notEqual);
+  expectError(
+      std::move(notEqualRule),
+      "Not-equal filter requires a string column, but column 'ram' is numeric");
+}
+
+TEST_F(FilterModelTest, TypeMismatchIsValidatedAfterRowsAreFilteredOut) {
+  FilterRuleStringAny matchesNothing;
+  matchesNothing.column() = "host";
+  matchesNothing.values() = {"missing"};
+  FilterRule firstRule;
+  firstRule.stringAny() = std::move(matchesNothing);
+
+  FilterRuleRegex wrongType;
+  wrongType.column() = "ram";
+  wrongType.regex() = ".*";
+  FilterRule secondRule;
+  secondRule.regex() = std::move(wrongType);
+
+  const std::vector<FilterRule> rules = {
+      std::move(firstRule), std::move(secondRule)};
+  const auto query = TestUtils::prepareQuery(std::string("host"), rules);
+  REBALANCER_EXPECT_RUNTIME_ERROR(
+      getData(*model, query),
+      "Regex filter requires a string column, but column 'ram' is numeric");
 }
 
 } // namespace facebook::rebalancer::explorer::tests

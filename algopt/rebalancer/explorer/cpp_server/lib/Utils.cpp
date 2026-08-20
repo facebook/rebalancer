@@ -25,10 +25,6 @@ Column::Column(
       description_(std::move(description)),
       excludeFromAggregation_(excludeFromAggregation) {}
 
-const DataCell& Column::getValue(const EntityId entityId) const {
-  return folly::get_ref_default(nonDefaultValues_, entityId, defaultValue_);
-}
-
 explorer::ColumnType Column::getColumnType() const {
   return columnType_;
 }
@@ -64,15 +60,58 @@ bool Column::isString() const {
   return !isNumeric();
 }
 
+void Column::requireNumeric(const std::string_view operation) const {
+  if (!isNumeric()) {
+    throw std::runtime_error(
+        fmt::format(
+            "{} requires a numeric column, but column '{}' is a string",
+            operation,
+            columnName_));
+  }
+}
+
+void Column::requireString(const std::string_view operation) const {
+  if (!isString()) {
+    throw std::runtime_error(
+        fmt::format(
+            "{} requires a string column, but column '{}' is numeric",
+            operation,
+            columnName_));
+  }
+}
+
+const DataCell& Column::cellAt(const EntityId entityId) const {
+  return folly::get_ref_default(nonDefaultValues_, entityId, defaultValue_);
+}
+
 bool Column::hasValueMatchingType(
     const EntityId entityId,
     const bool expectsDouble) const {
-  return valueMatchesType(getValue(entityId), expectsDouble);
+  return valueMatchesType(cellAt(entityId), expectsDouble);
 }
 
 bool Column::valueMatchesType(const DataCell& value, const bool expectsDouble) {
   return expectsDouble ? value.doubleValue && !value.strValue
                        : value.strValue && !value.doubleValue;
+}
+
+double Column::getDouble(const EntityId entityId) const {
+  requireNumeric("Reading a double value");
+  return *cellAt(entityId).doubleValue;
+}
+
+std::string_view Column::getStrView(const EntityId entityId) const {
+  requireString("Reading a string value");
+  return *cellAt(entityId).strValue;
+}
+
+std::string Column::toString(const EntityId entityId) const {
+  const auto& value = cellAt(entityId);
+  return isString() ? *value.strValue : std::to_string(*value.doubleValue);
+}
+
+bool Column::matches(const EntityId entityId, const DataCell& expected) const {
+  return cellAt(entityId) == expected;
 }
 
 Table::Table(std::vector<EntityId> rowIds) : rowIds_(std::move(rowIds)) {}
@@ -172,7 +211,7 @@ bool Utils::existsRow(
     bool allMatch = true;
     for (size_t i = 0; i < columnValues.size(); ++i) {
       auto& column = columns.at(i);
-      if (column->getValue(rowId) != columnValues[i]) {
+      if (!column->matches(rowId, columnValues[i])) {
         allMatch = false;
         break;
       }

@@ -1,5 +1,6 @@
 // (c) Facebook, Inc. and its affiliates. Confidential and proprietary.
 
+#include "algopt/rebalancer/algopt_common/TestUtils.h"
 #include "algopt/rebalancer/interface/Constants.h"
 #include "algopt/rebalancer/interface/tests/utils.h"
 #include "rebalancer/explorer/cpp_server/lib/LoadModel.h"
@@ -398,6 +399,17 @@ TEST_F(ModelServerTest, MetricDistributionLimit) {
 
   auto response = getMetricDistribution(*model, request);
   EXPECT_EQ(points, *response.points());
+}
+
+TEST_F(ModelServerTest, MetricDistributionRejectsStringColumn) {
+  MetricDistributionRequest request;
+  request.entity() = "host";
+  request.metric() = "host";
+  request.maxPoints() = 1000;
+
+  REBALANCER_EXPECT_RUNTIME_ERROR(
+      getMetricDistribution(*model, request),
+      "Metric distribution requires a numeric column, but column 'host' is a string");
 }
 
 TEST_F(ModelServerTest, getProblemMetadata) {
