@@ -18,6 +18,7 @@
 #include "algopt/rebalancer/interface/CoreSolver.h"
 #include "algopt/rebalancer/interface/ProblemSolver.h"
 #include "algopt/rebalancer/interface/standalone/BackwardCompatabilityUtils.h"
+#include "algopt/rebalancer/treeprof/Profiler.h"
 
 #include <folly/FileUtil.h>
 #include <folly/system/HardwareConcurrency.h>
@@ -98,13 +99,18 @@ AssignmentSolution RebalancerReplayer::replay(
   BackwardCompatabilityUtils::possiblyModify(*problem.universe());
   const auto universe =
       std::make_shared<entities::Universe>(*problem.universe());
-  return CoreSolver::solve(
+  algopt::treeprof::Profiler treeProfiler("Replay::solve");
+  auto solution = CoreSolver::solve(
       problem,
       executor,
       /*enableParallelizedNewMaterializer=*/true,
       universe,
       logger,
       std::move(learnedInvalidMoveFilter));
+  treeProfiler.stop();
+  CoreSolver::printAndLogHierachicalProfile(
+      treeProfiler.getRoot(), *solution.problemProfile(), logger);
+  return solution;
 }
 
 } // namespace facebook::rebalancer
