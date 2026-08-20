@@ -106,7 +106,7 @@ Table GroupModel::applyGroup(const Group& group, Table table) {
 
   for (const auto& column : columns) {
     // only columns that can be aggregated (like double/int)
-    if (!column->typeLikeIdOrInt() && !column->typeLikeDouble()) {
+    if (!column->isNumeric()) {
       continue;
     }
     if (column->isExcludedFromAggregation()) {

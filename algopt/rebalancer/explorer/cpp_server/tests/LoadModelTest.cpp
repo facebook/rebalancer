@@ -684,6 +684,11 @@ TEST(LoadModelTest, BasicWithNoSolutionObject) {
           128000,
           *column->getValue(toEntityId(universe.getObjectId("host2")))
                .doubleValue);
+    } else if (column->getColumnName() == "dst.dynamicLoad") {
+      EXPECT_DOUBLE_EQ(
+          1.0,
+          *column->getValue(toEntityId(universe.getObjectId("host0")))
+               .doubleValue);
     } else if (column->getColumnName() == "network") {
       // assert network dimension for host3 are added
       EXPECT_EQ(

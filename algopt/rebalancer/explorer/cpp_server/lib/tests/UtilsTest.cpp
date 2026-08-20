@@ -229,50 +229,66 @@ TEST_F(UtilsTest, TableBuilderRebuild) {
       builder.build(), "Cannot build the same table more than once");
 }
 
-TEST_F(UtilsTest, ColumnTypeHelperMethods) {
+TEST_F(UtilsTest, ColumnTypeClassification) {
   const entities::Map<EntityId, DataCell> emptyMap;
-  const DataCell defaultCell("");
+  for (const auto type :
+       {ColumnType::DOUBLE,
+        ColumnType::UTILIZATION,
+        ColumnType::DIMENSION,
+        ColumnType::INTEGER,
+        ColumnType::IDENTIFIER}) {
+    const auto column = Column(emptyMap, DataCell(0.0), "Value", type);
+    EXPECT_TRUE(column.isNumeric());
+    EXPECT_FALSE(column.isString());
+  }
+  for (const auto type :
+       {ColumnType::STRING,
+        ColumnType::ENTITY_NAME,
+        ColumnType::PARTITION,
+        ColumnType::ASSIGNMENT,
+        ColumnType::SCOPE}) {
+    const auto column = Column(emptyMap, DataCell(""), "Value", type);
+    EXPECT_FALSE(column.isNumeric());
+    EXPECT_TRUE(column.isString());
+  }
+}
 
-  // Create columns of different types
-  auto doubleCol = std::make_shared<Column>(
-      emptyMap, defaultCell, "double", ColumnType::DOUBLE);
-  auto utilizationCol = std::make_shared<Column>(
-      emptyMap, defaultCell, "util", ColumnType::UTILIZATION);
-  auto dimensionCol = std::make_shared<Column>(
-      emptyMap, defaultCell, "dim", ColumnType::DIMENSION);
+TEST_F(UtilsTest, InsertColumnRejectsMissingValue) {
+  Table table({EntityId(1), EntityId(2)});
+  const auto values =
+      entities::Map<EntityId, DataCell>{{EntityId(1), DataCell(1.0)}};
+  const auto column =
+      std::make_shared<Column>(values, DataCell(), "Value", ColumnType::DOUBLE);
 
-  auto stringCol = std::make_shared<Column>(
-      emptyMap, defaultCell, "string", ColumnType::STRING);
-  auto entityNameCol = std::make_shared<Column>(
-      emptyMap, defaultCell, "entity", ColumnType::ENTITY_NAME);
-  auto partitionCol = std::make_shared<Column>(
-      emptyMap, defaultCell, "partition", ColumnType::PARTITION);
-  auto assignmentCol = std::make_shared<Column>(
-      emptyMap, defaultCell, "assignment", ColumnType::ASSIGNMENT);
-  auto scopeCol = std::make_shared<Column>(
-      emptyMap, defaultCell, "scope", ColumnType::SCOPE);
+  REBALANCER_EXPECT_RUNTIME_ERROR(
+      table.insertColumn(column),
+      "Column 'Value' must have exactly one value matching its type for every table row");
+}
 
-  // Test typeLikeDouble()
-  EXPECT_TRUE(doubleCol->typeLikeDouble());
-  EXPECT_TRUE(utilizationCol->typeLikeDouble());
-  EXPECT_TRUE(dimensionCol->typeLikeDouble());
+TEST_F(UtilsTest, InsertColumnRejectsMultipleValues) {
+  Table table({EntityId(1)});
+  auto value = DataCell("one");
+  value.doubleValue = 1.0;
+  const auto values =
+      entities::Map<EntityId, DataCell>{{EntityId(1), std::move(value)}};
+  const auto column =
+      std::make_shared<Column>(values, DataCell(), "Value", ColumnType::STRING);
 
-  EXPECT_FALSE(stringCol->typeLikeDouble());
-  EXPECT_FALSE(entityNameCol->typeLikeDouble());
-  EXPECT_FALSE(partitionCol->typeLikeDouble());
-  EXPECT_FALSE(assignmentCol->typeLikeDouble());
-  EXPECT_FALSE(scopeCol->typeLikeDouble());
+  REBALANCER_EXPECT_RUNTIME_ERROR(
+      table.insertColumn(column),
+      "Column 'Value' must have exactly one value matching its type for every table row");
+}
 
-  // Test typeLikeString()
-  EXPECT_TRUE(stringCol->typeLikeString());
-  EXPECT_TRUE(entityNameCol->typeLikeString());
-  EXPECT_TRUE(partitionCol->typeLikeString());
-  EXPECT_TRUE(assignmentCol->typeLikeString());
-  EXPECT_TRUE(scopeCol->typeLikeString());
+TEST_F(UtilsTest, InsertColumnRejectsMismatchedValueType) {
+  Table table({EntityId(1)});
+  const auto values =
+      entities::Map<EntityId, DataCell>{{EntityId(1), DataCell("one")}};
+  const auto column =
+      std::make_shared<Column>(values, DataCell(), "Value", ColumnType::DOUBLE);
 
-  EXPECT_FALSE(doubleCol->typeLikeString());
-  EXPECT_FALSE(utilizationCol->typeLikeString());
-  EXPECT_FALSE(dimensionCol->typeLikeString());
+  REBALANCER_EXPECT_RUNTIME_ERROR(
+      table.insertColumn(column),
+      "Column 'Value' must have exactly one value matching its type for every table row");
 }
 
 TEST_F(UtilsTest, InsertMultipleIdentifierColumnsViaInsertColumn) {

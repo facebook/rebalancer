@@ -71,11 +71,15 @@ class Column {
 
   const entities::Map<EntityId, DataCell>& getNonDefaultValues() const;
 
-  bool typeLikeIdOrInt() const;
-  bool typeLikeDouble() const;
-  bool typeLikeString() const;
+  bool isNumeric() const;
+  bool isString() const;
 
  private:
+  friend class Table;
+
+  bool hasValueMatchingType(EntityId entityId, bool expectsDouble) const;
+  static bool valueMatchesType(const DataCell& value, bool expectsDouble);
+
   const entities::Map<EntityId, DataCell> nonDefaultValues_;
   const DataCell defaultValue_;
   const std::string columnName_;

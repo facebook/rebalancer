@@ -41,27 +41,52 @@ const std::string& Column::getDescription() const {
   return description_;
 }
 
-bool Column::typeLikeIdOrInt() const {
-  return columnType_ == ColumnType::INTEGER ||
-      columnType_ == ColumnType::IDENTIFIER;
+bool Column::isNumeric() const {
+  switch (columnType_) {
+    case ColumnType::DOUBLE:
+    case ColumnType::UTILIZATION:
+    case ColumnType::DIMENSION:
+    case ColumnType::INTEGER:
+    case ColumnType::IDENTIFIER:
+      return true;
+    case ColumnType::STRING:
+    case ColumnType::ENTITY_NAME:
+    case ColumnType::PARTITION:
+    case ColumnType::ASSIGNMENT:
+    case ColumnType::SCOPE:
+      return false;
+  }
+  throw std::runtime_error(
+      fmt::format("Unknown column type: {}", static_cast<int>(columnType_)));
 }
 
-bool Column::typeLikeDouble() const {
-  return columnType_ == ColumnType::DOUBLE ||
-      columnType_ == ColumnType::UTILIZATION ||
-      columnType_ == ColumnType::DIMENSION;
+bool Column::isString() const {
+  return !isNumeric();
 }
 
-bool Column::typeLikeString() const {
-  return columnType_ == ColumnType::STRING ||
-      columnType_ == ColumnType::ENTITY_NAME ||
-      columnType_ == ColumnType::PARTITION ||
-      columnType_ == ColumnType::ASSIGNMENT || columnType_ == ColumnType::SCOPE;
+bool Column::hasValueMatchingType(
+    const EntityId entityId,
+    const bool expectsDouble) const {
+  return valueMatchesType(getValue(entityId), expectsDouble);
+}
+
+bool Column::valueMatchesType(const DataCell& value, const bool expectsDouble) {
+  return expectsDouble ? value.doubleValue && !value.strValue
+                       : value.strValue && !value.doubleValue;
 }
 
 Table::Table(std::vector<EntityId> rowIds) : rowIds_(std::move(rowIds)) {}
 
 void Table::insertColumn(std::shared_ptr<const Column> columnData) {
+  const auto expectsDouble = columnData->isNumeric();
+  for (const auto rowId : rowIds_) {
+    if (!columnData->hasValueMatchingType(rowId, expectsDouble)) {
+      throw std::runtime_error(
+          fmt::format(
+              "Column '{}' must have exactly one value matching its type for every table row",
+              columnData->getColumnName()));
+    }
+  }
   if (columnData->getColumnType() == ColumnType::IDENTIFIER) {
     if (idColExists_) {
       throw std::runtime_error("Expected only one column of type IDENTIFIER");

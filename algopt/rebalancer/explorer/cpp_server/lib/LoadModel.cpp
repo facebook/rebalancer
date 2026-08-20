@@ -893,7 +893,7 @@ buildDynamicObjectDimensionColAsync(
   const ObjectScalarDimension& scalarDimension = dimension.at(index);
 
   // Compute srcColumn and dstColumn independently
-  const DataCell defaultCell;
+  const DataCell defaultCell(scalarDimension.getDefaultValue());
   const Map<ContainerId, std::vector<ObjectId>>& initialAssignment =
       universe.getContainers().getInitialAssignment();
 
