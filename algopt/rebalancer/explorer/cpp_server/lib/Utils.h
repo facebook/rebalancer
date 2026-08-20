@@ -2,16 +2,22 @@
 
 #pragma once
 
+#include "algopt/rebalancer/algopt_common/CompressedIdMap.h"
+#include "algopt/rebalancer/algopt_common/DynamicBitSet.h"
 #include "algopt/rebalancer/entities/Identifiers.h"
 #include "algopt/rebalancer/entities/Map.h"
 #include "rebalancer/explorer/if/gen-cpp2/explorer_types.h"
 
 #include <fmt/core.h>
+#include <folly/lang/SafeAssert.h>
 
+#include <concepts>
+#include <cstddef>
 #include <optional>
 #include <ranges>
 #include <string>
 #include <string_view>
+#include <variant>
 #include <vector>
 
 namespace facebook::rebalancer::explorer {
@@ -38,11 +44,124 @@ struct DataCell {
   }
 };
 
+struct ColumnMetadata {
+  std::string name;
+  ColumnType type;
+  bool isPrimaryKey = false;
+  std::string description = {};
+  bool excludeFromAggregation = false;
+};
+
 class Column {
   /* Stores column details. */
   static inline const std::string kEmptyString;
 
  public:
+  // Once a non-default value is stored for a row, later emplace calls do not
+  // replace it.
+  using DoubleStorage = algopt::CompressedIdMap<EntityId, double>;
+
+  class BoolStorage {
+   public:
+    BoolStorage(std::size_t totalSize, bool defaultValue)
+        : defaultValue_(defaultValue), nonDefaultValues_(totalSize) {}
+
+    void emplace(EntityId entityId, bool value) {
+      const auto index = indexFor(entityId);
+      if (value != defaultValue_) {
+        nonDefaultValues_.set(index);
+      }
+    }
+
+    bool getValue(EntityId entityId) const {
+      const auto hasNonDefaultValue =
+          nonDefaultValues_.isSet(indexFor(entityId));
+      return hasNonDefaultValue ? !defaultValue_ : defaultValue_;
+    }
+
+    std::size_t totalSize() const {
+      return nonDefaultValues_.size();
+    }
+
+   private:
+    std::size_t indexFor(EntityId entityId) const {
+      const auto index = entityId.asIndex();
+      FOLLY_SAFE_CHECK(
+          index < nonDefaultValues_.size(),
+          "BoolStorage: entity ID out of range: ",
+          index);
+      return index;
+    }
+
+    bool defaultValue_;
+    algopt::DynamicBitSet nonDefaultValues_;
+  };
+
+  // Inserted strings must remain at the same address and outlive the storage.
+  class BorrowedStringStorage {
+   public:
+    BorrowedStringStorage(
+        std::size_t totalSize,
+        std::size_t expectedNonDefaultSize)
+        : values_(totalSize, nullptr, expectedNonDefaultSize) {}
+
+    BorrowedStringStorage(
+        entities::Map<EntityId, const std::string*>&& keyToValue,
+        std::size_t totalSize)
+        : values_(std::move(keyToValue), nullptr, totalSize) {}
+
+    void emplace(EntityId entityId, const std::string& value) {
+      if (!value.empty()) {
+        values_.emplace(entityId, &value);
+      }
+    }
+    void emplace(EntityId, std::string&&) = delete;
+
+    std::string_view getValue(EntityId entityId) const {
+      const auto* value = values_.getValue(entityId);
+      return value ? std::string_view(*value) : std::string_view{};
+    }
+
+    std::size_t totalSize() const {
+      return values_.totalSize();
+    }
+
+   private:
+    algopt::CompressedIdMap<EntityId, const std::string*> values_;
+  };
+
+  class OwnedStringStorage {
+   public:
+    OwnedStringStorage(
+        std::size_t totalSize,
+        std::string defaultValue,
+        std::size_t expectedNonDefaultSize)
+        : values_(totalSize, std::move(defaultValue), expectedNonDefaultSize) {}
+
+    OwnedStringStorage(
+        entities::Map<EntityId, std::string>&& keyToValue,
+        std::string defaultValue,
+        std::size_t totalSize)
+        : values_(std::move(keyToValue), std::move(defaultValue), totalSize) {}
+
+    void emplace(EntityId entityId, std::string value) {
+      values_.emplace(entityId, std::move(value));
+    }
+
+    const std::string& getValue(EntityId entityId) const {
+      return values_.getValue(entityId);
+    }
+
+    std::size_t totalSize() const {
+      return values_.totalSize();
+    }
+
+   private:
+    algopt::CompressedIdMap<EntityId, std::string> values_;
+  };
+
+  // TODO: Delete this constructor with LegacyStorage after all tables use
+  // typed storage.
   Column(
       entities::Map<EntityId, DataCell> nonDefaultValues,
       DataCell defaultValue,
@@ -51,6 +170,14 @@ class Column {
       bool primaryKey = false,
       std::string description = kEmptyString,
       bool excludeFromAggregation = false);
+
+  template <typename T>
+    requires(
+        std::same_as<T, DoubleStorage> || std::same_as<T, BoolStorage> ||
+        std::same_as<T, BorrowedStringStorage> ||
+        std::same_as<T, OwnedStringStorage>)
+  Column(T storage, ColumnMetadata metadata)
+      : Column(Storage(std::move(storage)), std::move(metadata)) {}
 
   double getDouble(EntityId entityId) const;
   std::string_view getStrView(EntityId entityId) const;
@@ -75,13 +202,29 @@ class Column {
   friend class Table;
   friend class Utils;
 
-  const DataCell& cellAt(EntityId entityId) const;
   bool matches(EntityId entityId, const DataCell& expected) const;
-  bool hasValueMatchingType(EntityId entityId, bool expectsDouble) const;
+  bool hasValuesMatchingType(const std::vector<EntityId>& entityIds) const;
   static bool valueMatchesType(const DataCell& value, bool expectsDouble);
 
-  const entities::Map<EntityId, DataCell> nonDefaultValues_;
-  const DataCell defaultValue_;
+  struct LegacyStorage {
+    entities::Map<EntityId, DataCell> nonDefaultValues;
+    DataCell defaultValue;
+  };
+
+  static const DataCell& legacyCellAt(
+      const LegacyStorage& storage,
+      EntityId entityId);
+
+  using Storage = std::variant<
+      LegacyStorage,
+      DoubleStorage,
+      BoolStorage,
+      BorrowedStringStorage,
+      OwnedStringStorage>;
+
+  Column(Storage storage, ColumnMetadata metadata);
+
+  const Storage storage_;
   const std::string columnName_;
   const ColumnType columnType_;
   // Denotes whether this column is part of the set of primary keys for the

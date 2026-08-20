@@ -17,13 +17,49 @@ Column::Column(
     bool primaryKey,
     std::string description,
     bool excludeFromAggregation)
-    : nonDefaultValues_(std::move(nonDefaultValues)),
-      defaultValue_(std::move(defaultValue)),
-      columnName_(std::move(columnName)),
-      columnType_(std::move(columnType)),
-      primaryKey_(primaryKey),
-      description_(std::move(description)),
-      excludeFromAggregation_(excludeFromAggregation) {}
+    : Column(
+          LegacyStorage{
+              .nonDefaultValues = std::move(nonDefaultValues),
+              .defaultValue = std::move(defaultValue)},
+          ColumnMetadata{
+              .name = std::move(columnName),
+              .type = columnType,
+              .isPrimaryKey = primaryKey,
+              .description = std::move(description),
+              .excludeFromAggregation = excludeFromAggregation}) {}
+
+Column::Column(Storage storage, ColumnMetadata metadata)
+    : storage_(std::move(storage)),
+      columnName_(std::move(metadata.name)),
+      columnType_(metadata.type),
+      primaryKey_(metadata.isPrimaryKey),
+      description_(std::move(metadata.description)),
+      excludeFromAggregation_(metadata.excludeFromAggregation) {
+  const auto storageMatchesType = std::visit(
+      [&](const auto& storage) {
+        using StorageType = std::decay_t<decltype(storage)>;
+        if constexpr (std::same_as<StorageType, LegacyStorage>) {
+          return true;
+        } else if constexpr (std::same_as<StorageType, BoolStorage>) {
+          return columnType_ == ColumnType::INTEGER;
+        } else if constexpr (std::same_as<StorageType, DoubleStorage>) {
+          return isNumeric();
+        } else if constexpr (
+            std::same_as<StorageType, BorrowedStringStorage> ||
+            std::same_as<StorageType, OwnedStringStorage>) {
+          return isString();
+        } else {
+          static_assert(
+              std::same_as<StorageType, void>, "Unhandled Column storage type");
+        }
+      },
+      storage_);
+  if (!storageMatchesType) {
+    throw std::runtime_error(
+        fmt::format(
+            "Column '{}' storage does not match its type", columnName_));
+  }
+}
 
 explorer::ColumnType Column::getColumnType() const {
   return columnType_;
@@ -80,14 +116,32 @@ void Column::requireString(const std::string_view operation) const {
   }
 }
 
-const DataCell& Column::cellAt(const EntityId entityId) const {
-  return folly::get_ref_default(nonDefaultValues_, entityId, defaultValue_);
+const DataCell& Column::legacyCellAt(
+    const LegacyStorage& storage,
+    const EntityId entityId) {
+  return folly::get_ref_default(
+      storage.nonDefaultValues, entityId, storage.defaultValue);
 }
 
-bool Column::hasValueMatchingType(
-    const EntityId entityId,
-    const bool expectsDouble) const {
-  return valueMatchesType(cellAt(entityId), expectsDouble);
+bool Column::hasValuesMatchingType(
+    const std::vector<EntityId>& entityIds) const {
+  const auto expectsDouble = isNumeric();
+  return std::visit(
+      [&](const auto& storage) {
+        using StorageType = std::decay_t<decltype(storage)>;
+        for (const auto entityId : entityIds) {
+          if constexpr (std::same_as<StorageType, LegacyStorage>) {
+            if (!valueMatchesType(
+                    legacyCellAt(storage, entityId), expectsDouble)) {
+              return false;
+            }
+          } else if (entityId.asIndex() >= storage.totalSize()) {
+            return false;
+          }
+        }
+        return true;
+      },
+      storage_);
 }
 
 bool Column::valueMatchesType(const DataCell& value, const bool expectsDouble) {
@@ -97,34 +151,51 @@ bool Column::valueMatchesType(const DataCell& value, const bool expectsDouble) {
 
 double Column::getDouble(const EntityId entityId) const {
   requireNumeric("Reading a double value");
-  return *cellAt(entityId).doubleValue;
+  if (const auto* data = std::get_if<DoubleStorage>(&storage_)) {
+    return data->getValue(entityId);
+  }
+  if (const auto* data = std::get_if<BoolStorage>(&storage_)) {
+    return data->getValue(entityId);
+  }
+
+  const auto& data = std::get<LegacyStorage>(storage_);
+  return *legacyCellAt(data, entityId).doubleValue;
 }
 
 std::string_view Column::getStrView(const EntityId entityId) const {
   requireString("Reading a string value");
-  return *cellAt(entityId).strValue;
+  if (const auto* data = std::get_if<BorrowedStringStorage>(&storage_)) {
+    return data->getValue(entityId);
+  }
+  if (const auto* data = std::get_if<OwnedStringStorage>(&storage_)) {
+    return data->getValue(entityId);
+  }
+
+  const auto& data = std::get<LegacyStorage>(storage_);
+  return *legacyCellAt(data, entityId).strValue;
 }
 
 std::string Column::toString(const EntityId entityId) const {
-  const auto& value = cellAt(entityId);
-  return isString() ? *value.strValue : std::to_string(*value.doubleValue);
+  return isString() ? std::string(getStrView(entityId))
+                    : std::to_string(getDouble(entityId));
 }
 
 bool Column::matches(const EntityId entityId, const DataCell& expected) const {
-  return cellAt(entityId) == expected;
+  if (!valueMatchesType(expected, isNumeric())) {
+    return false;
+  }
+  return isNumeric() ? getDouble(entityId) == *expected.doubleValue
+                     : getStrView(entityId) == *expected.strValue;
 }
 
 Table::Table(std::vector<EntityId> rowIds) : rowIds_(std::move(rowIds)) {}
 
 void Table::insertColumn(std::shared_ptr<const Column> columnData) {
-  const auto expectsDouble = columnData->isNumeric();
-  for (const auto rowId : rowIds_) {
-    if (!columnData->hasValueMatchingType(rowId, expectsDouble)) {
-      throw std::runtime_error(
-          fmt::format(
-              "Column '{}' must have exactly one value matching its type for every table row",
-              columnData->getColumnName()));
-    }
+  if (!columnData->hasValuesMatchingType(rowIds_)) {
+    throw std::runtime_error(
+        fmt::format(
+            "Column '{}' must have exactly one value matching its type for every table row",
+            columnData->getColumnName()));
   }
   if (columnData->getColumnType() == ColumnType::IDENTIFIER) {
     if (idColExists_) {
@@ -210,7 +281,7 @@ bool Utils::existsRow(
   for (const auto& rowId : rowIds) {
     bool allMatch = true;
     for (size_t i = 0; i < columnValues.size(); ++i) {
-      auto& column = columns.at(i);
+      const auto& column = columns.at(i);
       if (!column->matches(rowId, columnValues[i])) {
         allMatch = false;
         break;

@@ -121,6 +121,85 @@ TEST_F(UtilsTest, ExistsRowWrongNumberOfValues) {
       "Number of values must match number of columns in table");
 }
 
+TEST_F(UtilsTest, ExistsRowWithTypedStorage) {
+  const std::string task0 = "Task0";
+  Table table({EntityId(0), EntityId(1)});
+  Column::DoubleStorage loads(
+      /*totalSize=*/2, /*defaultValue=*/0.0, /*expectedNonDefaultSize=*/1);
+  loads.emplace(EntityId(0), 25.0);
+  table.insertColumn(
+      std::make_shared<Column>(
+          std::move(loads),
+          ColumnMetadata{.name = "Load", .type = ColumnType::DOUBLE}));
+
+  Column::BoolStorage active(/*totalSize=*/2, /*defaultValue=*/true);
+  active.emplace(EntityId(0), false);
+  table.insertColumn(
+      std::make_shared<Column>(
+          std::move(active),
+          ColumnMetadata{.name = "Active", .type = ColumnType::INTEGER}));
+
+  entities::Map<EntityId, const std::string*> names;
+  names.emplace(EntityId(0), &task0);
+  table.insertColumn(
+      std::make_shared<Column>(
+          Column::BorrowedStringStorage(std::move(names), /*totalSize=*/2),
+          ColumnMetadata{.name = "Name", .type = ColumnType::STRING}));
+
+  Column::OwnedStringStorage labels(
+      /*totalSize=*/2,
+      /*defaultValue=*/"unknown",
+      /*expectedNonDefaultSize=*/1);
+  labels.emplace(EntityId(0), "owned");
+  table.insertColumn(
+      std::make_shared<Column>(
+          std::move(labels),
+          ColumnMetadata{.name = "Label", .type = ColumnType::STRING}));
+
+  const std::vector<DataCell> expectedRow = {
+      DataCell(25.0), DataCell(0.0), DataCell("Task0"), DataCell("owned")};
+  EXPECT_TRUE(Utils::existsRow(table, expectedRow));
+  const std::vector<DataCell> expectedDefaultRow = {
+      DataCell(0.0), DataCell(1.0), DataCell(""), DataCell("unknown")};
+  EXPECT_TRUE(Utils::existsRow(table, expectedDefaultRow));
+  EXPECT_FALSE(
+      Utils::existsRow(
+          table,
+          {DataCell(30.0),
+           DataCell(0.0),
+           DataCell("Task0"),
+           DataCell("owned")}));
+  EXPECT_FALSE(
+      Utils::existsRow(
+          table,
+          {DataCell(25.0),
+           DataCell("false"),
+           DataCell("Task0"),
+           DataCell("owned")}));
+  EXPECT_FALSE(
+      Utils::existsRow(
+          table,
+          {DataCell(25.0), DataCell(0.0), DataCell(0.0), DataCell("owned")}));
+  EXPECT_FALSE(
+      Utils::existsRow(
+          table,
+          {DataCell(25.0),
+           DataCell(0.0),
+           DataCell("Task0"),
+           DataCell("unknown")}));
+  EXPECT_FALSE(
+      Utils::existsRow(
+          table,
+          {DataCell("25.0"),
+           DataCell(0.0),
+           DataCell("Task0"),
+           DataCell("owned")}));
+  EXPECT_FALSE(
+      Utils::existsRow(
+          table,
+          {DataCell(25.0), DataCell(0.0), DataCell("Task0"), DataCell(1.0)}));
+}
+
 TEST_F(UtilsTest, TableBuilderBasic) {
   TableBuilder builder;
   builder
@@ -319,6 +398,149 @@ TEST_F(UtilsTest, ColumnTypedAccessors) {
   REBALANCER_EXPECT_RUNTIME_ERROR(
       stringColumn.getDouble(rowId),
       "Reading a double value requires a numeric column, but column 'string' is a string");
+}
+
+TEST_F(UtilsTest, ColumnDoubleStorage) {
+  Column::DoubleStorage numericValues(
+      /*totalSize=*/100, /*defaultValue=*/0.0, /*expectedNonDefaultSize=*/1);
+  numericValues.emplace(EntityId(0), 1.5);
+  numericValues.emplace(EntityId(0), 2.0);
+  const Column numeric(
+      std::move(numericValues),
+      {.name = "numeric", .type = ColumnType::DOUBLE});
+  EXPECT_DOUBLE_EQ(1.5, numeric.getDouble(EntityId(0)));
+  EXPECT_DOUBLE_EQ(0.0, numeric.getDouble(EntityId(99)));
+  EXPECT_EQ("1.500000", numeric.toString(EntityId(0)));
+  REBALANCER_EXPECT_RUNTIME_ERROR(
+      numeric.getStrView(EntityId(0)),
+      "Reading a string value requires a string column, but column 'numeric' is numeric");
+}
+
+TEST_F(UtilsTest, ColumnBoolStorage) {
+  Column::BoolStorage boolValues(/*totalSize=*/2, /*defaultValue=*/true);
+  boolValues.emplace(EntityId(0), false);
+  boolValues.emplace(EntityId(0), true);
+  const Column boolean(
+      std::move(boolValues), {.name = "boolean", .type = ColumnType::INTEGER});
+  EXPECT_DOUBLE_EQ(0.0, boolean.getDouble(EntityId(0)));
+  EXPECT_DOUBLE_EQ(1.0, boolean.getDouble(EntityId(1)));
+  EXPECT_EQ("0.000000", boolean.toString(EntityId(0)));
+
+  Column::BoolStorage falseDefaultValues(
+      /*totalSize=*/2, /*defaultValue=*/false);
+  falseDefaultValues.emplace(EntityId(0), true);
+  falseDefaultValues.emplace(EntityId(0), false);
+  const Column falseDefault(
+      std::move(falseDefaultValues),
+      {.name = "false_default", .type = ColumnType::INTEGER});
+  EXPECT_DOUBLE_EQ(1.0, falseDefault.getDouble(EntityId(0)));
+  EXPECT_DOUBLE_EQ(0.0, falseDefault.getDouble(EntityId(1)));
+}
+
+TEST_F(UtilsTest, ColumnBorrowedStringStorage) {
+  const std::string empty;
+  const std::string first = "first";
+  const std::string second = "second";
+  Column::BorrowedStringStorage referencedValues(
+      /*totalSize=*/100, /*expectedNonDefaultSize=*/1);
+  referencedValues.emplace(EntityId(0), empty);
+  referencedValues.emplace(EntityId(0), first);
+  referencedValues.emplace(EntityId(0), second);
+  const Column referenced(
+      std::move(referencedValues),
+      {.name = "referenced", .type = ColumnType::STRING});
+  EXPECT_EQ(first, referenced.getStrView(EntityId(0)));
+  EXPECT_EQ("", referenced.getStrView(EntityId(99)));
+  EXPECT_EQ("first", referenced.toString(EntityId(0)));
+  EXPECT_EQ("", referenced.toString(EntityId(99)));
+}
+
+TEST_F(UtilsTest, ColumnOwnedStringStorage) {
+  Column::OwnedStringStorage ownedValues(
+      /*totalSize=*/2,
+      /*defaultValue=*/"unknown",
+      /*expectedNonDefaultSize=*/1);
+  ownedValues.emplace(EntityId(0), "owned");
+  ownedValues.emplace(EntityId(0), "replacement");
+  ownedValues.emplace(EntityId(0), "unknown");
+  const Column owned(
+      std::move(ownedValues),
+      ColumnMetadata{.name = "owned", .type = ColumnType::STRING});
+  EXPECT_EQ("owned", owned.getStrView(EntityId(0)));
+  EXPECT_EQ("unknown", owned.getStrView(EntityId(1)));
+  EXPECT_EQ("owned", owned.toString(EntityId(0)));
+}
+
+TEST_F(UtilsTest, ColumnOwnedStringStorageConsumesMap) {
+  entities::Map<EntityId, std::string> rowIdToValue;
+  rowIdToValue.emplace(EntityId(0), "owned");
+  const Column owned(
+      Column::OwnedStringStorage(
+          std::move(rowIdToValue), /*defaultValue=*/"unknown", /*totalSize=*/2),
+      ColumnMetadata{.name = "owned", .type = ColumnType::STRING});
+
+  EXPECT_EQ("owned", owned.getStrView(EntityId(0)));
+  EXPECT_EQ("unknown", owned.getStrView(EntityId(1)));
+}
+
+TEST_F(UtilsTest, ColumnRejectsMismatchedTypedStorage) {
+  const auto constructMismatchedColumn = [] {
+    return Column(
+        Column::DoubleStorage(
+            /*totalSize=*/0,
+            /*defaultValue=*/0.0,
+            /*expectedNonDefaultSize=*/0),
+        ColumnMetadata{.name = "double_as_string", .type = ColumnType::STRING});
+  };
+  REBALANCER_EXPECT_RUNTIME_ERROR(
+      constructMismatchedColumn(),
+      "Column 'double_as_string' storage does not match its type");
+
+  const auto constructMismatchedStringColumn = [] {
+    return Column(
+        Column::OwnedStringStorage(
+            /*totalSize=*/0,
+            /*defaultValue=*/"",
+            /*expectedNonDefaultSize=*/0),
+        ColumnMetadata{.name = "owned_as_double", .type = ColumnType::DOUBLE});
+  };
+  REBALANCER_EXPECT_RUNTIME_ERROR(
+      constructMismatchedStringColumn(),
+      "Column 'owned_as_double' storage does not match its type");
+
+  const auto constructMismatchedBorrowedColumn = [] {
+    return Column(
+        Column::BorrowedStringStorage(
+            /*totalSize=*/0, /*expectedNonDefaultSize=*/0),
+        ColumnMetadata{
+            .name = "borrowed_as_double", .type = ColumnType::DOUBLE});
+  };
+  REBALANCER_EXPECT_RUNTIME_ERROR(
+      constructMismatchedBorrowedColumn(),
+      "Column 'borrowed_as_double' storage does not match its type");
+
+  const auto constructMismatchedBoolColumn = [] {
+    return Column(
+        Column::BoolStorage(/*totalSize=*/0, /*defaultValue=*/false),
+        ColumnMetadata{.name = "bool_as_double", .type = ColumnType::DOUBLE});
+  };
+  REBALANCER_EXPECT_RUNTIME_ERROR(
+      constructMismatchedBoolColumn(),
+      "Column 'bool_as_double' storage does not match its type");
+}
+
+TEST_F(UtilsTest, TableRejectsTypedStorageWithoutEveryRow) {
+  Table table({EntityId(0), EntityId(1)});
+  auto column = std::make_shared<Column>(
+      Column::DoubleStorage(
+          /*totalSize=*/1,
+          /*defaultValue=*/0.0,
+          /*expectedNonDefaultSize=*/0),
+      ColumnMetadata{.name = "numeric", .type = ColumnType::DOUBLE});
+
+  REBALANCER_EXPECT_RUNTIME_ERROR(
+      table.insertColumn(std::move(column)),
+      "Column 'numeric' must have exactly one value matching its type for every table row");
 }
 
 TEST_F(UtilsTest, InsertMultipleIdentifierColumnsViaInsertColumn) {
