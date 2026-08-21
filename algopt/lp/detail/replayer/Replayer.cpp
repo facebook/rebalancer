@@ -38,7 +38,13 @@ std::string_view getSolverName() {
       FLAGS_solver_type.starts_with("xpress")) {
     return kXpressSolver;
   }
-  return kGurobiSolver;
+  if (FLAGS_solver_type.starts_with("Gurobi") ||
+      FLAGS_solver_type.starts_with("gurobi")) {
+    return kGurobiSolver;
+  }
+  throw std::runtime_error(fmt::format(
+      "Invalid --solver_type '{}'. Valid options: xpress, gurobi",
+      FLAGS_solver_type));
 }
 
 int main(int argc, char* argv[]) {
