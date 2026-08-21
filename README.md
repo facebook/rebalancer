@@ -16,6 +16,14 @@ There is a finite (but easily extensible) set of predefined expressions that can
 
 Users interact with Rebalancer via an interface which is available in C++ and Python.
 
+At Meta, Rebalancer has been used for dozens of large-scale resource-allocation
+problems, including hardware and server allocation, ML training and inference
+placement, traffic routing, and load-balancing migrations. Its design,
+algorithms, and production experience are described in
+["Optimizing Resource Allocation in Hyperscale Datacenters: Scalability,
+Usability, and Experiences"](https://www.usenix.org/system/files/osdi24-kumar.pdf),
+published at OSDI 2024.
+
 ## Quick Example
 
 Four tasks, two hosts, one capacity constraint — `host0` starts overloaded with
@@ -316,6 +324,25 @@ A complexity of contributing to rebalancer is that it must compile both on Meta'
   * The deployment step will only step will only be run if the base branch is `main` or `docs`. This branches can only be committed to by members of the core development team.
 * View the website at: https://facebook.github.io/rebalancer/
 
+
+## Citing Rebalancer
+
+If you use Rebalancer in your research, please cite the following paper:
+
+```bibtex
+@inproceedings {298719,
+author = {Neeraj Kumar and Pol Mauri Ruiz and Vijay Menon and Igor Kabiljo and Mayank Pundir and Andrew Newell and Daniel Lee and Liyuan Wang and Chunqiang Tang},
+title = {Optimizing Resource Allocation in Hyperscale Datacenters: Scalability, Usability, and Experiences},
+booktitle = {18th USENIX Symposium on Operating Systems Design and Implementation (OSDI 24)},
+year = {2024},
+isbn = {978-1-939133-40-3},
+address = {Santa Clara, CA},
+pages = {507--528},
+url = {https://www.usenix.org/conference/osdi24/presentation/kumar},
+publisher = {USENIX Association},
+month = jul
+}
+```
 
 ## License
 
