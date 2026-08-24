@@ -63,7 +63,6 @@ class LoadModel {
           tablePromises,
       folly::coro::AsyncScope& asyncScope,
       folly::Executor* executor);
-
   static std::vector<std::string> getDynamicDimensionNames(
       const entities::Universe& universe);
 };

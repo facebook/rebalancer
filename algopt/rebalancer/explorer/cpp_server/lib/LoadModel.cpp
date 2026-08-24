@@ -36,6 +36,18 @@ namespace facebook::rebalancer::explorer {
 using namespace facebook::rebalancer::entities;
 using namespace facebook::rebalancer::interface;
 
+namespace {
+
+std::string makeScalarDimensionName(
+    const std::string& dimensionName,
+    const int scalarCount,
+    const int scalarIndex) {
+  return scalarCount > 1 ? fmt::format("{}_{}", dimensionName, scalarIndex)
+                         : dimensionName;
+}
+
+} // namespace
+
 static EquivalenceSetsData buildEquivalenceSetData(
     const interface::EquivalenceSetInfo& equivSetInfo,
     const Universe& universe) {
@@ -281,9 +293,8 @@ buildStaticObjectDimensionCols(const entities::Universe& universe) {
       if (scalarDimension.isRoutingConfigBased()) {
         continue;
       }
-      auto colName = (objectDimension.size() > 1)
-          ? fmt::format("{}_{}", dimName, i)
-          : dimName;
+      auto colName =
+          makeScalarDimensionName(dimName, objectDimension.size(), i);
 
       if (!scalarDimension.isDynamic()) {
         DataCell defaultDimension(0.0);
@@ -815,9 +826,8 @@ std::vector<std::string> LoadModel::getDynamicDimensionNames(
     for (int i = 0; i < dimension.size(); i++) {
       const ObjectScalarDimension& scalarDimension = dimension.at(i);
       if (scalarDimension.isDynamic()) {
-        auto dimensionName =
-            (dimension.size() > 1) ? fmt::format("{}_{}", dimName, i) : dimName;
-        dynamicDimensionNames.emplace_back(dimensionName);
+        dynamicDimensionNames.emplace_back(
+            makeScalarDimensionName(dimName, dimension.size(), i));
       }
     }
   }
@@ -829,7 +839,7 @@ folly::coro::Task<void> buildDynamicTableAsync(
     const Universe& universe,
     DimensionId dimId,
     int index,
-    std::string dimName,
+    std::string scalarDimName,
     std::shared_ptr<folly::SharedPromise<Table>> promise) {
   try {
     const ObjectDimension& dimension =
@@ -837,7 +847,7 @@ folly::coro::Task<void> buildDynamicTableAsync(
     const ObjectScalarDimension& scalarDimension = dimension.at(index);
     promise->setValue(
         LoadModel::buildDynamicDimensionTable(
-            universe, scalarDimension, dimName));
+            universe, scalarDimension, scalarDimName));
   } catch (...) {
     promise->setException(folly::exception_wrapper(std::current_exception()));
   }
@@ -861,15 +871,16 @@ void LoadModel::initDynamicDimensionTables(
     for (int i = 0; i < dimension.size(); i++) {
       const ObjectScalarDimension& scalarDimension = dimension.at(i);
       if (scalarDimension.isDynamic()) {
-        auto dimensionName =
-            (dimension.size() > 1) ? fmt::format("{}_{}", dimName, i) : dimName;
+        auto scalarDimName =
+            makeScalarDimensionName(dimName, dimension.size(), i);
         auto promise = std::make_shared<folly::SharedPromise<Table>>();
-        tablePromises[dimensionName] = promise;
+        tablePromises[scalarDimName] = promise;
         // Launch the coroutine on the thread pool
         asyncScope.add(
             folly::coro::co_withExecutor(
                 executor,
-                buildDynamicTableAsync(universe, dimId, i, dimName, promise)));
+                buildDynamicTableAsync(
+                    universe, dimId, i, std::move(scalarDimName), promise)));
       }
     }
   }
@@ -882,11 +893,11 @@ buildDynamicObjectDimensionColAsync(
     const Universe& universe,
     DimensionId dimId,
     int index,
-    std::string dimName,
+    std::string scalarDimName,
     const Map<entities::ContainerId, std::vector<entities::ObjectId>>&
         finalAssignment) {
   algopt::treeprof::EventRecorder event("Build dynamic object dimension cols");
-  XLOG(INFO) << "Building object dimension cols for " << dimName;
+  XLOG(INFO) << "Building object dimension cols for " << scalarDimName;
   const algopt::Timer timer(true);
 
   const ObjectDimension& dimension = universe.getObjects().getDimension(dimId);
@@ -900,13 +911,13 @@ buildDynamicObjectDimensionColAsync(
   auto srcColumn = std::make_shared<Column>(
       getObjectDimensionValues(initialAssignment, scalarDimension, universe),
       defaultCell,
-      fmt::format("src.{}", dimName),
+      fmt::format("src.{}", scalarDimName),
       ColumnType::DIMENSION);
 
   auto dstColumn = std::make_shared<Column>(
       getObjectDimensionValues(finalAssignment, scalarDimension, universe),
       defaultCell,
-      fmt::format("dst.{}", dimName),
+      fmt::format("dst.{}", scalarDimName),
       ColumnType::DIMENSION);
 
   // Insert columns into the objects table
@@ -915,7 +926,7 @@ buildDynamicObjectDimensionColAsync(
   result.emplace_back(std::move(srcColumn));
   result.emplace_back(std::move(dstColumn));
 
-  XLOG(INFO) << "Built object dimension cols for " << dimName << " in "
+  XLOG(INFO) << "Built object dimension cols for " << scalarDimName << " in "
              << timer.getSeconds() << " seconds";
   event.stop();
   co_return result;
@@ -942,12 +953,18 @@ buildDynamicObjectDimensionColsAsync(
     for (int i = 0; i < dimension.size(); i++) {
       const ObjectScalarDimension& scalarDimension = dimension.at(i);
       if (scalarDimension.isDynamic()) {
+        auto scalarDimName =
+            makeScalarDimensionName(dimName, dimension.size(), i);
         // Launch the coroutine on the thread pool
         tasks.push_back(
             folly::coro::co_withExecutor(
                 executor,
                 buildDynamicObjectDimensionColAsync(
-                    universe, dimId, i, dimName, finalAssignment)));
+                    universe,
+                    dimId,
+                    i,
+                    std::move(scalarDimName),
+                    finalAssignment)));
       }
     }
   }

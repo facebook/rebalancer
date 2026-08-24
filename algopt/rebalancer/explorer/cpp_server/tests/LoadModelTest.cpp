@@ -171,10 +171,15 @@ TEST(LoadModelTest, Basic) {
       // assert normal object dimension
       EXPECT_DOUBLE_EQ(
           128000, column->getDouble(toEntityId(universe.getObjectId("host2"))));
-    } else if (column->getColumnName() == "network") {
-      // asset network dimension for host3 are added
+    } else if (column->getColumnName() == "network_0") {
       EXPECT_DOUBLE_EQ(
-          8.0, column->getDouble(toEntityId(universe.getObjectId("host3"))));
+          3.0, column->getDouble(toEntityId(universe.getObjectId("host3"))));
+    } else if (column->getColumnName() == "network_1") {
+      EXPECT_DOUBLE_EQ(
+          4.5, column->getDouble(toEntityId(universe.getObjectId("host3"))));
+    } else if (column->getColumnName() == "network_2") {
+      EXPECT_DOUBLE_EQ(
+          1.0, column->getDouble(toEntityId(universe.getObjectId("host3"))));
     } else if (column->getColumnName() == "scheme") {
       // assert partition data for object
       EXPECT_EQ(
@@ -371,6 +376,69 @@ TEST(LoadModelTest, DynamicDimensionTableUsesGroupRowsForCompactStorage) {
   EXPECT_EQ("web", objectNames->getStrView(groupRow));
   EXPECT_EQ("zone0", scopeItemNames->getStrView(groupRow));
   EXPECT_DOUBLE_EQ(7.0, dimensionValues->getDouble(groupRow));
+}
+
+TEST(LoadModelTest, MultiComponentDynamicDimensionsHaveUniqueNames) {
+  auto bundle = TestUtils::buildBundle();
+  auto& dimensions = *bundle.problem()->universe()->objects()->dimensions();
+  entities::thrift::ObjectDimension* dynamicDimension = nullptr;
+  for (auto& entry : dimensions) {
+    auto& dimension = entry.second;
+    if (*dimension.isDynamic()) {
+      dynamicDimension = &dimension;
+      break;
+    }
+  }
+  if (!dynamicDimension) {
+    FAIL() << "Expected the test universe to contain a dynamic dimension";
+  }
+  auto& scalarDimensions = *dynamicDimension->scalarDimensions();
+  ASSERT_EQ(1, scalarDimensions.size());
+  scalarDimensions.push_back(scalarDimensions.front());
+
+  auto explorerModel = LoadModel::buildData(std::move(bundle));
+  addObjectTable(explorerModel);
+  const auto& universe = *explorerModel.universe;
+  auto dynamicDimensionName = explorerModel.dynamicDimensionNames.begin();
+  std::set<std::string> detailColumnNames;
+  for (const auto dimensionId : universe.getObjects().getDimensionIds()) {
+    const auto& dimension = universe.getObjects().getDimension(dimensionId);
+    for (int scalarIndex = 0; scalarIndex < dimension.size(); ++scalarIndex) {
+      if (!dimension.at(scalarIndex).isDynamic()) {
+        continue;
+      }
+      ASSERT_NE(
+          dynamicDimensionName, explorerModel.dynamicDimensionNames.end());
+      const auto table = LoadModel::buildDynamicDimensionTable(
+          universe, dimension.at(scalarIndex), *dynamicDimensionName++);
+      for (const auto& column : table.getColumnData()) {
+        if (column->getColumnType() == ColumnType::DIMENSION) {
+          detailColumnNames.insert(column->getColumnName());
+        }
+      }
+    }
+  }
+  EXPECT_EQ(dynamicDimensionName, explorerModel.dynamicDimensionNames.end());
+
+  const auto expectedDetailColumnNames =
+      makeSet<std::string>({"dynamicLoad_0", "dynamicLoad_1"});
+  EXPECT_EQ(expectedDetailColumnNames, detailColumnNames);
+
+  std::set<std::string> objectColumnNames;
+  for (const auto& columnName :
+       explorerModel.tableData.at(universe.getObjectTypeName())
+           .getColumnNames()) {
+    if (columnName.starts_with("src.dynamicLoad") ||
+        columnName.starts_with("dst.dynamicLoad")) {
+      objectColumnNames.insert(columnName);
+    }
+  }
+  const auto expectedObjectColumnNames = makeSet<std::string>(
+      {"src.dynamicLoad_0",
+       "dst.dynamicLoad_0",
+       "src.dynamicLoad_1",
+       "dst.dynamicLoad_1"});
+  EXPECT_EQ(expectedObjectColumnNames, objectColumnNames);
 }
 
 TEST(ModelTest, MoveGroupTogether) {
@@ -622,10 +690,15 @@ TEST(LoadModelTest, BasicWithNoSolutionObject) {
     } else if (column->getColumnName() == "dst.dynamicLoad") {
       EXPECT_DOUBLE_EQ(
           1.0, column->getDouble(toEntityId(universe.getObjectId("host0"))));
-    } else if (column->getColumnName() == "network") {
-      // assert network dimension for host3 are added
+    } else if (column->getColumnName() == "network_0") {
       EXPECT_DOUBLE_EQ(
-          8.0, column->getDouble(toEntityId(universe.getObjectId("host3"))));
+          3.0, column->getDouble(toEntityId(universe.getObjectId("host3"))));
+    } else if (column->getColumnName() == "network_1") {
+      EXPECT_DOUBLE_EQ(
+          4.5, column->getDouble(toEntityId(universe.getObjectId("host3"))));
+    } else if (column->getColumnName() == "network_2") {
+      EXPECT_DOUBLE_EQ(
+          1.0, column->getDouble(toEntityId(universe.getObjectId("host3"))));
     } else if (column->getColumnName() == kEquivSetPartition.data()) {
       const auto allObjectIds = universe.getObjects().getObjectIds();
       std::set<std::string> equivSetNames;
