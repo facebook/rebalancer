@@ -311,6 +311,26 @@ TEST(LoadModelTest, Basic) {
   }
 }
 
+TEST(LoadModelTest, OverlappingPartitionJoinsGroups) {
+  auto bundle = TestUtils::buildBundle({.includeOverlappedPartition = true});
+  auto explorerModel = LoadModel::buildData(std::move(bundle));
+  addObjectTable(explorerModel);
+
+  const auto& universe = *explorerModel.universe;
+  const auto& table = explorerModel.tableData.at("host");
+  const auto partitionColumn =
+      Utils::fetchColumn(table.getColumnData(), "overlapped");
+  EXPECT_EQ(
+      "group1, group2",
+      partitionColumn->getStrView(toEntityId(universe.getObjectId("host0"))));
+  EXPECT_EQ(
+      "group1",
+      partitionColumn->getStrView(toEntityId(universe.getObjectId("host3"))));
+  EXPECT_EQ(
+      "",
+      partitionColumn->getStrView(toEntityId(universe.getObjectId("host4"))));
+}
+
 TEST(LoadModelTest, DynamicDimensionTableUsesGroupRowsForCompactStorage) {
   UniverseProblemBuilder builder(
       std::make_unique<AsyncConfig>(getTestExecutor(/*numThreads=*/true)));

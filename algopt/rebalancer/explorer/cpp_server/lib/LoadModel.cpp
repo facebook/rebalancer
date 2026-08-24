@@ -21,6 +21,7 @@
 #include <fmt/core.h>
 #include <folly/FileUtil.h>
 #include <folly/futures/SharedPromise.h>
+#include <folly/String.h>
 #include <folly/Synchronized.h>
 #include <folly/system/HardwareConcurrency.h>
 
@@ -138,11 +139,19 @@ static std::vector<std::shared_ptr<const Column>> buildPartitionCols(
     auto& partition = universe.getPartition(partitionId);
     auto& partitionName = universe.getEntityName(partitionId);
     Map<EntityId, DataCell> objectToCell;
-    for (auto groupId : partition.getGroupIds()) {
-      auto& groupName = universe.getEntityName(groupId);
-      for (auto objectId : partition.getObjectIds(groupId)) {
-        const DataCell name(groupName);
-        objectToCell[toEntityId(objectId)] = name;
+    for (const auto& [objectId, groupIds] : partition.getObjectIdToGroupIds()) {
+      if (groupIds.size() == 1) {
+        objectToCell[toEntityId(objectId)] =
+            DataCell(universe.getEntityName(groupIds.front()));
+      } else {
+        std::vector<std::string> groupNames;
+        groupNames.reserve(groupIds.size());
+        for (const auto groupId : groupIds) {
+          groupNames.push_back(universe.getEntityName(groupId));
+        }
+        std::sort(groupNames.begin(), groupNames.end());
+        objectToCell[toEntityId(objectId)] =
+            DataCell(folly::join(", ", groupNames));
       }
     }
     DataCell defaultPartition("");
