@@ -143,6 +143,13 @@ DEFINE_bool(
     false,
     "Validate local search moves after applying them.");
 
+DEFINE_bool(
+    move_stats_track_containers,
+    false,
+    "Override MoveStatsSpec.trackContainers, i.e. per-container move stats, "
+    "like ProblemSolver::enableMoveStats does. If not set, the instance's "
+    "saved value is kept.");
+
 DEFINE_double(
     precision_tolerance_absolute,
     -1,
@@ -436,6 +443,11 @@ static void possiblyModifyProblem(AssignmentProblem& problem) {
   if (!gflags::GetCommandLineFlagInfoOrDie("validate_applied_moves")
            .is_default) {
     problem.validateAppliedMoves() = FLAGS_validate_applied_moves;
+  }
+  if (!gflags::GetCommandLineFlagInfoOrDie("move_stats_track_containers")
+           .is_default) {
+    problem.moveStatsSpec()->trackContainers() =
+        FLAGS_move_stats_track_containers;
   }
 
   // Enable the learned move-legality heuristic (rebalancer-net): an explicit
