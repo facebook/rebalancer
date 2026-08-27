@@ -14,7 +14,6 @@
 #include <concepts>
 #include <cstddef>
 #include <functional>
-#include <optional>
 #include <ranges>
 #include <string>
 #include <string_view>
@@ -26,26 +25,12 @@ namespace facebook::rebalancer::explorer {
 
 using EntityId = entities::EntityId<struct ExplorerTag>;
 using BorrowedString = std::reference_wrapper<const std::string>;
+using CellValue = std::variant<std::string, double>;
 
 template <typename T>
 constexpr EntityId toEntityId(T id) {
   return EntityId(static_cast<entities::EntityIdType>(id));
 }
-
-struct DataCell {
-  /* Stores value of the cell */
-  std::optional<std::string> strValue = std::nullopt;
-  std::optional<double> doubleValue = std::nullopt;
-
-  DataCell() = default;
-  explicit DataCell(const std::string& value) : strValue(value) {}
-  explicit DataCell(std::string&& value) : strValue(std::move(value)) {}
-  explicit DataCell(double value) : doubleValue(value) {}
-
-  bool operator==(const DataCell& other) const {
-    return strValue == other.strValue && doubleValue == other.doubleValue;
-  }
-};
 
 struct ColumnMetadata {
   std::string name;
@@ -57,20 +42,7 @@ struct ColumnMetadata {
 
 class Column {
   /* Stores column details. */
-  static inline const std::string kEmptyString;
-
  public:
-  // TODO: Delete this constructor with LegacyStorage after all tables use
-  // typed storage.
-  Column(
-      entities::Map<EntityId, DataCell> nonDefaultValues,
-      DataCell defaultValue,
-      std::string columnName,
-      ColumnType columnType,
-      bool primaryKey = false,
-      std::string description = kEmptyString,
-      bool excludeFromAggregation = false);
-
   double getDouble(EntityId entityId) const;
   std::string_view getStrView(EntityId entityId) const;
   std::string toString(EntityId entityId) const;
@@ -96,14 +68,8 @@ class Column {
   template <typename>
   friend class ColumnTableBuilder;
 
-  bool matches(EntityId entityId, const DataCell& expected) const;
-  bool hasValuesMatchingType(const std::vector<EntityId>& entityIds) const;
-  static bool valueMatchesType(const DataCell& value, bool expectsDouble);
-
-  struct LegacyStorage {
-    entities::Map<EntityId, DataCell> nonDefaultValues;
-    DataCell defaultValue;
-  };
+  std::size_t getRowCount() const;
+  bool matches(EntityId entityId, const CellValue& expected) const;
 
   struct DoubleStorage {
     std::vector<double> values;
@@ -153,12 +119,7 @@ class Column {
     }
   };
 
-  static const DataCell& legacyCellAt(
-      const LegacyStorage& storage,
-      EntityId entityId);
-
   using Storage = std::variant<
-      LegacyStorage,
       DoubleStorage,
       BoolStorage,
       BorrowedStringStorage,
@@ -169,6 +130,8 @@ class Column {
   Column(Storage storage, ColumnMetadata metadata);
 
  private:
+  void checkRowId(EntityId entityId, std::size_t rowCount) const;
+
   const Storage storage_;
   const std::string columnName_;
   const ColumnType columnType_;
@@ -190,14 +153,13 @@ class Table {
   /* Stores details about Table */
  public:
   explicit Table(std::size_t rowCount);
-  explicit Table(std::vector<EntityId> rowIds);
-  void insertColumn(std::shared_ptr<const Column> columnData);
+  void insertColumn(std::shared_ptr<const Column> column);
   void insertColumn(ColumnMetadata metadata, std::vector<double> values);
   void insertColumn(
       ColumnMetadata metadata,
       std::vector<BorrowedString> values);
   void insertColumnsInSortedOrder(
-      std::vector<std::shared_ptr<const Column>> columnsData);
+      std::vector<std::shared_ptr<const Column>> columns);
   std::vector<std::string> getColumnNames() const;
   const std::vector<std::shared_ptr<const Column>>& getColumnData() const;
   const std::vector<EntityId>& getRowIds() const;
@@ -326,40 +288,6 @@ class ColumnTableBuilder {
   bool built_ = false;
 };
 
-class TableBuilder {
-  static inline const DataCell kEmptyDataCell = DataCell();
-
- public:
-  struct ColumnDefinition {
-    std::string name;
-    ColumnType type;
-    bool isPrimaryKey = false;
-    DataCell defaultValue = kEmptyDataCell;
-    std::string description{};
-    bool excludeFromAggregation = false;
-  };
-
-  TableBuilder() = default;
-
-  TableBuilder& addColumnDefinition(const ColumnDefinition& columnDef);
-
-  template <typename... T>
-  TableBuilder& addRow(T&&... args) {
-    return addRowWithCells({DataCell(std::forward<T>(args))...});
-  }
-
-  TableBuilder& addRowWithCells(const std::vector<DataCell>& values);
-
-  Table build();
-
- private:
-  std::vector<ColumnDefinition> columnDefinitions_;
-  std::vector<entities::Map<EntityId, DataCell>> columnMaps_;
-  std::vector<EntityId> rowIds_;
-  entities::EntityIdType nextRowId_ = 0;
-  bool built_ = false;
-};
-
 class Utils {
  private:
   explicit Utils();
@@ -369,10 +297,9 @@ class Utils {
       const std::vector<std::shared_ptr<const Column>>& columns,
       const std::string& columnName);
 
-  // check if a row with the specified columnValues exists in the table
   static bool existsRow(
       const Table& table,
-      const std::vector<DataCell>& columnValues);
+      const std::vector<CellValue>& rowValues);
 
   template <typename T>
   static inline std::vector<T> filterOut(
