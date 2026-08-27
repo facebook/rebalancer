@@ -992,6 +992,7 @@ ExplorerModel LoadModel::buildData(interface::Bundle&& bundle) {
   // Build problem, universe, and parse solution
   auto& problemSpec = *bundle.problem();
   auto universe = buildUniverse(problemSpec);
+  problemSpec.universe().reset();
   auto solution = bundle.solution()
       ? std::make_optional(std::move(*bundle.solution()))
       : std::nullopt;

@@ -88,6 +88,7 @@ EntityId getRowId(const Table& table, const std::string& primaryKey) {
 TEST(LoadModelTest, Basic) {
   auto bundle = TestUtils::buildBundle();
   auto explorerModel = LoadModel::buildData(std::move(bundle));
+  EXPECT_FALSE(explorerModel.problemSpec.universe().has_value());
   addObjectTable(explorerModel);
   const auto& tableData = std::move(explorerModel.tableData);
 
