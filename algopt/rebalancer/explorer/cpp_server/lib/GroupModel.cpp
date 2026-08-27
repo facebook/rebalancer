@@ -88,7 +88,7 @@ Table GroupModel::applyGroup(const Group& group, Table table) {
       createNewRowIds(groupByTableColumns, filteredRows);
   const auto groupCount = folly::to<EntityIdType>(newRowIds.size());
 
-  ColumnTableBuilder<EntityId> builder(newRowIds);
+  TableBuilder<EntityId> builder(newRowIds);
   for (const auto& column : groupByTableColumns) {
     Map<EntityId, std::string> groupRowIdToValue;
     groupRowIdToValue.reserve(groupCount);

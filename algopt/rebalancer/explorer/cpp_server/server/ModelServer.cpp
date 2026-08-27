@@ -960,7 +960,7 @@ MoveSetsResponse ModelServer::getMoveSets(
     }
   }
 
-  ColumnTableBuilder tableBuilder(rows);
+  TableBuilder tableBuilder(rows);
   tableBuilder.add(
       {.name = problemOnlyHasSingleMoves_ ? "Move #" : "MoveSet #",
        .type = ColumnType::IDENTIFIER,

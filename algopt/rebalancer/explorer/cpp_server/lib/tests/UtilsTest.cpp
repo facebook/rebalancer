@@ -24,7 +24,7 @@ class UtilsTest : public ::testing::Test {
         {.name = "Task0", .load = 25.0, .host = "Host0"},
         {.name = "Task1", .load = 30.0, .host = "Host1"},
         {.name = "Task2", .load = 35.0, .host = "Host2"}};
-    ColumnTableBuilder builder(rows);
+    TableBuilder builder(rows);
     return builder
         .add(
             {.name = "Name", .type = ColumnType::STRING, .isPrimaryKey = true},
@@ -111,7 +111,7 @@ TEST_F(UtilsTest, ExistsRowWrongNumberOfValues) {
       "Number of values must match number of columns in table");
 }
 
-TEST_F(UtilsTest, ExistsRowWithColumnTableBuilder) {
+TEST_F(UtilsTest, ExistsRowWithTableBuilder) {
   struct Row {
     double load;
     bool active;
@@ -124,7 +124,7 @@ TEST_F(UtilsTest, ExistsRowWithColumnTableBuilder) {
       {.load = 25.0, .active = false, .name = task0, .label = "owned"},
       {.load = 0.0, .active = true, .name = empty, .label = "unknown"}};
 
-  ColumnTableBuilder<Row> builder(rows);
+  TableBuilder<Row> builder(rows);
   builder
       .add(
           {.name = "Load", .type = ColumnType::DOUBLE},
@@ -170,7 +170,7 @@ TEST_F(UtilsTest, ExistsRowWithColumnTableBuilder) {
   EXPECT_FALSE(Utils::existsRow(table, {25.0, 0.0, std::string("Task0"), 1.0}));
 }
 
-TEST_F(UtilsTest, ColumnTableBuilderBuildsColumnsFromRowKeys) {
+TEST_F(UtilsTest, TableBuilderBuildsColumnsFromRowKeys) {
   const std::vector<entities::ScopeItemId> scopeItemIds = {
       entities::ScopeItemId(8),
       entities::ScopeItemId(3),
@@ -179,7 +179,7 @@ TEST_F(UtilsTest, ColumnTableBuilderBuildsColumnsFromRowKeys) {
   const std::string item3 = "item3";
   const std::string empty;
 
-  ColumnTableBuilder<entities::ScopeItemId> builder(scopeItemIds);
+  TableBuilder<entities::ScopeItemId> builder(scopeItemIds);
   builder
       .add(
           {.name = "Scope Item",
@@ -252,10 +252,10 @@ TEST_F(UtilsTest, ColumnTableBuilderBuildsColumnsFromRowKeys) {
       builder.build(), "Cannot build the same table more than once");
 }
 
-TEST_F(UtilsTest, ColumnTableBuilderBuildsEmptyTable) {
+TEST_F(UtilsTest, TableBuilderBuildsEmptyTable) {
   const std::vector<entities::ScopeItemId> noRows;
   const std::string empty;
-  ColumnTableBuilder<entities::ScopeItemId> builder(noRows);
+  TableBuilder<entities::ScopeItemId> builder(noRows);
   builder
       .add(
           {.name = "Name", .type = ColumnType::STRING},
@@ -269,9 +269,9 @@ TEST_F(UtilsTest, ColumnTableBuilderBuildsEmptyTable) {
   EXPECT_EQ(2, table.getColumnData().size());
 }
 
-TEST_F(UtilsTest, ColumnTableBuilderRejectsNullColumn) {
+TEST_F(UtilsTest, TableBuilderRejectsNullColumn) {
   const std::vector<int> noRows;
-  ColumnTableBuilder<int> builder(noRows);
+  TableBuilder<int> builder(noRows);
 
   REBALANCER_EXPECT_RUNTIME_ERROR(
       builder.add(std::shared_ptr<const Column>{}), "Cannot add a null column");
@@ -279,7 +279,7 @@ TEST_F(UtilsTest, ColumnTableBuilderRejectsNullColumn) {
 
 TEST_F(UtilsTest, ColumnTypeClassification) {
   const std::vector<int> noRows;
-  const ColumnTableBuilder<int> builder(noRows);
+  const TableBuilder<int> builder(noRows);
   for (const auto type :
        {ColumnType::DOUBLE,
         ColumnType::UTILIZATION,
@@ -313,7 +313,7 @@ TEST_F(UtilsTest, ColumnTypeClassification) {
 
 TEST_F(UtilsTest, ColumnTypedAccessors) {
   const std::vector<int> rows = {0};
-  const ColumnTableBuilder<int> builder(rows);
+  const TableBuilder<int> builder(rows);
   const auto numeric = builder.make(
       {.name = "numeric", .type = ColumnType::DOUBLE}, [](int) { return 1.5; });
   const auto stringColumn = builder.make(
@@ -333,9 +333,9 @@ TEST_F(UtilsTest, ColumnTypedAccessors) {
       "Reading a double value requires a numeric column, but column 'string' is a string");
 }
 
-TEST_F(UtilsTest, ColumnTableBuilderRejectsMismatchedColumnType) {
+TEST_F(UtilsTest, TableBuilderRejectsMismatchedColumnType) {
   const std::vector<int> rows = {1};
-  ColumnTableBuilder<int> builder(rows);
+  TableBuilder<int> builder(rows);
 
   REBALANCER_EXPECT_RUNTIME_ERROR(
       builder.make(
@@ -351,7 +351,7 @@ TEST_F(UtilsTest, ColumnTableBuilderRejectsMismatchedColumnType) {
 
 TEST_F(UtilsTest, ColumnRejectsOutOfRangeRowId) {
   const std::vector<int> rows = {0, 1};
-  const ColumnTableBuilder<int> builder(rows);
+  const TableBuilder<int> builder(rows);
   const auto column = builder.make(
       {.name = "Value", .type = ColumnType::DOUBLE},
       [](const int value) { return static_cast<double>(value); });

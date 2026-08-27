@@ -66,7 +66,7 @@ class Column {
   friend class Table;
   friend class Utils;
   template <typename>
-  friend class ColumnTableBuilder;
+  friend class TableBuilder;
 
   std::size_t getRowCount() const;
   bool matches(EntityId entityId, const CellValue& expected) const;
@@ -185,14 +185,14 @@ class Table {
 };
 
 template <typename RowKey>
-class ColumnTableBuilder {
+class TableBuilder {
  public:
   // rowKeys must remain valid and unchanged until build().
-  explicit ColumnTableBuilder(const std::vector<RowKey>& rowKeys)
+  explicit TableBuilder(const std::vector<RowKey>& rowKeys)
       : rowKeys_(rowKeys), table_(rowKeys.size()) {}
 
-  ColumnTableBuilder(std::vector<RowKey>&&) = delete;
-  ColumnTableBuilder(const std::vector<RowKey>&&) = delete;
+  TableBuilder(std::vector<RowKey>&&) = delete;
+  TableBuilder(const std::vector<RowKey>&&) = delete;
 
   // Strings borrowed with std::cref must outlive the built table.
   template <typename GetValue>
@@ -225,12 +225,12 @@ class ColumnTableBuilder {
 
   template <typename GetValue>
     requires std::invocable<GetValue&, const RowKey&>
-  ColumnTableBuilder& add(ColumnMetadata metadata, GetValue getValue) {
+  TableBuilder& add(ColumnMetadata metadata, GetValue getValue) {
     table_.insertColumn(make(std::move(metadata), std::move(getValue)));
     return *this;
   }
 
-  ColumnTableBuilder& add(std::shared_ptr<const Column> column) {
+  TableBuilder& add(std::shared_ptr<const Column> column) {
     checkNotBuilt();
     if (!column) {
       throw std::runtime_error("Cannot add a null column");
@@ -239,8 +239,7 @@ class ColumnTableBuilder {
     return *this;
   }
 
-  ColumnTableBuilder& addSorted(
-      std::vector<std::shared_ptr<const Column>> columns) {
+  TableBuilder& addSorted(std::vector<std::shared_ptr<const Column>> columns) {
     checkNotBuilt();
     table_.insertColumnsInSortedOrder(std::move(columns));
     return *this;

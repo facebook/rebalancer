@@ -110,7 +110,7 @@ Table tabulate(
          .utilizationB = absUtilB});
   });
 
-  ColumnTableBuilder tableBuilder(rows);
+  TableBuilder tableBuilder(rows);
   tableBuilder
       .add(
           {.name = "Util Metric",
@@ -261,7 +261,7 @@ Table tabulate(
     }
   });
 
-  ColumnTableBuilder tableBuilder(rows);
+  TableBuilder tableBuilder(rows);
   tableBuilder
       .add(
           {.name = "Routing Config",
@@ -341,7 +341,7 @@ Table tabulate(
              .latencyB = valueB});
       });
 
-  ColumnTableBuilder tableBuilder(rows);
+  TableBuilder tableBuilder(rows);
   tableBuilder
       .add(
           {.name = "Latency Metric",
