@@ -18,6 +18,8 @@
 #include "rebalancer/explorer/cpp_server/lib/Utils.h"
 #include "rebalancer/explorer/if/gen-cpp2/explorer_types.h"
 
+#include <range/v3/range/conversion.hpp>
+
 #include <fmt/core.h>
 #include <folly/FileUtil.h>
 #include <folly/futures/SharedPromise.h>
@@ -25,11 +27,13 @@
 #include <folly/Synchronized.h>
 #include <folly/system/HardwareConcurrency.h>
 
+#include <algorithm>
 #include <limits>
 #include <memory>
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 namespace facebook::rebalancer::explorer {
@@ -38,6 +42,8 @@ using namespace facebook::rebalancer::entities;
 using namespace facebook::rebalancer::interface;
 
 namespace {
+
+static const std::string kEmptyString;
 
 std::string makeScalarDimensionName(
     const std::string& dimensionName,
@@ -326,77 +332,57 @@ static std::pair<Map<ObjectId, ContainerId>, Map<ObjectId, ContainerId>>
 buildObjectToContainer(
     const Map<ContainerId, std::vector<ObjectId>>& finalAssignment,
     const Universe& universe) {
-  Map<ObjectId, ContainerId> initialObjectToContainer;
-  Map<ObjectId, ContainerId> finalObjectToContainer;
+  Map<ObjectId, ContainerId> objectIdToInitialContainerId;
+  Map<ObjectId, ContainerId> objectIdToFinalContainerId;
 
   for (auto containerId : universe.getContainers().getContainerIds()) {
     for (auto objectId :
          universe.getContainers().getInitialObjectIds(containerId)) {
-      initialObjectToContainer.emplace(objectId, containerId);
+      objectIdToInitialContainerId.emplace(objectId, containerId);
     }
 
     if (finalAssignment.contains(containerId)) {
       for (auto objectId : finalAssignment.at(containerId)) {
-        finalObjectToContainer.emplace(objectId, containerId);
+        objectIdToFinalContainerId.emplace(objectId, containerId);
       }
     }
   }
   return std::pair(
-      std::move(initialObjectToContainer), std::move(finalObjectToContainer));
+      std::move(objectIdToInitialContainerId),
+      std::move(objectIdToFinalContainerId));
 }
 
-static Map<ContainerId, ScopeItemId> getContainerToScopeItemId(
-    const Universe& universe,
-    ScopeId scopeId) {
-  Map<ContainerId, ScopeItemId> containerToScopeItemId;
-  for (auto scopeItemId : universe.getScope(scopeId).getScopeItemIds()) {
-    for (auto containerId :
-         universe.getScope(scopeId).getContainerIds(scopeItemId)) {
-      auto [_, insertSuccess] =
-          containerToScopeItemId.emplace(containerId, scopeItemId);
-
-      if (!insertSuccess) {
-        throw std::runtime_error(
-            fmt::format(
-                "Container '{}' belongs to more than one scope item in scope '{}'. This is not supported currently",
-                universe.getEntityName(containerId),
-                universe.getEntityName(scopeId)));
-      }
-    }
+template <typename RowKey>
+static std::optional<ScopeItemId> scopeItemIdForRow(
+    const Scope& scope,
+    RowKey rowKey) {
+  if constexpr (std::is_same_v<RowKey, ScopeItemId>) {
+    return rowKey;
+  } else {
+    static_assert(
+        std::is_same_v<RowKey, ContainerId>, "Unsupported table row key");
+    return scope.getScopeItemId(rowKey);
   }
-
-  return containerToScopeItemId;
 }
 
+template <typename RowKey>
 static std::vector<std::shared_ptr<const Column>> buildScopeDimensionCols(
+    const ColumnTableBuilder<RowKey>& builder,
     const Universe& universe,
     ScopeId scopeId) {
   const auto& scope = universe.getScope(scopeId);
   std::vector<std::shared_ptr<const Column>> columns;
   columns.reserve(scope.getDimensionIds().size());
-  const auto& scopeName = universe.getEntityName(scopeId);
-  for (const auto dimId : scope.getDimensionIds()) {
-    const auto& scopeDimension = scope.getDimension(dimId);
-    const auto& dimName = universe.getEntityName(dimId);
-
-    Map<EntityId, DataCell> scopeItemToCell;
-    const auto defaultValue = scopeDimension.getDefaultValue();
-    for (const auto& [scopeItemId, value] :
-         scopeDimension.getNonDefaultValues()) {
-      auto rowId = toEntityId(scopeItemId);
-      if (scopeName == universe.getContainerTypeName()) {
-        rowId = toEntityId(
-            universe.getContainerId(universe.getEntityName(scopeItemId)));
-      }
-      scopeItemToCell[rowId].doubleValue = value;
-    }
-
-    columns.push_back(
-        std::make_shared<Column>(
-            std::move(scopeItemToCell),
-            DataCell(defaultValue),
-            dimName,
-            ColumnType::DIMENSION));
+  for (const auto dimensionId : scope.getDimensionIds()) {
+    const auto& dimension = scope.getDimension(dimensionId);
+    columns.push_back(builder.make(
+        {.name = universe.getEntityName(dimensionId),
+         .type = ColumnType::DIMENSION},
+        [&dimension, &scope](const RowKey rowKey) {
+          const auto scopeItemId = scopeItemIdForRow(scope, rowKey);
+          return scopeItemId ? dimension.getValue(*scopeItemId)
+                             : dimension.getDefaultValue();
+        }));
   }
   return columns;
 }
@@ -461,119 +447,113 @@ static double getRelativeUtilization(double absValue, double scopDimValue) {
 static std::pair<Map<ScopeItemId, double>, Map<ScopeItemId, double>>
 getInitialAndFinalAbsoluteUtils(
     DimensionId dimensionId,
-    [[maybe_unused]] ScopeId scopeId,
+    ScopeId scopeId,
     const Universe& universe,
-    const Map<ContainerId, ScopeItemId>& containerToScopeItemId,
-    const Map<ObjectId, ContainerId>& objectToInitialContainer,
-    const Map<ObjectId, ContainerId>& objectToFinalContainer) {
-  Map<ScopeItemId, double> scopeItemToInitialUtil;
-  Map<ScopeItemId, double> scopeItemToFinalUtil;
+    const Map<ObjectId, ContainerId>& objectIdToInitialContainerId,
+    const Map<ObjectId, ContainerId>& objectIdToFinalContainerId) {
+  Map<ScopeItemId, double> scopeItemIdToInitialUtilization;
+  Map<ScopeItemId, double> scopeItemIdToFinalUtilization;
+  const auto& scope = universe.getScope(scopeId);
+
+  const auto updateMax = [](auto& scopeItemIdToUtilization,
+                            const auto& scopeItemIdToScalarUtilization) {
+    for (const auto& [scopeItemId, scalarUtilization] :
+         scopeItemIdToScalarUtilization) {
+      auto [it, inserted] =
+          scopeItemIdToUtilization.emplace(scopeItemId, scalarUtilization);
+      if (!inserted) {
+        it->second = std::max(scalarUtilization, it->second);
+      }
+    }
+  };
 
   /* Calculate initial and final utilization for each scalar dimension and
    * take the max */
-  auto& objectDimension = universe.getObjects().getDimension(dimensionId);
+  const auto& objectDimension = universe.getObjects().getDimension(dimensionId);
   for (int index = 0; index < objectDimension.size(); ++index) {
-    auto& scalarDimension = objectDimension.at(index);
+    const auto& scalarDimension = objectDimension.at(index);
     if (scalarDimension.isRoutingConfigBased()) {
       throw std::runtime_error(
           "unexpected call to getInitialAndFinalAbsoluteUtils(...) with an ObjectPartitionRoutingDimension");
     }
 
-    Map<ScopeItemId, double> scopeItemToInitialScalarUtil;
-    Map<ScopeItemId, double> scopeItemToFinalScalarUtil;
-    for (auto objectId : universe.getObjects().getObjectIds()) {
-      auto srcContainerId = objectToInitialContainer.at(objectId);
-      auto srcScopeItemIdPtr =
-          folly::get_ptr(containerToScopeItemId, srcContainerId);
-      if (srcScopeItemIdPtr) {
-        scopeItemToInitialScalarUtil[*srcScopeItemIdPtr] +=
-            scalarDimension.getValue(objectId, *srcScopeItemIdPtr);
+    Map<ScopeItemId, double> scopeItemIdToInitialScalarUtilization;
+    Map<ScopeItemId, double> scopeItemIdToFinalScalarUtilization;
+    for (const auto objectId : universe.getObjects().getObjectIds()) {
+      const auto srcContainerId = objectIdToInitialContainerId.at(objectId);
+      const auto srcScopeItemId = scope.getScopeItemId(srcContainerId);
+      if (srcScopeItemId) {
+        scopeItemIdToInitialScalarUtilization[*srcScopeItemId] +=
+            scalarDimension.getValue(objectId, *srcScopeItemId);
       }
 
       // it is possible that the object may not be in the final assignment if
       // solution file is missing
-      auto dstContainerIdPtr = folly::get_ptr(objectToFinalContainer, objectId);
+      const auto* dstContainerIdPtr =
+          folly::get_ptr(objectIdToFinalContainerId, objectId);
       if (!dstContainerIdPtr) {
         continue;
       }
 
-      auto dstScopeItemIdPtr =
-          folly::get_ptr(containerToScopeItemId, *dstContainerIdPtr);
-      if (dstScopeItemIdPtr) {
-        scopeItemToFinalScalarUtil[*dstScopeItemIdPtr] +=
-            scalarDimension.getValue(objectId, *dstScopeItemIdPtr);
+      const auto dstScopeItemId = scope.getScopeItemId(*dstContainerIdPtr);
+      if (dstScopeItemId) {
+        scopeItemIdToFinalScalarUtilization[*dstScopeItemId] +=
+            scalarDimension.getValue(objectId, *dstScopeItemId);
       }
     }
 
-    auto update = [](auto& utilMap, const auto& scalarUtilMap) {
-      for (const auto& [scopeItemId, scalarUtil] : scalarUtilMap) {
-        auto ptr = folly::get_ptr(utilMap, scopeItemId);
-        if (!ptr) {
-          utilMap.emplace(scopeItemId, scalarUtil);
-        } else {
-          *ptr = std::max(scalarUtil, *ptr);
-        }
-      }
-    };
-
-    update(scopeItemToInitialUtil, scopeItemToInitialScalarUtil);
-    update(scopeItemToFinalUtil, scopeItemToFinalScalarUtil);
+    updateMax(
+        scopeItemIdToInitialUtilization, scopeItemIdToInitialScalarUtilization);
+    updateMax(
+        scopeItemIdToFinalUtilization, scopeItemIdToFinalScalarUtilization);
   }
-  return std::make_pair(scopeItemToInitialUtil, scopeItemToFinalUtil);
+  return {
+      std::move(scopeItemIdToInitialUtilization),
+      std::move(scopeItemIdToFinalUtilization)};
 }
 
-static std::pair<Map<EntityId, DataCell>, Map<EntityId, DataCell>>
+static std::pair<Map<ScopeItemId, double>, Map<ScopeItemId, double>>
 getScopeItemToInitialAndFinalRelativeUtils(
     DimensionId dimensionId,
     const Universe& universe,
     ScopeId scopeId,
-    const Map<ContainerId, ScopeItemId>& containerToScopeItemId,
-    const Map<ObjectId, ContainerId>& objectToInitialContainer,
-    const Map<ObjectId, ContainerId>& objectToFinalContainer) {
-  auto& scope = universe.getScope(scopeId);
-  auto& scopeName = universe.getEntityName(scopeId);
-  auto [initScopeItemUtils, finalScopeItemUtils] =
+    const Map<ObjectId, ContainerId>& objectIdToInitialContainerId,
+    const Map<ObjectId, ContainerId>& objectIdToFinalContainerId) {
+  const auto& scope = universe.getScope(scopeId);
+  auto [scopeItemIdToInitialUtilization, scopeItemIdToFinalUtilization] =
       getInitialAndFinalAbsoluteUtils(
           dimensionId,
           scopeId,
           universe,
-          containerToScopeItemId,
-          objectToInitialContainer,
-          objectToFinalContainer);
+          objectIdToInitialContainerId,
+          objectIdToFinalContainerId);
 
-  Map<EntityId, DataCell> scopeItemToInitialRelativeUtilCell;
-  Map<EntityId, DataCell> scopeItemToFinalRelativeUtilCell;
-  for (auto scopeItemId : scope.getScopeItemIds()) {
-    auto rowId = toEntityId(scopeItemId);
-    // if scope is container, then rowId will be container id (since
-    // everything in the "containers table" is indexed based on ContainerId)
-    if (scopeName == universe.getContainerTypeName()) {
-      rowId = toEntityId(
-          universe.getContainerId(universe.getEntityName(scopeItemId)));
-    }
+  const auto& dimension = scope.getDimension(dimensionId);
+  for (const auto scopeItemId : scope.getScopeItemIds()) {
+    const double scopeDimValue = dimension.getValue(scopeItemId);
+    const auto initialAbsoluteUtil =
+        folly::get_default(scopeItemIdToInitialUtilization, scopeItemId, 0);
+    const auto finalAbsoluteUtil =
+        folly::get_default(scopeItemIdToFinalUtilization, scopeItemId, 0);
 
-    const double scopeDimValue =
-        scope.getDimension(dimensionId).getValue(scopeItemId);
-    auto initScopeItemUil =
-        folly::get_default(initScopeItemUtils, scopeItemId, 0);
-    auto finalScopeItemUil =
-        folly::get_default(finalScopeItemUtils, scopeItemId, 0);
-
-    scopeItemToInitialRelativeUtilCell[rowId].doubleValue =
-        getRelativeUtilization(initScopeItemUil, scopeDimValue);
-    scopeItemToFinalRelativeUtilCell[rowId].doubleValue =
-        getRelativeUtilization(finalScopeItemUil, scopeDimValue);
+    scopeItemIdToInitialUtilization[scopeItemId] =
+        getRelativeUtilization(initialAbsoluteUtil, scopeDimValue);
+    scopeItemIdToFinalUtilization[scopeItemId] =
+        getRelativeUtilization(finalAbsoluteUtil, scopeDimValue);
   }
 
-  return std::make_pair(
-      scopeItemToInitialRelativeUtilCell, scopeItemToFinalRelativeUtilCell);
+  return {
+      std::move(scopeItemIdToInitialUtilization),
+      std::move(scopeItemIdToFinalUtilization)};
 }
 
+template <typename RowKey>
 static std::vector<std::shared_ptr<const Column>> buildUtilizationCols(
+    const ColumnTableBuilder<RowKey>& builder,
     const Universe& universe,
     ScopeId scopeId,
-    const Map<ObjectId, ContainerId>& objectToInitialContainer,
-    const Map<ObjectId, ContainerId>& objectToFinalContainer,
+    const Map<ObjectId, ContainerId>& objectIdToInitialContainerId,
+    const Map<ObjectId, ContainerId>& objectIdToFinalContainerId,
     std::shared_ptr<algopt::treeprof::ExecutorWrapper> executor) {
   XLOGF(
       INFO,
@@ -581,28 +561,36 @@ static std::vector<std::shared_ptr<const Column>> buildUtilizationCols(
       universe.getEntityName(scopeId),
       universe.getObjects().getDimensionIds().size());
 
-  const auto containerToScopeItemId =
-      getContainerToScopeItemId(universe, scopeId);
+  const auto& scope = universe.getScope(scopeId);
   const auto dimensionIds = universe.getObjects().getDimensionIds();
   std::vector<std::shared_ptr<const Column>> columns;
+  columns.reserve(2 * dimensionIds.size());
+  const auto makeUtilizationColumn =
+      [&](const std::string& name,
+          const Map<ScopeItemId, double>& scopeItemIdToUtilization) {
+        return builder.make(
+            {.name = name, .type = ColumnType::UTILIZATION},
+            [&scope, &scopeItemIdToUtilization](const RowKey rowKey) {
+              const auto scopeItemId = scopeItemIdForRow(scope, rowKey);
+              return scopeItemId
+                  ? folly::get_default(
+                        scopeItemIdToUtilization, *scopeItemId, 0.0)
+                  : 0.0;
+            });
+      };
   folly::coro::blockingWait(
       CoroUtils::runEachFuncAndUpdate(
           dimensionIds.begin(),
           dimensionIds.end(),
-          [&](auto it)
-              -> std::optional<
-                  std::pair<Map<EntityId, DataCell>, Map<EntityId, DataCell>>> {
+          [&](auto it) -> std::optional<std::pair<
+                           Map<ScopeItemId, double>,
+                           Map<ScopeItemId, double>>> {
             const auto dimensionId = *it;
-            const auto& objectDimension =
-                universe.getObjects().getDimension(dimensionId);
-            const bool shouldSkipDim =
-                objectDimension.at(0).isRoutingConfigBased() ||
-                (objectDimension.at(0).isDynamic() &&
-                 objectDimension.at(0).getScopeId() != scopeId);
-
-            // skip dimension if it is routing config based or if it is a
-            // dynamic dimension defined on a different scope
-            if (shouldSkipDim) {
+            const auto& scalarDimension =
+                universe.getObjects().getDimension(dimensionId).at(0);
+            if (scalarDimension.isRoutingConfigBased() ||
+                (scalarDimension.isDynamic() &&
+                 scalarDimension.getScopeId() != scopeId)) {
               return std::nullopt;
             }
 
@@ -610,31 +598,26 @@ static std::vector<std::shared_ptr<const Column>> buildUtilizationCols(
                 dimensionId,
                 universe,
                 scopeId,
-                containerToScopeItemId,
-                objectToInitialContainer,
-                objectToFinalContainer);
+                objectIdToInitialContainerId,
+                objectIdToFinalContainerId);
           },
-          [&columns, &universe](const auto& initialAndFinalUtilMaps, auto it) {
+          [&columns, &makeUtilizationColumn, &universe](
+              auto&& initialAndFinalUtilMaps, auto it) {
             if (!initialAndFinalUtilMaps) {
               return;
             }
 
             const auto& dimensionName = universe.getEntityName(*it);
-            columns.push_back(
-                std::make_shared<Column>(
-                    initialAndFinalUtilMaps->first,
-                    DataCell(0.0),
-                    fmt::format("{}.initUtil", dimensionName),
-                    ColumnType::UTILIZATION));
-
-            columns.push_back(
-                std::make_shared<Column>(
-                    initialAndFinalUtilMaps->second,
-                    DataCell(0.0),
-                    fmt::format("{}.finalUtil", dimensionName),
-                    ColumnType::UTILIZATION));
+            const auto& [scopeItemIdToInitialUtilization, scopeItemIdToFinalUtilization] =
+                *initialAndFinalUtilMaps;
+            columns.push_back(makeUtilizationColumn(
+                fmt::format("{}.initUtil", dimensionName),
+                scopeItemIdToInitialUtilization));
+            columns.push_back(makeUtilizationColumn(
+                fmt::format("{}.finalUtil", dimensionName),
+                scopeItemIdToFinalUtilization));
           },
-          executor));
+          std::move(executor)));
   return columns;
 }
 
@@ -700,107 +683,94 @@ static std::shared_ptr<const Column> buildObjectCol(const Universe& universe) {
 }
 
 static std::shared_ptr<const Column> buildContainerScopeColumn(
+    const ColumnTableBuilder<ContainerId>& builder,
     const Universe& universe,
     ScopeId scopeId) {
   const auto& scope = universe.getScope(scopeId);
   const auto& scopeName = universe.getEntityName(scopeId);
-  Map<EntityId, DataCell> containerIdToCell;
-  for (const auto scopeItemId : scope.getScopeItemIds()) {
-    const DataCell value(universe.getEntityName(scopeItemId));
-    for (const auto containerId : scope.getContainerIds(scopeItemId)) {
-      containerIdToCell[toEntityId(containerId)] = value;
-    }
-  }
   const auto isContainer = scopeName == universe.getContainerTypeName();
-  return std::make_shared<Column>(
-      std::move(containerIdToCell),
-      DataCell(""),
-      scopeName,
-      isContainer ? ColumnType::ENTITY_NAME : ColumnType::SCOPE,
-      /*primaryKey=*/isContainer);
+  return builder.make(
+      {.name = scopeName,
+       .type = isContainer ? ColumnType::ENTITY_NAME : ColumnType::SCOPE,
+       .isPrimaryKey = isContainer},
+      [&scope, &universe](const ContainerId containerId) {
+        const auto scopeItemId = scope.getScopeItemId(containerId);
+        return std::cref(
+            scopeItemId ? universe.getEntityName(*scopeItemId) : kEmptyString);
+      });
 }
 
 static std::shared_ptr<const Column> buildScopeNameColumn(
+    const ColumnTableBuilder<ScopeItemId>& builder,
     const Universe& universe,
     const ScopeId scopeId) {
-  Map<EntityId, DataCell> scopeItemIdToCell;
-  for (const auto scopeItemId : universe.getScope(scopeId).getScopeItemIds()) {
-    scopeItemIdToCell[toEntityId(scopeItemId)] =
-        DataCell(universe.getEntityName(scopeItemId));
-  }
-  return std::make_shared<Column>(
-      std::move(scopeItemIdToCell),
-      DataCell(""),
-      universe.getEntityName(scopeId),
-      ColumnType::ENTITY_NAME,
-      /*primaryKey=*/true);
+  return builder.make(
+      {.name = universe.getEntityName(scopeId),
+       .type = ColumnType::ENTITY_NAME,
+       .isPrimaryKey = true},
+      [&universe](const ScopeItemId scopeItemId) {
+        return std::cref(universe.getEntityName(scopeItemId));
+      });
 }
 
 static Table buildContainerTable(
     const Universe& universe,
-    const Map<ObjectId, ContainerId>& objectToInitialContainer,
-    const Map<ObjectId, ContainerId>& objectToFinalContainer,
+    const Map<ObjectId, ContainerId>& objectIdToInitialContainerId,
+    const Map<ObjectId, ContainerId>& objectIdToFinalContainerId,
     std::shared_ptr<algopt::treeprof::ExecutorWrapper> executor) {
-  const auto& containerIds = universe.getContainers().getContainerIds();
-  std::vector<EntityId> rowIds;
-  rowIds.reserve(containerIds.size());
-  for (const auto containerId : containerIds) {
-    rowIds.push_back(toEntityId(containerId));
-  }
-  Table table(std::move(rowIds));
+  const auto containerIds =
+      universe.getContainers().getContainerIds() | ranges::to<std::vector>;
+  ColumnTableBuilder<ContainerId> builder(containerIds);
   for (const auto scopeId : universe.getScopeIds()) {
-    table.insertColumn(buildContainerScopeColumn(universe, scopeId));
+    builder.add(buildContainerScopeColumn(builder, universe, scopeId));
   }
 
   const auto containerScopeId =
       universe.getScopeId(universe.getContainerTypeName());
-  table.insertColumnsInSortedOrder(
-      buildScopeDimensionCols(universe, containerScopeId));
-  table.insertColumnsInSortedOrder(buildUtilizationCols(
+  builder.addSorted(
+      buildScopeDimensionCols(builder, universe, containerScopeId));
+  builder.addSorted(buildUtilizationCols(
+      builder,
       universe,
       containerScopeId,
-      objectToInitialContainer,
-      objectToFinalContainer,
+      objectIdToInitialContainerId,
+      objectIdToFinalContainerId,
       std::move(executor)));
-  return table;
+  return builder.build();
 }
 
 static Table buildScopeTable(
     const Universe& universe,
     const ScopeId scopeId,
-    const Map<ObjectId, ContainerId>& objectToInitialContainer,
-    const Map<ObjectId, ContainerId>& objectToFinalContainer,
+    const Map<ObjectId, ContainerId>& objectIdToInitialContainerId,
+    const Map<ObjectId, ContainerId>& objectIdToFinalContainerId,
     std::shared_ptr<algopt::treeprof::ExecutorWrapper> executor) {
   const auto& scopeItemIds = universe.getScope(scopeId).getScopeItemIds();
-  std::vector<EntityId> rowIds;
-  rowIds.reserve(scopeItemIds.size());
-  for (const auto scopeItemId : scopeItemIds) {
-    rowIds.push_back(toEntityId(scopeItemId));
-  }
-  Table table(std::move(rowIds));
-  table.insertColumn(buildScopeNameColumn(universe, scopeId));
-  table.insertColumnsInSortedOrder(buildScopeDimensionCols(universe, scopeId));
-  table.insertColumnsInSortedOrder(buildUtilizationCols(
+  ColumnTableBuilder<ScopeItemId> builder(scopeItemIds);
+  builder.add(buildScopeNameColumn(builder, universe, scopeId));
+  builder.addSorted(buildScopeDimensionCols(builder, universe, scopeId));
+  builder.addSorted(buildUtilizationCols(
+      builder,
       universe,
       scopeId,
-      objectToInitialContainer,
-      objectToFinalContainer,
+      objectIdToInitialContainerId,
+      objectIdToFinalContainerId,
       std::move(executor)));
-  return table;
+  return builder.build();
 }
 
 static Map<std::string, Table> buildPrebuiltTables(
     const Universe& universe,
-    const Map<ObjectId, ContainerId>& objectToInitialContainer,
-    const Map<ObjectId, ContainerId>& objectToFinalContainer,
+    const Map<ObjectId, ContainerId>& objectIdToInitialContainerId,
+    const Map<ObjectId, ContainerId>& objectIdToFinalContainerId,
     const std::shared_ptr<algopt::treeprof::ExecutorWrapper>& executor) {
   Map<std::string, Table> tableNameToTable;
   tableNameToTable.emplace(
       universe.getContainerTypeName(),
       buildContainerTable(
           universe,
-          objectToInitialContainer,
-          objectToFinalContainer,
+          objectIdToInitialContainerId,
+          objectIdToFinalContainerId,
           executor));
   for (const auto scopeId : universe.getScopeIds()) {
     const auto& scopeName = universe.getEntityName(scopeId);
@@ -812,8 +782,8 @@ static Map<std::string, Table> buildPrebuiltTables(
         buildScopeTable(
             universe,
             scopeId,
-            objectToInitialContainer,
-            objectToFinalContainer,
+            objectIdToInitialContainerId,
+            objectIdToFinalContainerId,
             executor));
   }
   return tableNameToTable;
@@ -1069,13 +1039,13 @@ ExplorerModel LoadModel::buildData(interface::Bundle&& bundle) {
   auto equivalenceSetsData =
       buildEquivalenceSetData(problem->makeEquivalenceSetInfo(), *universe);
 
-  auto [objectToInitialContainer, objectToFinalContainer] =
+  auto [objectIdToInitialContainerId, objectIdToFinalContainerId] =
       buildObjectToContainer(finalAssignment, *universe);
 
   auto prebuiltTables = buildPrebuiltTables(
       *universe,
-      objectToInitialContainer,
-      objectToFinalContainer,
+      objectIdToInitialContainerId,
+      objectIdToFinalContainerId,
       wrappedExecutor);
 
   auto dynamicDimensionNames = getDynamicDimensionNames(*universe);

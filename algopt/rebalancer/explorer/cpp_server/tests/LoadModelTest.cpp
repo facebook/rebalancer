@@ -17,7 +17,9 @@
 #include <cmath>
 #include <memory>
 #include <optional>
+#include <stdexcept>
 #include <string>
+#include <vector>
 
 using namespace facebook::rebalancer;
 using namespace facebook::rebalancer::interface;
@@ -70,6 +72,17 @@ void addObjectTable(ExplorerModel& model) {
           executor.get()));
   model.tableData.emplace(
       model.universe->getObjectTypeName(), std::move(table));
+}
+
+EntityId getRowId(const Table& table, const std::string& primaryKey) {
+  const auto* primaryKeyColumn = table.getOnlyPrimaryKeyColumn();
+  for (const auto rowId : table.getRowIds()) {
+    if (primaryKeyColumn->getStrView(rowId) == primaryKey) {
+      return rowId;
+    }
+  }
+  throw std::runtime_error(
+      fmt::format("Primary key '{}' not found", primaryKey));
 }
 
 TEST(LoadModelTest, Basic) {
@@ -147,6 +160,18 @@ TEST(LoadModelTest, Basic) {
       {"dynamicLoad.initUtil", ColumnType::UTILIZATION},
       {"dynamicLoad.finalUtil", ColumnType::UTILIZATION}};
   colNameAndTypeAreAsExpected(expectedMsbColumnNameAndType, "msb", tableData);
+  const std::vector<std::string> expectedMsbColumns = {
+      "msb",
+      "network",
+      "dynamicLoad.finalUtil",
+      "dynamicLoad.initUtil",
+      "host_count.finalUtil",
+      "host_count.initUtil",
+      "network.finalUtil",
+      "network.initUtil",
+      "ram.finalUtil",
+      "ram.initUtil"};
+  EXPECT_EQ(expectedMsbColumns, tableData.at("msb").getColumnNames());
 
   const auto& objectColumnData = tableData.at("host").getColumnData();
   for (auto& column : objectColumnData) {
@@ -208,105 +233,68 @@ TEST(LoadModelTest, Basic) {
   }
 
   // assert container data
-  const auto& containerColumnData = tableData.at("rack").getColumnData();
+  const auto& containerTable = tableData.at("rack");
+  const auto& containerColumnData = containerTable.getColumnData();
+  const auto rack0RowId = getRowId(containerTable, "rack0");
+  const auto rack2RowId = getRowId(containerTable, "rack2");
+  EXPECT_EQ(3, containerTable.getRowIds().size());
   for (const auto& column : containerColumnData) {
     // Only the rack column is a primary key.
     EXPECT_EQ(column->isPrimaryKey(), column->getColumnName() == "rack");
     if (column->getColumnName() == "msb") {
-      EXPECT_EQ(
-          "msb1",
-          column->getStrView(toEntityId(universe.getContainerId("rack2"))));
+      EXPECT_EQ("msb1", column->getStrView(rack2RowId));
     } else if (column->getColumnName() == "row") {
-      EXPECT_EQ(
-          "row1",
-          column->getStrView(toEntityId(universe.getContainerId("rack2"))));
+      EXPECT_EQ("row1", column->getStrView(rack2RowId));
+    } else if (column->getColumnName() == "row_incomplete") {
+      EXPECT_EQ("", column->getStrView(rack2RowId));
     } else if (column->getColumnName() == "network.initUtil") {
-      EXPECT_DOUBLE_EQ(
-          0.09,
-          column->getDouble(toEntityId(universe.getContainerId("rack0"))));
+      EXPECT_DOUBLE_EQ(0.09, column->getDouble(rack0RowId));
     } else if (column->getColumnName() == "host_count.initUtil") {
-      EXPECT_DOUBLE_EQ(
-          3, column->getDouble(toEntityId(universe.getContainerId("rack0"))));
+      EXPECT_DOUBLE_EQ(3.0, column->getDouble(rack0RowId));
     }
   }
 
   // assert row data
-  const auto& rowColumnData = tableData.at("row").getColumnData();
-  auto rowScopeId = universe.getScopeId("row");
+  const auto& rowTable = tableData.at("row");
+  const auto& rowColumnData = rowTable.getColumnData();
+  const auto row0RowId = getRowId(rowTable, "row0");
+  const auto row1RowId = getRowId(rowTable, "row1");
   for (const auto& column : rowColumnData) {
     // Only the row column is a primary key.
     EXPECT_EQ(column->isPrimaryKey(), column->getColumnName() == "row");
     if (column->getColumnName() == "network.initUtil") {
-      EXPECT_DOUBLE_EQ(
-          9.0,
-          column->getDouble(
-              toEntityId(universe.getScopeItemId(rowScopeId, "row0"))));
-      EXPECT_DOUBLE_EQ(
-          4.5,
-          column->getDouble(
-              toEntityId(universe.getScopeItemId(rowScopeId, "row1"))));
+      EXPECT_DOUBLE_EQ(9.0, column->getDouble(row0RowId));
+      EXPECT_DOUBLE_EQ(4.5, column->getDouble(row1RowId));
     }
   }
 
   // assert scope data
-  const auto& msbScopeColumnData = tableData.at("msb").getColumnData();
-  auto msbScopeId = universe.getScopeId("msb");
+  const auto& msbTable = tableData.at("msb");
+  const auto& msbScopeColumnData = msbTable.getColumnData();
+  const auto msb0RowId = getRowId(msbTable, "msb0");
+  const auto msb1RowId = getRowId(msbTable, "msb1");
+  EXPECT_EQ(2, msbTable.getRowIds().size());
   for (const auto& column : msbScopeColumnData) {
     // Only the msb column is a primary key.
     EXPECT_EQ(column->isPrimaryKey(), column->getColumnName() == "msb");
     if (column->getColumnName() == "host_count.initUtil") {
-      EXPECT_DOUBLE_EQ(
-          4,
-          column->getDouble(
-              toEntityId(universe.getScopeItemId(msbScopeId, "msb0"))));
-      EXPECT_DOUBLE_EQ(
-          1,
-          column->getDouble(
-              toEntityId(universe.getScopeItemId(msbScopeId, "msb1"))));
+      EXPECT_DOUBLE_EQ(4.0, column->getDouble(msb0RowId));
+      EXPECT_DOUBLE_EQ(1.0, column->getDouble(msb1RowId));
     } else if (column->getColumnName() == "host_count.finalUtil") {
-      EXPECT_DOUBLE_EQ(
-          3,
-          column->getDouble(
-              toEntityId(universe.getScopeItemId(msbScopeId, "msb0"))));
-      EXPECT_DOUBLE_EQ(
-          2,
-          column->getDouble(
-              toEntityId(universe.getScopeItemId(msbScopeId, "msb1"))));
+      EXPECT_DOUBLE_EQ(3.0, column->getDouble(msb0RowId));
+      EXPECT_DOUBLE_EQ(2.0, column->getDouble(msb1RowId));
     } else if (column->getColumnName() == "network") {
-      EXPECT_DOUBLE_EQ(
-          1000.0,
-          column->getDouble(
-              toEntityId(universe.getScopeItemId(msbScopeId, "msb0"))));
-      EXPECT_DOUBLE_EQ(
-          0,
-          column->getDouble(
-              toEntityId(universe.getScopeItemId(msbScopeId, "msb1"))));
+      EXPECT_DOUBLE_EQ(1000.0, column->getDouble(msb0RowId));
+      EXPECT_DOUBLE_EQ(0.0, column->getDouble(msb1RowId));
     } else if (column->getColumnName() == "network.initUtil") {
-      EXPECT_DOUBLE_EQ(
-          0.0115,
-          column->getDouble(
-              toEntityId(universe.getScopeItemId(msbScopeId, "msb0"))));
-      EXPECT_TRUE(
-          std::isnan(column->getDouble(
-              toEntityId(universe.getScopeItemId(msbScopeId, "msb1")))));
+      EXPECT_DOUBLE_EQ(0.0115, column->getDouble(msb0RowId));
+      EXPECT_TRUE(std::isnan(column->getDouble(msb1RowId)));
     } else if (column->getColumnName() == "dynamicLoad.initUtil") {
-      EXPECT_DOUBLE_EQ(
-          13.0,
-          column->getDouble(
-              toEntityId(universe.getScopeItemId(msbScopeId, "msb0"))));
-      EXPECT_DOUBLE_EQ(
-          1.0,
-          column->getDouble(
-              toEntityId(universe.getScopeItemId(msbScopeId, "msb1"))));
+      EXPECT_DOUBLE_EQ(13.0, column->getDouble(msb0RowId));
+      EXPECT_DOUBLE_EQ(1.0, column->getDouble(msb1RowId));
     } else if (column->getColumnName() == "dynamicLoad.finalUtil") {
-      EXPECT_DOUBLE_EQ(
-          3.0,
-          column->getDouble(
-              toEntityId(universe.getScopeItemId(msbScopeId, "msb0"))));
-      EXPECT_DOUBLE_EQ(
-          2.0,
-          column->getDouble(
-              toEntityId(universe.getScopeItemId(msbScopeId, "msb1"))));
+      EXPECT_DOUBLE_EQ(3.0, column->getDouble(msb0RowId));
+      EXPECT_DOUBLE_EQ(2.0, column->getDouble(msb1RowId));
     }
   }
 }
@@ -735,49 +723,32 @@ TEST(LoadModelTest, BasicWithNoSolutionObject) {
   }
 
   // assert row data
-  const auto& rowColumnData = tableData.at("row").getColumnData();
-  auto rowScopeId = universe.getScopeId("row");
+  const auto& rowTable = tableData.at("row");
+  const auto& rowColumnData = rowTable.getColumnData();
+  const auto row0RowId = getRowId(rowTable, "row0");
   for (auto& column : rowColumnData) {
     if (column->getColumnName() == "network.initUtil") {
-      EXPECT_DOUBLE_EQ(
-          9.0,
-          column->getDouble(
-              toEntityId(universe.getScopeItemId(rowScopeId, "row0"))));
+      EXPECT_DOUBLE_EQ(9.0, column->getDouble(row0RowId));
     }
   }
 
   // assert scope data
-  const auto& msbScopeColumnData = tableData.at("msb").getColumnData();
-  auto msbScopeId = universe.getScopeId("msb");
+  const auto& msbTable = tableData.at("msb");
+  const auto& msbScopeColumnData = msbTable.getColumnData();
+  const auto msb0RowId = getRowId(msbTable, "msb0");
+  const auto msb1RowId = getRowId(msbTable, "msb1");
   for (auto& column : msbScopeColumnData) {
     if (column->getColumnName() == "host_count.initUtil") {
-      EXPECT_DOUBLE_EQ(
-          4,
-          column->getDouble(
-              toEntityId(universe.getScopeItemId(msbScopeId, "msb0"))));
+      EXPECT_DOUBLE_EQ(4.0, column->getDouble(msb0RowId));
     } else if (column->getColumnName() == "host_count.finalUtil") {
       // note that this is zero because there is no solution object
-      EXPECT_DOUBLE_EQ(
-          0,
-          column->getDouble(
-              toEntityId(universe.getScopeItemId(msbScopeId, "msb0"))));
+      EXPECT_DOUBLE_EQ(0.0, column->getDouble(msb0RowId));
     } else if (column->getColumnName() == "network") {
-      EXPECT_DOUBLE_EQ(
-          1000.0,
-          column->getDouble(
-              toEntityId(universe.getScopeItemId(msbScopeId, "msb0"))));
-      EXPECT_DOUBLE_EQ(
-          0,
-          column->getDouble(
-              toEntityId(universe.getScopeItemId(msbScopeId, "msb1"))));
+      EXPECT_DOUBLE_EQ(1000.0, column->getDouble(msb0RowId));
+      EXPECT_DOUBLE_EQ(0.0, column->getDouble(msb1RowId));
     } else if (column->getColumnName() == "network.initUtil") {
-      EXPECT_DOUBLE_EQ(
-          0.0115,
-          column->getDouble(
-              toEntityId(universe.getScopeItemId(msbScopeId, "msb0"))));
-      EXPECT_TRUE(
-          std::isnan(column->getDouble(
-              toEntityId(universe.getScopeItemId(msbScopeId, "msb1")))));
+      EXPECT_DOUBLE_EQ(0.0115, column->getDouble(msb0RowId));
+      EXPECT_TRUE(std::isnan(column->getDouble(msb1RowId)));
     }
   }
 }
