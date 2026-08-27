@@ -156,8 +156,7 @@ class TestUtils(testutil.BaseFacebookTestCase):
             utils.createJsonFile(folder, "test_json", {})
 
     def test_createJsonFileFailParallel(self) -> None:
-        # pyre-fixme[2]: Parameter must be annotated.
-        def createTestJson(service, scope) -> None:
+        def createTestJson(service: str, scope: str) -> None:
             folder = self.getTmpFolder(service, scope)
             with utils.FolderLock(folder):
                 utils.createJsonFile(folder, "test_json", {})
