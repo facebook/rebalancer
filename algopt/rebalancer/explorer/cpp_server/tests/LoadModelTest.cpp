@@ -74,7 +74,7 @@ void addObjectTable(ExplorerModel& model) {
       model.universe->getObjectTypeName(), std::move(table));
 }
 
-EntityId getRowId(const Table& table, const std::string& primaryKey) {
+RowId getRowId(const Table& table, const std::string& primaryKey) {
   const auto* primaryKeyColumn = table.getOnlyPrimaryKeyColumn();
   for (const auto rowId : table.getRowIds()) {
     if (primaryKeyColumn->getStrView(rowId) == primaryKey) {
@@ -335,7 +335,7 @@ TEST(LoadModelTest, DynamicDimensionTableStoresObjectRows) {
   const auto table =
       LoadModel::buildDynamicDimensionTable(universe, dimension, "dynamicLoad");
   ASSERT_EQ(2, table.getRowIds().size());
-  const EntityId objectRow(1);
+  const RowId objectRow(1);
   EXPECT_EQ(
       "host0",
       Utils::fetchColumn(table.getColumnData(), "host")->getStrView(objectRow));
@@ -405,8 +405,8 @@ TEST(LoadModelTest, DynamicDimensionTableUsesGroupRowsForCompactStorage) {
 
   EXPECT_EQ(3, table.getColumnData().size());
   ASSERT_EQ(2, table.getRowIds().size());
-  const EntityId defaultRow(0);
-  const EntityId groupRow(1);
+  const RowId defaultRow(0);
+  const RowId groupRow(1);
   EXPECT_EQ("default", objectNames->getStrView(defaultRow));
   EXPECT_EQ("default", scopeItemNames->getStrView(defaultRow));
   EXPECT_DOUBLE_EQ(1.0, dimensionValues->getDouble(defaultRow));

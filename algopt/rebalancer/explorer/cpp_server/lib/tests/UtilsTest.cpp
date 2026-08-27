@@ -213,8 +213,7 @@ TEST_F(UtilsTest, TableBuilderBuildsColumnsFromRowKeys) {
   builder.addSorted(std::move(sortedColumns));
 
   const Table table = builder.build();
-  const std::vector<EntityId> expectedRowIds = {
-      EntityId(0), EntityId(1), EntityId(2)};
+  const std::vector<RowId> expectedRowIds = {RowId(0), RowId(1), RowId(2)};
   const std::vector<std::string> expectedColumnNames = {
       "Scope Item", "Load", "Enabled", "Owned"};
   const auto& columns = table.getColumnData();
@@ -319,7 +318,7 @@ TEST_F(UtilsTest, ColumnTypedAccessors) {
   const auto stringColumn = builder.make(
       {.name = "string", .type = ColumnType::STRING},
       [](int) { return std::string("value"); });
-  const EntityId rowId(0);
+  const RowId rowId(0);
 
   EXPECT_DOUBLE_EQ(1.5, numeric->getDouble(rowId));
   EXPECT_EQ("1.500000", numeric->toString(rowId));
@@ -357,7 +356,7 @@ TEST_F(UtilsTest, ColumnRejectsOutOfRangeRowId) {
       [](const int value) { return static_cast<double>(value); });
 
   REBALANCER_EXPECT_RUNTIME_ERROR(
-      column->getDouble(EntityId(2)),
+      column->getDouble(RowId(2)),
       "Row ID 2 is out of range for column 'Value' with 2 rows");
 }
 

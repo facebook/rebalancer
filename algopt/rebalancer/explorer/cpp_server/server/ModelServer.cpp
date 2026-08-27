@@ -457,7 +457,7 @@ double ModelServer::getChangeInObjective(
 }
 
 static Result prepareResult(const Table& table, size_t totalRows) {
-  /* Prepare Result object from filtered entity ids and table data. */
+  /* Prepare Result object from filtered row IDs and table data. */
   const auto& columns = table.getColumnData();
   std::vector<ColumnDescription> columnDescriptions;
   std::transform(
@@ -474,14 +474,14 @@ static Result prepareResult(const Table& table, size_t totalRows) {
       });
 
   std::vector<RowData> rows;
-  for (auto entityId : table.getRowIds()) {
+  for (const auto rowId : table.getRowIds()) {
     std::vector<CellData> cells;
     for (const auto& column : columns) {
       CellData cellData;
       if (column->isString()) {
-        cellData.stringValue() = column->getStrView(entityId);
+        cellData.stringValue() = column->getStrView(rowId);
       } else {
-        cellData.doubleValue() = column->getDouble(entityId);
+        cellData.doubleValue() = column->getDouble(rowId);
       }
       cells.push_back(std::move(cellData));
     }
@@ -515,19 +515,19 @@ static Table applyOrder(const Order& order, Table table) {
     std::sort(
         rowIds.begin(),
         rowIds.end(),
-        [orderDirection, &getValue](EntityId id1, EntityId id2) {
-          const auto value1 = getValue(id1);
-          const auto value2 = getValue(id2);
+        [orderDirection, &getValue](RowId rowId1, RowId rowId2) {
+          const auto value1 = getValue(rowId1);
+          const auto value2 = getValue(rowId2);
           return orderDirection == OrderDirection::ASCENDING ? value1 < value2
                                                              : value1 > value2;
         });
   };
   if (orderTableColumn->isNumeric()) {
     sortRows(
-        [&](const EntityId id) { return orderTableColumn->getDouble(id); });
+        [&](const RowId rowId) { return orderTableColumn->getDouble(rowId); });
   } else {
     sortRows(
-        [&](const EntityId id) { return orderTableColumn->getStrView(id); });
+        [&](const RowId rowId) { return orderTableColumn->getStrView(rowId); });
   }
   table.updateRowIds(rowIds);
   return table;
@@ -539,7 +539,7 @@ static Table applyPagination(const Page& page, Table table) {
   const int startIndex = std::min(*page.offset(), int(rowIds.size()));
   const int limit = *page.limit();
   const int endIndex = std::min(startIndex + limit, int(rowIds.size()));
-  std::vector<EntityId> newRowIds(
+  std::vector<RowId> newRowIds(
       rowIds.begin() + startIndex, rowIds.begin() + endIndex);
   table.updateRowIds(std::move(newRowIds));
   return table;

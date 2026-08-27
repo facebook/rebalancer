@@ -101,16 +101,16 @@ std::size_t Column::getRowCount() const {
       [](const auto& storage) { return storage.totalSize(); }, storage_);
 }
 
-double Column::getDouble(const EntityId entityId) const {
+double Column::getDouble(const RowId rowId) const {
   requireNumeric("Reading a double value");
   return std::visit(
-      [this, entityId](const auto& storage) -> double {
+      [this, rowId](const auto& storage) -> double {
         using StorageType = std::decay_t<decltype(storage)>;
         if constexpr (
             std::same_as<StorageType, DoubleStorage> ||
             std::same_as<StorageType, BoolStorage>) {
-          checkRowId(entityId, storage.totalSize());
-          return storage.getValue(entityId);
+          checkRowId(rowId, storage.totalSize());
+          return storage.getValue(rowId);
         } else {
           throw std::runtime_error(
               fmt::format(
@@ -120,16 +120,16 @@ double Column::getDouble(const EntityId entityId) const {
       storage_);
 }
 
-std::string_view Column::getStrView(const EntityId entityId) const {
+std::string_view Column::getStrView(const RowId rowId) const {
   requireString("Reading a string value");
   return std::visit(
-      [this, entityId](const auto& storage) -> std::string_view {
+      [this, rowId](const auto& storage) -> std::string_view {
         using StorageType = std::decay_t<decltype(storage)>;
         if constexpr (
             std::same_as<StorageType, BorrowedStringStorage> ||
             std::same_as<StorageType, OwnedStringStorage>) {
-          checkRowId(entityId, storage.totalSize());
-          return storage.getValue(entityId);
+          checkRowId(rowId, storage.totalSize());
+          return storage.getValue(rowId);
         } else {
           throw std::runtime_error(
               fmt::format(
@@ -139,41 +139,40 @@ std::string_view Column::getStrView(const EntityId entityId) const {
       storage_);
 }
 
-void Column::checkRowId(const EntityId entityId, const std::size_t rowCount)
-    const {
-  if (entityId.asIndex() >= rowCount) {
+void Column::checkRowId(const RowId rowId, const std::size_t rowCount) const {
+  if (rowId.asIndex() >= rowCount) {
     throw std::runtime_error(
         fmt::format(
             "Row ID {} is out of range for column '{}' with {} rows",
-            entityId.asIndex(),
+            rowId.asIndex(),
             columnName_,
             rowCount));
   }
 }
 
-std::string Column::toString(const EntityId entityId) const {
-  return isString() ? std::string(getStrView(entityId))
-                    : std::to_string(getDouble(entityId));
+std::string Column::toString(const RowId rowId) const {
+  return isString() ? std::string(getStrView(rowId))
+                    : std::to_string(getDouble(rowId));
 }
 
-bool Column::matches(const EntityId entityId, const CellValue& expected) const {
+bool Column::matches(const RowId rowId, const CellValue& expected) const {
   if (isNumeric()) {
     const auto* expectedValue = std::get_if<double>(&expected);
     if (!expectedValue) {
       return false;
     }
-    const auto actualValue = getDouble(entityId);
+    const auto actualValue = getDouble(rowId);
     return actualValue == *expectedValue ||
         (std::isnan(actualValue) && std::isnan(*expectedValue));
   }
   const auto* expectedValue = std::get_if<std::string>(&expected);
-  return expectedValue && getStrView(entityId) == *expectedValue;
+  return expectedValue && getStrView(rowId) == *expectedValue;
 }
 
 Table::Table(const std::size_t rowCount) {
   rowIds_.reserve(rowCount);
   for (const auto index : folly::irange(rowCount)) {
-    rowIds_.push_back(toEntityId(index));
+    rowIds_.emplace_back(static_cast<EntityIdType>(index));
   }
 }
 
@@ -242,11 +241,11 @@ const std::vector<std::shared_ptr<const Column>>& Table::getColumnData() const {
   return columns_;
 }
 
-const std::vector<EntityId>& Table::getRowIds() const {
+const std::vector<RowId>& Table::getRowIds() const {
   return rowIds_;
 }
 
-void Table::updateRowIds(std::vector<EntityId> newRowIds) {
+void Table::updateRowIds(std::vector<RowId> newRowIds) {
   rowIds_ = std::move(newRowIds);
 }
 

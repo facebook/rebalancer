@@ -20,45 +20,42 @@ const static std::string kRowCount = "Row_Count";
 
 using namespace facebook::rebalancer::entities;
 
-static EntityId getGroupId(
+static RowId getGroupRowId(
     GroupValueCellStruct group,
-    Map<GroupValueCellStruct, EntityId>& groupToNewRowIds,
-    std::vector<EntityId>& newRowIds) {
-  auto groupRowPtr = folly::get_ptr(groupToNewRowIds, group);
+    Map<GroupValueCellStruct, RowId>& groupToRowId,
+    std::vector<RowId>& newRowIds) {
+  auto groupRowPtr = folly::get_ptr(groupToRowId, group);
   if (groupRowPtr) {
     return *groupRowPtr;
   } else {
-    EntityId entityID(newRowIds.size());
-    groupToNewRowIds.emplace(std::move(group), entityID);
-    newRowIds.push_back(entityID);
-    return entityID;
+    const RowId rowId(static_cast<EntityIdType>(newRowIds.size()));
+    groupToRowId.emplace(std::move(group), rowId);
+    newRowIds.push_back(rowId);
+    return rowId;
   }
 }
 
-static std::pair<std::vector<EntityId>, Map<EntityId, EntityId>>
-createNewRowIds(
+static std::pair<std::vector<RowId>, Map<RowId, RowId>> createNewRowIds(
     const std::vector<std::shared_ptr<const Column>>& groupByTableColumns,
-    const std::vector<EntityId>& filteredRows) {
-  /* This method create new row id for each row in new group_by table.
-    It also maps original row to new row which will help in filling the
-    group_by table.
-   */
-  Map<GroupValueCellStruct, EntityId> groupToNewRowIds;
-  std::vector<EntityId> newRowIds;
-  Map<EntityId, EntityId> origRowToGroupRow;
+    const std::vector<RowId>& filteredRowIds) {
+  // Assign one dense row ID per distinct group and map each input row to it.
+  Map<GroupValueCellStruct, RowId> groupToRowId;
+  std::vector<RowId> newRowIds;
+  Map<RowId, RowId> rowIdToGroupRowId;
 
-  for (auto filteredRow : filteredRows) {
+  for (const auto filteredRowId : filteredRowIds) {
     std::vector<std::string> groupValue;
     groupValue.reserve(groupByTableColumns.size());
     for (const auto& col : groupByTableColumns) {
-      groupValue.emplace_back(col->getStrView(filteredRow));
+      groupValue.emplace_back(col->getStrView(filteredRowId));
     }
     GroupValueCellStruct value{.groupCellValue = std::move(groupValue)};
-    auto groupId = getGroupId(std::move(value), groupToNewRowIds, newRowIds);
-    origRowToGroupRow.emplace(filteredRow, groupId);
+    const auto groupRowId =
+        getGroupRowId(std::move(value), groupToRowId, newRowIds);
+    rowIdToGroupRowId.emplace(filteredRowId, groupRowId);
   }
 
-  return std::pair(std::move(newRowIds), std::move(origRowToGroupRow));
+  return std::pair(std::move(newRowIds), std::move(rowIdToGroupRowId));
 }
 
 static std::vector<std::shared_ptr<const Column>> extractGroupByColumns(
@@ -82,20 +79,20 @@ Table GroupModel::applyGroup(const Group& group, Table table) {
   /* Group by filtered rows based on requested columns */
   auto groupByColumns = *group.columns();
   const auto& columns = table.getColumnData();
-  const auto& filteredRows = table.getRowIds();
+  const auto& filteredRowIds = table.getRowIds();
   auto groupByTableColumns = extractGroupByColumns(groupByColumns, columns);
-  auto [newRowIds, origRowToGroupRow] =
-      createNewRowIds(groupByTableColumns, filteredRows);
+  auto [newRowIds, rowIdToGroupRowId] =
+      createNewRowIds(groupByTableColumns, filteredRowIds);
   const auto groupCount = folly::to<EntityIdType>(newRowIds.size());
 
-  TableBuilder<EntityId> builder(newRowIds);
+  TableBuilder<RowId> builder(newRowIds);
   for (const auto& column : groupByTableColumns) {
-    Map<EntityId, std::string> groupRowIdToValue;
+    Map<RowId, std::string> groupRowIdToValue;
     groupRowIdToValue.reserve(groupCount);
-    for (const auto origRowId : filteredRows) {
-      const auto groupRowId = origRowToGroupRow.at(origRowId);
+    for (const auto rowId : filteredRowIds) {
+      const auto groupRowId = rowIdToGroupRowId.at(rowId);
       // Every row in a group has the same value for a group-by column.
-      groupRowIdToValue.try_emplace(groupRowId, column->getStrView(origRowId));
+      groupRowIdToValue.try_emplace(groupRowId, column->getStrView(rowId));
     }
     builder.add(
         {
@@ -103,7 +100,7 @@ Table GroupModel::applyGroup(const Group& group, Table table) {
             .type = column->getColumnType(),
             .isPrimaryKey = true,
         },
-        [&groupRowIdToValue](const EntityId rowId) -> std::string {
+        [&groupRowIdToValue](const RowId rowId) -> std::string {
           return std::move(groupRowIdToValue.at(rowId));
         });
   }
@@ -118,11 +115,11 @@ Table GroupModel::applyGroup(const Group& group, Table table) {
     }
     const auto isColTypeId =
         (column->getColumnType() == ColumnType::IDENTIFIER);
-    Map<EntityId, double> groupRowIdToTotal;
+    Map<RowId, double> groupRowIdToTotal;
     groupRowIdToTotal.reserve(groupCount);
-    for (const auto origRowId : filteredRows) {
-      const auto groupRowId = origRowToGroupRow.at(origRowId);
-      const double value = isColTypeId ? 1.0 : column->getDouble(origRowId);
+    for (const auto rowId : filteredRowIds) {
+      const auto groupRowId = rowIdToGroupRowId.at(rowId);
+      const double value = isColTypeId ? 1.0 : column->getDouble(rowId);
       const auto [totalIt, inserted] =
           groupRowIdToTotal.try_emplace(groupRowId, value);
       if (!inserted) {
@@ -132,7 +129,7 @@ Table GroupModel::applyGroup(const Group& group, Table table) {
     builder.add(
         {.name = isColTypeId ? kRowCount : column->getColumnName(),
          .type = isColTypeId ? ColumnType::INTEGER : column->getColumnType()},
-        [&groupRowIdToTotal](const EntityId rowId) {
+        [&groupRowIdToTotal](const RowId rowId) {
           return groupRowIdToTotal.at(rowId);
         });
   }

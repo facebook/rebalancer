@@ -23,14 +23,9 @@
 
 namespace facebook::rebalancer::explorer {
 
-using EntityId = entities::EntityId<struct ExplorerTag>;
+using RowId = entities::EntityId<struct ExplorerRowTag>;
 using BorrowedString = std::reference_wrapper<const std::string>;
 using CellValue = std::variant<std::string, double>;
-
-template <typename T>
-constexpr EntityId toEntityId(T id) {
-  return EntityId(static_cast<entities::EntityIdType>(id));
-}
 
 struct ColumnMetadata {
   std::string name;
@@ -43,9 +38,9 @@ struct ColumnMetadata {
 class Column {
   /* Stores column details. */
  public:
-  double getDouble(EntityId entityId) const;
-  std::string_view getStrView(EntityId entityId) const;
-  std::string toString(EntityId entityId) const;
+  double getDouble(RowId rowId) const;
+  std::string_view getStrView(RowId rowId) const;
+  std::string toString(RowId rowId) const;
 
   ColumnType getColumnType() const;
   const std::string& getColumnName() const;
@@ -69,13 +64,13 @@ class Column {
   friend class TableBuilder;
 
   std::size_t getRowCount() const;
-  bool matches(EntityId entityId, const CellValue& expected) const;
+  bool matches(RowId rowId, const CellValue& expected) const;
 
   struct DoubleStorage {
     std::vector<double> values;
 
-    double getValue(EntityId entityId) const {
-      return values.at(entityId.asIndex());
+    double getValue(RowId rowId) const {
+      return values.at(rowId.asIndex());
     }
 
     std::size_t totalSize() const {
@@ -86,8 +81,8 @@ class Column {
   struct BoolStorage {
     algopt::DynamicBitSet values;
 
-    bool getValue(EntityId entityId) const {
-      return values.isSet(entityId.asIndex());
+    bool getValue(RowId rowId) const {
+      return values.isSet(rowId.asIndex());
     }
 
     std::size_t totalSize() const {
@@ -98,8 +93,8 @@ class Column {
   struct BorrowedStringStorage {
     std::vector<BorrowedString> values;
 
-    std::string_view getValue(EntityId entityId) const {
-      return values.at(entityId.asIndex()).get();
+    std::string_view getValue(RowId rowId) const {
+      return values.at(rowId.asIndex()).get();
     }
 
     std::size_t totalSize() const {
@@ -110,8 +105,8 @@ class Column {
   struct OwnedStringStorage {
     std::vector<std::string> values;
 
-    const std::string& getValue(EntityId entityId) const {
-      return values.at(entityId.asIndex());
+    const std::string& getValue(RowId rowId) const {
+      return values.at(rowId.asIndex());
     }
 
     std::size_t totalSize() const {
@@ -130,7 +125,7 @@ class Column {
   Column(Storage storage, ColumnMetadata metadata);
 
  private:
-  void checkRowId(EntityId entityId, std::size_t rowCount) const;
+  void checkRowId(RowId rowId, std::size_t rowCount) const;
 
   const Storage storage_;
   const std::string columnName_;
@@ -162,7 +157,7 @@ class Table {
       std::vector<std::shared_ptr<const Column>> columns);
   std::vector<std::string> getColumnNames() const;
   const std::vector<std::shared_ptr<const Column>>& getColumnData() const;
-  const std::vector<EntityId>& getRowIds() const;
+  const std::vector<RowId>& getRowIds() const;
   const std::vector<const Column*>& getPrimaryKeyColumns() const {
     return primaryKeyColumns_;
   }
@@ -175,11 +170,11 @@ class Table {
     }
     return primaryKeyColumns_.front();
   }
-  void updateRowIds(std::vector<EntityId>);
+  void updateRowIds(std::vector<RowId>);
 
  private:
   std::vector<std::shared_ptr<const Column>> columns_;
-  std::vector<EntityId> rowIds_;
+  std::vector<RowId> rowIds_;
   std::vector<const Column*> primaryKeyColumns_;
   bool idColExists_ = false;
 };

@@ -37,86 +37,86 @@ static bool satisfiesNumericCondition(
 static void applyFilterRuleRegex(
     const std::vector<std::shared_ptr<const Column>>& columns,
     const FilterRuleRegex& rule,
-    std::vector<EntityId>& entityIds) {
+    std::vector<RowId>& rowIds) {
   const auto& column = Utils::fetchColumn(columns, *rule.column());
   column->requireString("Regex filter");
-  entityIds.erase(
+  rowIds.erase(
       std::remove_if(
-          entityIds.begin(),
-          entityIds.end(),
-          [&column, &rule](auto entityId) {
+          rowIds.begin(),
+          rowIds.end(),
+          [&column, &rule](auto rowId) {
             return !re2::RE2::PartialMatch(
-                column->getStrView(entityId), *rule.regex());
+                column->getStrView(rowId), *rule.regex());
           }),
-      entityIds.end());
+      rowIds.end());
 }
 
 static void applyFilterRuleNumeric(
     const std::vector<std::shared_ptr<const Column>>& columns,
     const FilterRuleNumeric& rule,
-    std::vector<EntityId>& entityIds) {
+    std::vector<RowId>& rowIds) {
   const auto& column = Utils::fetchColumn(columns, *rule.column());
   column->requireNumeric("Numeric filter");
-  entityIds.erase(
+  rowIds.erase(
       std::remove_if(
-          entityIds.begin(),
-          entityIds.end(),
-          [&column, &rule](auto entityId) {
+          rowIds.begin(),
+          rowIds.end(),
+          [&column, &rule](auto rowId) {
             const auto targetValue = *rule.doubleValue();
             return !satisfiesNumericCondition(
-                *rule.comparator(), column->getDouble(entityId), targetValue);
+                *rule.comparator(), column->getDouble(rowId), targetValue);
           }),
-      entityIds.end());
+      rowIds.end());
 }
 
 static void applyFilterStringAny(
     const std::vector<std::shared_ptr<const Column>>& columns,
     const FilterRuleStringAny& rule,
-    std::vector<EntityId>& entityIds) {
+    std::vector<RowId>& rowIds) {
   const auto& column = Utils::fetchColumn(columns, *rule.column());
   column->requireString("Any filter");
-  entityIds.erase(
+  rowIds.erase(
       std::remove_if(
-          entityIds.begin(),
-          entityIds.end(),
-          [&column, &rule](auto entityId) {
-            const auto value = column->getStrView(entityId);
+          rowIds.begin(),
+          rowIds.end(),
+          [&column, &rule](auto rowId) {
+            const auto value = column->getStrView(rowId);
             return std::find(
                        rule.values()->begin(), rule.values()->end(), value) ==
                 rule.values()->end();
           }),
-      entityIds.end());
+      rowIds.end());
 }
 
 static void applyFilterStringNe(
     const std::vector<std::shared_ptr<const Column>>& columns,
     const FilterRuleStringNe& rule,
-    std::vector<EntityId>& entityIds) {
+    std::vector<RowId>& rowIds) {
   const auto& column = Utils::fetchColumn(columns, *rule.column());
   column->requireString("Not-equal filter");
-  entityIds.erase(
+  rowIds.erase(
       std::remove_if(
-          entityIds.begin(),
-          entityIds.end(),
-          [&column, &rule](auto entityId) {
-            return column->getStrView(entityId) == *rule.value();
+          rowIds.begin(),
+          rowIds.end(),
+          [&column, &rule](auto rowId) {
+            return column->getStrView(rowId) == *rule.value();
           }),
-      entityIds.end());
+      rowIds.end());
 }
 
 static void applyFilterRule(
     const std::vector<std::shared_ptr<const Column>>& columns,
     const FilterRule& rule,
-    std::vector<EntityId>& entityIds) {
+    std::vector<RowId>& rowIds) {
   switch (rule.getType()) {
     case FilterRule::Type::regex:
-      return applyFilterRuleRegex(columns, rule.get_regex(), entityIds);
+      return applyFilterRuleRegex(columns, rule.get_regex(), rowIds);
     case FilterRule::Type::numeric:
-      return applyFilterRuleNumeric(columns, rule.get_numeric(), entityIds);
+      return applyFilterRuleNumeric(columns, rule.get_numeric(), rowIds);
     case FilterRule::Type::stringAny:
-      return applyFilterStringAny(columns, rule.get_stringAny(), entityIds);
+      return applyFilterStringAny(columns, rule.get_stringAny(), rowIds);
     case FilterRule::Type::stringNe:
-      return applyFilterStringNe(columns, rule.get_stringNe(), entityIds);
+      return applyFilterStringNe(columns, rule.get_stringNe(), rowIds);
     default:
       throw std::runtime_error("Unrecognized filter type");
   }
