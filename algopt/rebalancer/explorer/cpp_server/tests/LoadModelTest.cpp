@@ -323,6 +323,30 @@ TEST(LoadModelTest, OverlappingPartitionJoinsGroups) {
   EXPECT_EQ("", partitionColumn->getStrView(getRowId(table, "host4")));
 }
 
+TEST(LoadModelTest, DynamicDimensionTableStoresObjectRows) {
+  auto bundle = TestUtils::buildBundle();
+  const entities::Universe universe(*bundle.problem()->universe());
+  const auto& dimension =
+      universe.getObjects()
+          .getDimension(universe.getDimensionId("dynamicLoad"))
+          .only();
+
+  const auto table =
+      LoadModel::buildDynamicDimensionTable(universe, dimension, "dynamicLoad");
+  ASSERT_EQ(2, table.getRowIds().size());
+  const EntityId objectRow(1);
+  EXPECT_EQ(
+      "host0",
+      Utils::fetchColumn(table.getColumnData(), "host")->getStrView(objectRow));
+  EXPECT_EQ(
+      "msb0",
+      Utils::fetchColumn(table.getColumnData(), "msb")->getStrView(objectRow));
+  EXPECT_DOUBLE_EQ(
+      10.0,
+      Utils::fetchColumn(table.getColumnData(), "dynamicLoad")
+          ->getDouble(objectRow));
+}
+
 TEST(LoadModelTest, DynamicDimensionTableUsesGroupRowsForCompactStorage) {
   UniverseProblemBuilder builder(
       std::make_unique<AsyncConfig>(getTestExecutor(/*numThreads=*/true)));

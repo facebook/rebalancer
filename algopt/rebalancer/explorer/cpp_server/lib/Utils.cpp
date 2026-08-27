@@ -217,6 +217,22 @@ void Table::insertColumn(std::shared_ptr<const Column> columnData) {
   columns_.push_back(std::move(columnData));
 }
 
+void Table::insertColumn(ColumnMetadata metadata, std::vector<double> values) {
+  insertColumn(
+      std::make_shared<Column>(
+          Column::DoubleStorage{.values = std::move(values)},
+          std::move(metadata)));
+}
+
+void Table::insertColumn(
+    ColumnMetadata metadata,
+    std::vector<BorrowedString> values) {
+  insertColumn(
+      std::make_shared<Column>(
+          Column::BorrowedStringStorage{.values = std::move(values)},
+          std::move(metadata)));
+}
+
 void Table::insertColumnsInSortedOrder(
     std::vector<std::shared_ptr<const Column>> columnsData) {
   /* Sort the columns based on column name and insert. */

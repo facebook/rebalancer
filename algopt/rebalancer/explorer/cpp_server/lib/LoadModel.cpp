@@ -28,11 +28,13 @@
 #include <folly/system/HardwareConcurrency.h>
 
 #include <algorithm>
+#include <functional>
 #include <limits>
 #include <memory>
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <type_traits>
 #include <vector>
 
@@ -44,6 +46,7 @@ using namespace facebook::rebalancer::interface;
 namespace {
 
 static const std::string kEmptyString;
+static const std::string kDefaultRowName = "default";
 
 std::string makeScalarDimensionName(
     const std::string& dimensionName,
@@ -228,78 +231,77 @@ Table LoadModel::buildDynamicDimensionTable(
             "Expected to be called only for a dynamic dimension, called for {}.",
             dimensionName));
   }
-  DataCell defaultCell;
-  entities::Map<EntityId, DataCell> objectNames;
-  entities::Map<EntityId, DataCell> scopeItemNames;
-  entities::Map<EntityId, DataCell> dimensionValues;
-  std::vector<EntityId> rowIds;
 
-  const ScopeId& scopeId = dimension.getScopeId();
-  const Scope& scope = universe.getScope(scopeId);
+  const auto scopeId = dimension.getScopeId();
+  const auto& scope = universe.getScope(scopeId);
+  const auto defaultValue = dimension.getDefaultValue();
 
-  const double defaultValue = dimension.getDefaultValue();
-  const auto addRow = [&](const std::string& itemName,
+  // Avoid reallocating potentially millions of rows.
+  std::size_t rowCount = 1;
+  for (const auto scopeItemId : scope.getScopeItemIds()) {
+    rowCount +=
+        dimension.values(scopeItemId)
+            .visit(
+                [](const ObjectIdToDoubleMap& objectValues) -> std::size_t {
+                  return objectValues.nonDefaultSize();
+                },
+                [](const PartitionId, const GroupIdToDoubleMap& groupValues)
+                    -> std::size_t { return groupValues.size(); });
+  }
+
+  std::vector<BorrowedString> entityNames;
+  std::vector<BorrowedString> scopeItemNames;
+  std::vector<double> values;
+  entityNames.reserve(rowCount);
+  scopeItemNames.reserve(rowCount);
+  values.reserve(rowCount);
+  const auto addRow = [&](const std::string& entityName,
                           const std::string& scopeItemName,
                           const double value) {
-    const auto entityId = toEntityId(rowIds.size());
-    rowIds.push_back(entityId);
-    dimensionValues[entityId].doubleValue = value;
-    objectNames[entityId].strValue = itemName;
-    scopeItemNames[entityId].strValue = scopeItemName;
+    entityNames.push_back(std::cref(entityName));
+    scopeItemNames.push_back(std::cref(scopeItemName));
+    values.push_back(value);
   };
 
   // Add a default row for the dimension table.
   // TODO: add a new UI component to show default value.
   // Also show an error message if dimension is too big to display, for
   // example when more than 10M values.
-  addRow("default", "default", defaultValue);
-  std::string itemColumnName = universe.getObjectTypeName();
-  for (const ScopeItemId scopeItem : scope.getScopeItemIds()) {
-    const std::string& scopeItemName = universe.getEntityName(scopeItem);
-    dimension.values(scopeItem).visit(
-        [&](const ObjectIdToDoubleMap& objectValues) {
-          itemColumnName = universe.getObjectTypeName();
-          objectValues.forEachNonDefault(
-              [&](const ObjectId objectId, const double value) {
+  addRow(kDefaultRowName, kDefaultRowName, defaultValue);
+  auto entityColumnName = std::string_view(universe.getObjectTypeName());
+  for (const auto scopeItemId : scope.getScopeItemIds()) {
+    const auto& scopeItemName = universe.getEntityName(scopeItemId);
+    dimension.values(scopeItemId)
+        .visit(
+            [&](const ObjectIdToDoubleMap& objectValues) {
+              entityColumnName = universe.getObjectTypeName();
+              objectValues.forEachNonDefault([&](const ObjectId objectId,
+                                                 const double value) {
                 addRow(universe.getEntityName(objectId), scopeItemName, value);
               });
-        },
-        [&](const PartitionId partitionId,
-            const GroupIdToDoubleMap& groupValues) {
-          itemColumnName = universe.getEntityName(partitionId);
-          for (const auto& [groupId, value] : groupValues) {
-            addRow(universe.getEntityName(groupId), scopeItemName, value);
-          }
-        });
+            },
+            [&](const PartitionId partitionId,
+                const GroupIdToDoubleMap& groupValues) {
+              entityColumnName = universe.getEntityName(partitionId);
+              for (const auto& [groupId, value] : groupValues) {
+                addRow(universe.getEntityName(groupId), scopeItemName, value);
+              }
+            });
   }
 
-  const std::string& scopeName = universe.getEntityName(dimension.getScopeId());
-
-  auto objectNamesColumn = std::make_shared<Column>(
-      std::move(objectNames),
-      defaultCell,
-      std::move(itemColumnName),
-      ColumnType::ENTITY_NAME,
-      /*primaryKey=*/true);
-
-  auto scopeItemNamesColumn = std::make_shared<Column>(
-      std::move(scopeItemNames),
-      defaultCell,
-      scopeName,
-      ColumnType::SCOPE,
-      /*primaryKey=*/true);
-
-  defaultCell.doubleValue = defaultValue;
-  auto dimensionValuesColumn = std::make_shared<Column>(
-      std::move(dimensionValues),
-      std::move(defaultCell),
-      dimensionName,
-      ColumnType::DIMENSION);
-
-  Table table(std::move(rowIds));
-  table.insertColumn(std::move(objectNamesColumn));
-  table.insertColumn(std::move(scopeItemNamesColumn));
-  table.insertColumn(std::move(dimensionValuesColumn));
+  const auto& scopeName = universe.getEntityName(scopeId);
+  Table table(rowCount);
+  table.insertColumn(
+      {.name = std::string(entityColumnName),
+       .type = ColumnType::ENTITY_NAME,
+       .isPrimaryKey = true},
+      std::move(entityNames));
+  table.insertColumn(
+      {.name = scopeName, .type = ColumnType::SCOPE, .isPrimaryKey = true},
+      std::move(scopeItemNames));
+  table.insertColumn(
+      {.name = dimensionName, .type = ColumnType::DIMENSION},
+      std::move(values));
   return table;
 }
 

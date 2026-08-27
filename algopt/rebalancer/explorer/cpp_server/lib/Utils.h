@@ -192,6 +192,10 @@ class Table {
   explicit Table(std::size_t rowCount);
   explicit Table(std::vector<EntityId> rowIds);
   void insertColumn(std::shared_ptr<const Column> columnData);
+  void insertColumn(ColumnMetadata metadata, std::vector<double> values);
+  void insertColumn(
+      ColumnMetadata metadata,
+      std::vector<BorrowedString> values);
   void insertColumnsInSortedOrder(
       std::vector<std::shared_ptr<const Column>> columnsData);
   std::vector<std::string> getColumnNames() const;
