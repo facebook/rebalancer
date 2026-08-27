@@ -22,9 +22,11 @@
 #include <folly/MapUtil.h>
 #include <thrift/lib/cpp/util/EnumUtils.h>
 
+#include <functional>
 #include <limits>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 namespace facebook::rebalancer::explorer {
 
@@ -61,42 +63,20 @@ Table tabulate(
   const auto& changeSetA = config.changeSetA;
   const auto& changeSetB = config.changeSetB;
 
-  TableBuilder tableBuilder;
-  tableBuilder
-      .addColumnDefinition(
-          {.name = "Util Metric",
-           .type = ColumnType::STRING,
-           .isPrimaryKey = true})
-      .addColumnDefinition(
-          {.name = "Dimension",
-           .type = ColumnType::STRING,
-           .isPrimaryKey = true})
-      .addColumnDefinition(
-          {.name = "Scope", .type = ColumnType::SCOPE, .isPrimaryKey = true})
-      .addColumnDefinition(
-          {.name = "Scope Item",
-           .type = ColumnType::STRING,
-           .isPrimaryKey = true})
-      .addColumnDefinition(
-          {.name = "Partition",
-           .type = ColumnType::PARTITION,
-           .isPrimaryKey = true})
-      .addColumnDefinition(
-          {.name = "Group", .type = ColumnType::STRING, .isPrimaryKey = true})
-      .addColumnDefinition(
-          {.name = "Scope Item Dimension Value", .type = ColumnType::DOUBLE})
-      .addColumnDefinition(
-          {.name = "Relative Utilization (A)", .type = ColumnType::UTILIZATION})
-      .addColumnDefinition(
-          {.name = "Relative Utilization (B)", .type = ColumnType::UTILIZATION})
-      .addColumnDefinition(
-          {.name = "Relative Utilization (B-A)", .type = ColumnType::DOUBLE})
-      .addColumnDefinition(
-          {.name = "Utilization (A)", .type = ColumnType::UTILIZATION})
-      .addColumnDefinition(
-          {.name = "Utilization (B)", .type = ColumnType::UTILIZATION})
-      .addColumnDefinition(
-          {.name = "Utilization (B-A)", .type = ColumnType::DOUBLE});
+  struct Row {
+    std::string utilMetric;
+    BorrowedString dimension;
+    BorrowedString scope;
+    BorrowedString scopeItem;
+    BorrowedString partition;
+    BorrowedString group;
+    double scopeItemDimensionValue;
+    double relativeUtilizationA;
+    double relativeUtilizationB;
+    double utilizationA;
+    double utilizationB;
+  };
+  std::vector<Row> rows;
 
   Context contextA;
   contextA.changes() = changeSetA;
@@ -114,28 +94,73 @@ Table tabulate(
     const double relUtilA = getRelativeUtilization(absUtilA, scopeDimValue);
     const double relUtilB = getRelativeUtilization(absUtilB, scopeDimValue);
 
-    double relUtilBMinusA = relUtilB - relUtilA;
-    if (relUtilA == std::numeric_limits<double>::infinity() ||
-        relUtilB == std::numeric_limits<double>::infinity()) {
-      relUtilBMinusA = std::numeric_limits<double>::infinity();
-    }
-    tableBuilder.addRow(
-        MetricCollection::toString(utilMetric),
-        universe.getEntityName(dimensionId),
-        universe.getEntityName(scopeId),
-        universe.getEntityName(scopeItemId),
-        partitionIdOpt ? universe.getEntityName(*partitionIdOpt)
-                       : kNotApplicable,
-        groupIdOpt ? universe.getEntityName(*groupIdOpt) : kNotApplicable,
-        scopeDimValue,
-        relUtilA,
-        relUtilB,
-        relUtilBMinusA,
-        absUtilA,
-        absUtilB,
-        absUtilB - absUtilA);
+    rows.push_back(
+        {.utilMetric = MetricCollection::toString(utilMetric),
+         .dimension = universe.getEntityName(dimensionId),
+         .scope = universe.getEntityName(scopeId),
+         .scopeItem = universe.getEntityName(scopeItemId),
+         .partition = partitionIdOpt ? universe.getEntityName(*partitionIdOpt)
+                                     : kNotApplicable,
+         .group =
+             groupIdOpt ? universe.getEntityName(*groupIdOpt) : kNotApplicable,
+         .scopeItemDimensionValue = scopeDimValue,
+         .relativeUtilizationA = relUtilA,
+         .relativeUtilizationB = relUtilB,
+         .utilizationA = absUtilA,
+         .utilizationB = absUtilB});
   });
 
+  ColumnTableBuilder tableBuilder(rows);
+  tableBuilder
+      .add(
+          {.name = "Util Metric",
+           .type = ColumnType::STRING,
+           .isPrimaryKey = true},
+          [](const Row& row) { return row.utilMetric; })
+      .add(
+          {.name = "Dimension",
+           .type = ColumnType::STRING,
+           .isPrimaryKey = true},
+          [](const Row& row) { return row.dimension; })
+      .add(
+          {.name = "Scope", .type = ColumnType::SCOPE, .isPrimaryKey = true},
+          [](const Row& row) { return row.scope; })
+      .add(
+          {.name = "Scope Item",
+           .type = ColumnType::STRING,
+           .isPrimaryKey = true},
+          [](const Row& row) { return row.scopeItem; })
+      .add(
+          {.name = "Partition",
+           .type = ColumnType::PARTITION,
+           .isPrimaryKey = true},
+          [](const Row& row) { return row.partition; })
+      .add(
+          {.name = "Group", .type = ColumnType::STRING, .isPrimaryKey = true},
+          [](const Row& row) { return row.group; })
+      .add(
+          {.name = "Scope Item Dimension Value", .type = ColumnType::DOUBLE},
+          [](const Row& row) { return row.scopeItemDimensionValue; })
+      .add(
+          {.name = "Relative Utilization (A)", .type = ColumnType::UTILIZATION},
+          [](const Row& row) { return row.relativeUtilizationA; })
+      .add(
+          {.name = "Relative Utilization (B)", .type = ColumnType::UTILIZATION},
+          [](const Row& row) { return row.relativeUtilizationB; })
+      .add(
+          {.name = "Relative Utilization (B-A)", .type = ColumnType::DOUBLE},
+          [](const Row& row) {
+            return row.relativeUtilizationB - row.relativeUtilizationA;
+          })
+      .add(
+          {.name = "Utilization (A)", .type = ColumnType::UTILIZATION},
+          [](const Row& row) { return row.utilizationA; })
+      .add(
+          {.name = "Utilization (B)", .type = ColumnType::UTILIZATION},
+          [](const Row& row) { return row.utilizationB; })
+      .add(
+          {.name = "Utilization (B-A)", .type = ColumnType::DOUBLE},
+          [](const Row& row) { return row.utilizationB - row.utilizationA; });
   return tableBuilder.build();
 }
 
@@ -145,53 +170,37 @@ Table tabulate(
   auto& universe = config.universe;
   auto& orchestrator = config.orchestrator;
 
-  TableBuilder tableBuilder;
-  tableBuilder
-      .addColumnDefinition(
-          {.name = "Routing Config",
-           .type = ColumnType::STRING,
-           .isPrimaryKey = true})
-      .addColumnDefinition(
-          {.name = "Partition",
-           .type = ColumnType::PARTITION,
-           .isPrimaryKey = true})
-      .addColumnDefinition(
-          {.name = "Group", .type = ColumnType::STRING, .isPrimaryKey = true})
-      .addColumnDefinition(
-          {.name = "Scope", .type = ColumnType::SCOPE, .isPrimaryKey = true})
-      .addColumnDefinition(
-          {.name = "Source Scope Item",
-           .type = ColumnType::STRING,
-           .isPrimaryKey = true})
-      .addColumnDefinition(
-          {.name = "Destination Scope Item",
-           .type = ColumnType::STRING,
-           .isPrimaryKey = true})
-      .addColumnDefinition({.name = "Traffic (A)", .type = ColumnType::DOUBLE})
-      .addColumnDefinition({.name = "Traffic (B)", .type = ColumnType::DOUBLE})
-      .addColumnDefinition(
-          {.name = "Traffic (B-A)", .type = ColumnType::DOUBLE});
+  struct Row {
+    BorrowedString routingConfig;
+    BorrowedString partition;
+    BorrowedString group;
+    BorrowedString scope;
+    BorrowedString sourceScopeItem;
+    BorrowedString destinationScopeItem;
+    double trafficA;
+    double trafficB;
+  };
+  std::vector<Row> rows;
 
-  auto addRow = [&](entities::RoutingConfigId routingConfigId,
-                    entities::GroupId groupId,
-                    entities::ScopeItemId sourceId,
-                    entities::ScopeItemId destinationId,
-                    double trafficA,
-                    double trafficB) {
-    auto& routingConfig = universe.getRoutingConfig(routingConfigId);
-    auto partitionId = routingConfig.getPartitionId();
-    auto scopeId = routingConfig.getScopeId();
+  const auto addRow = [&](entities::RoutingConfigId routingConfigId,
+                          entities::GroupId groupId,
+                          entities::ScopeItemId sourceId,
+                          entities::ScopeItemId destinationId,
+                          double trafficA,
+                          double trafficB) {
+    const auto& routingConfig = universe.getRoutingConfig(routingConfigId);
+    const auto partitionId = routingConfig.getPartitionId();
+    const auto scopeId = routingConfig.getScopeId();
 
-    tableBuilder.addRow(
-        universe.getEntityName(routingConfigId),
-        universe.getEntityName(partitionId),
-        universe.getEntityName(groupId),
-        universe.getEntityName(scopeId),
-        universe.getEntityName(sourceId),
-        universe.getEntityName(destinationId),
-        trafficA,
-        trafficB,
-        trafficB - trafficA);
+    rows.push_back(
+        {.routingConfig = universe.getEntityName(routingConfigId),
+         .partition = universe.getEntityName(partitionId),
+         .group = universe.getEntityName(groupId),
+         .scope = universe.getEntityName(scopeId),
+         .sourceScopeItem = universe.getEntityName(sourceId),
+         .destinationScopeItem = universe.getEntityName(destinationId),
+         .trafficA = trafficA,
+         .trafficB = trafficB});
   };
 
   Context contextA;
@@ -252,6 +261,43 @@ Table tabulate(
     }
   });
 
+  ColumnTableBuilder tableBuilder(rows);
+  tableBuilder
+      .add(
+          {.name = "Routing Config",
+           .type = ColumnType::STRING,
+           .isPrimaryKey = true},
+          [](const Row& row) { return row.routingConfig; })
+      .add(
+          {.name = "Partition",
+           .type = ColumnType::PARTITION,
+           .isPrimaryKey = true},
+          [](const Row& row) { return row.partition; })
+      .add(
+          {.name = "Group", .type = ColumnType::STRING, .isPrimaryKey = true},
+          [](const Row& row) { return row.group; })
+      .add(
+          {.name = "Scope", .type = ColumnType::SCOPE, .isPrimaryKey = true},
+          [](const Row& row) { return row.scope; })
+      .add(
+          {.name = "Source Scope Item",
+           .type = ColumnType::STRING,
+           .isPrimaryKey = true},
+          [](const Row& row) { return row.sourceScopeItem; })
+      .add(
+          {.name = "Destination Scope Item",
+           .type = ColumnType::STRING,
+           .isPrimaryKey = true},
+          [](const Row& row) { return row.destinationScopeItem; })
+      .add(
+          {.name = "Traffic (A)", .type = ColumnType::DOUBLE},
+          [](const Row& row) { return row.trafficA; })
+      .add(
+          {.name = "Traffic (B)", .type = ColumnType::DOUBLE},
+          [](const Row& row) { return row.trafficB; })
+      .add(
+          {.name = "Traffic (B-A)", .type = ColumnType::DOUBLE},
+          [](const Row& row) { return row.trafficB - row.trafficA; });
   return tableBuilder.build();
 }
 
@@ -263,26 +309,15 @@ Table tabulate(
   auto& universe = config.universe;
   auto& orchestrator = config.orchestrator;
 
-  TableBuilder tableBuilder;
-  tableBuilder
-      .addColumnDefinition(
-          {.name = "Latency Metric",
-           .type = ColumnType::STRING,
-           .isPrimaryKey = true})
-      .addColumnDefinition(
-          {.name = "Routing Config",
-           .type = ColumnType::STRING,
-           .isPrimaryKey = true})
-      .addColumnDefinition(
-          {.name = "Partition",
-           .type = ColumnType::PARTITION,
-           .isPrimaryKey = true})
-      .addColumnDefinition(
-          {.name = "Group", .type = ColumnType::STRING, .isPrimaryKey = true})
-      .addColumnDefinition({.name = "Latency (A)", .type = ColumnType::DOUBLE})
-      .addColumnDefinition({.name = "Latency (B)", .type = ColumnType::DOUBLE})
-      .addColumnDefinition(
-          {.name = "Latency (B-A)", .type = ColumnType::DOUBLE});
+  struct Row {
+    std::string latencyMetric;
+    BorrowedString routingConfig;
+    BorrowedString partition;
+    BorrowedString group;
+    double latencyA;
+    double latencyB;
+  };
+  std::vector<Row> rows;
 
   Context contextA;
   contextA.changes() = config.changeSetA;
@@ -291,22 +326,50 @@ Table tabulate(
   metrics.forEachMetricExpressionForTabulation(
       [&](const auto& key, const auto& expr) {
         const auto& [routingConfigId, metricType, percentile, groupId] = key;
-        auto partitionId =
+        const auto partitionId =
             universe.getRoutingConfig(routingConfigId).getPartitionId();
         const double valueA = orchestrator.evaluate(expr.get(), contextA);
         const double valueB = orchestrator.evaluate(expr.get(), contextB);
 
-        tableBuilder.addRow(
-            thriftUtils::toString(
-                thriftUtils::makeRoutingLatencyMetric(metricType, percentile)),
-            universe.getEntityName(routingConfigId),
-            universe.getEntityName(partitionId),
-            universe.getEntityName(groupId),
-            valueA,
-            valueB,
-            valueB - valueA);
+        rows.push_back(
+            {.latencyMetric = thriftUtils::toString(
+                 thriftUtils::makeRoutingLatencyMetric(metricType, percentile)),
+             .routingConfig = universe.getEntityName(routingConfigId),
+             .partition = universe.getEntityName(partitionId),
+             .group = universe.getEntityName(groupId),
+             .latencyA = valueA,
+             .latencyB = valueB});
       });
 
+  ColumnTableBuilder tableBuilder(rows);
+  tableBuilder
+      .add(
+          {.name = "Latency Metric",
+           .type = ColumnType::STRING,
+           .isPrimaryKey = true},
+          [](const Row& row) { return row.latencyMetric; })
+      .add(
+          {.name = "Routing Config",
+           .type = ColumnType::STRING,
+           .isPrimaryKey = true},
+          [](const Row& row) { return row.routingConfig; })
+      .add(
+          {.name = "Partition",
+           .type = ColumnType::PARTITION,
+           .isPrimaryKey = true},
+          [](const Row& row) { return row.partition; })
+      .add(
+          {.name = "Group", .type = ColumnType::STRING, .isPrimaryKey = true},
+          [](const Row& row) { return row.group; })
+      .add(
+          {.name = "Latency (A)", .type = ColumnType::DOUBLE},
+          [](const Row& row) { return row.latencyA; })
+      .add(
+          {.name = "Latency (B)", .type = ColumnType::DOUBLE},
+          [](const Row& row) { return row.latencyB; })
+      .add(
+          {.name = "Latency (B-A)", .type = ColumnType::DOUBLE},
+          [](const Row& row) { return row.latencyB - row.latencyA; });
   return tableBuilder.build();
 }
 

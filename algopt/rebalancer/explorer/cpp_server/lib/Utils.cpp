@@ -1,6 +1,7 @@
 // (c) Facebook, Inc. and its affiliates. Confidential and proprietary.
 #include "rebalancer/explorer/cpp_server/lib/Utils.h"
 
+#include <cmath>
 #include <string>
 #include <vector>
 
@@ -184,8 +185,14 @@ bool Column::matches(const EntityId entityId, const DataCell& expected) const {
   if (!valueMatchesType(expected, isNumeric())) {
     return false;
   }
-  return isNumeric() ? getDouble(entityId) == *expected.doubleValue
-                     : getStrView(entityId) == *expected.strValue;
+  if (isString()) {
+    return getStrView(entityId) == *expected.strValue;
+  }
+
+  const auto actualValue = getDouble(entityId);
+  const auto expectedValue = *expected.doubleValue;
+  return actualValue == expectedValue ||
+      (std::isnan(actualValue) && std::isnan(expectedValue));
 }
 
 Table::Table(const std::size_t rowCount) {
