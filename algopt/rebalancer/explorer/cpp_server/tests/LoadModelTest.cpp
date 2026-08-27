@@ -89,7 +89,6 @@ TEST(LoadModelTest, Basic) {
   auto bundle = TestUtils::buildBundle();
   auto explorerModel = LoadModel::buildData(std::move(bundle));
   addObjectTable(explorerModel);
-  const auto& universe = *explorerModel.universe;
   const auto& tableData = std::move(explorerModel.tableData);
 
   // Verify column names and types for the host (object) table
@@ -173,55 +172,53 @@ TEST(LoadModelTest, Basic) {
       "ram.initUtil"};
   EXPECT_EQ(expectedMsbColumns, tableData.at("msb").getColumnNames());
 
-  const auto& objectColumnData = tableData.at("host").getColumnData();
-  for (auto& column : objectColumnData) {
+  const auto& objectTable = tableData.at("host");
+  const auto& objectColumnData = objectTable.getColumnData();
+  const auto host0RowId = getRowId(objectTable, "host0");
+  const auto host1RowId = getRowId(objectTable, "host1");
+  const auto host2RowId = getRowId(objectTable, "host2");
+  const auto host3RowId = getRowId(objectTable, "host3");
+  const auto host4RowId = getRowId(objectTable, "host4");
+  for (const auto& column : objectColumnData) {
     // Only the host column is a primary key.
     EXPECT_EQ(column->isPrimaryKey(), column->getColumnName() == "host");
     if (column->getColumnName() == "src.rack") {
       // assert host0 is initially on rack0
-      EXPECT_EQ(
-          "rack0",
-          column->getStrView(toEntityId(universe.getObjectId("host0"))));
+      EXPECT_EQ("rack0", column->getStrView(host0RowId));
 
       // ensure host 3 is on rack 1
-      EXPECT_EQ(
-          "rack1",
-          column->getStrView(toEntityId(universe.getObjectId("host3"))));
+      EXPECT_EQ("rack1", column->getStrView(host3RowId));
     } else if (column->getColumnName() == "dst.rack") {
       // assert host0 is moved to rack2
-      EXPECT_EQ(
-          "rack2",
-          column->getStrView(toEntityId(universe.getObjectId("host0"))));
+      EXPECT_EQ("rack2", column->getStrView(host0RowId));
     } else if (column->getColumnName() == "ram") {
       // assert normal object dimension
-      EXPECT_DOUBLE_EQ(
-          128000, column->getDouble(toEntityId(universe.getObjectId("host2"))));
+      EXPECT_DOUBLE_EQ(128000, column->getDouble(host2RowId));
     } else if (column->getColumnName() == "network_0") {
-      EXPECT_DOUBLE_EQ(
-          3.0, column->getDouble(toEntityId(universe.getObjectId("host3"))));
+      EXPECT_DOUBLE_EQ(3.0, column->getDouble(host3RowId));
     } else if (column->getColumnName() == "network_1") {
-      EXPECT_DOUBLE_EQ(
-          4.5, column->getDouble(toEntityId(universe.getObjectId("host3"))));
+      EXPECT_DOUBLE_EQ(4.5, column->getDouble(host3RowId));
     } else if (column->getColumnName() == "network_2") {
-      EXPECT_DOUBLE_EQ(
-          1.0, column->getDouble(toEntityId(universe.getObjectId("host3"))));
+      EXPECT_DOUBLE_EQ(1.0, column->getDouble(host3RowId));
+    } else if (column->getColumnName() == "src.dynamicLoad") {
+      EXPECT_DOUBLE_EQ(10.0, column->getDouble(host0RowId));
+    } else if (column->getColumnName() == "dst.dynamicLoad") {
+      EXPECT_DOUBLE_EQ(1.0, column->getDouble(host0RowId));
+    } else if (
+        column->getColumnName() == "src.row_incomplete" ||
+        column->getColumnName() == "dst.row_incomplete") {
+      EXPECT_EQ("", column->getStrView(host4RowId));
     } else if (column->getColumnName() == "scheme") {
       // assert partition data for object
-      EXPECT_EQ(
-          "twshared",
-          column->getStrView(toEntityId(universe.getObjectId("host3"))));
-      EXPECT_EQ(
-          "cache",
-          column->getStrView(toEntityId(universe.getObjectId("host1"))));
+      EXPECT_EQ("twshared", column->getStrView(host3RowId));
+      EXPECT_EQ("cache", column->getStrView(host1RowId));
 
       // assert default partition is empty
-      EXPECT_EQ(
-          "", column->getStrView(toEntityId(universe.getObjectId("host2"))));
+      EXPECT_EQ("", column->getStrView(host2RowId));
     } else if (column->getColumnName() == kEquivSetPartition.data()) {
-      const auto allObjectIds = universe.getObjects().getObjectIds();
       std::set<std::string> equivSetNames;
-      for (auto objectId : allObjectIds) {
-        equivSetNames.emplace(column->getStrView(toEntityId(objectId)));
+      for (const auto rowId : objectTable.getRowIds()) {
+        equivSetNames.emplace(column->getStrView(rowId));
       }
 
       // assert all objects are in the same equivalence set, since there is no
@@ -299,24 +296,31 @@ TEST(LoadModelTest, Basic) {
   }
 }
 
+TEST(LoadModelTest, DynamicObjectDimensionUsesFinalAssignment) {
+  auto bundle = TestUtils::buildBundle();
+  bundle.solution()->assignment()->at("host0") = "rack1";
+
+  auto explorerModel = LoadModel::buildData(std::move(bundle));
+  addObjectTable(explorerModel);
+
+  const auto& table = explorerModel.tableData.at("host");
+  const auto column =
+      Utils::fetchColumn(table.getColumnData(), "dst.dynamicLoad");
+  EXPECT_DOUBLE_EQ(10.0, column->getDouble(getRowId(table, "host0")));
+}
+
 TEST(LoadModelTest, OverlappingPartitionJoinsGroups) {
   auto bundle = TestUtils::buildBundle({.includeOverlappedPartition = true});
   auto explorerModel = LoadModel::buildData(std::move(bundle));
   addObjectTable(explorerModel);
 
-  const auto& universe = *explorerModel.universe;
   const auto& table = explorerModel.tableData.at("host");
   const auto partitionColumn =
       Utils::fetchColumn(table.getColumnData(), "overlapped");
   EXPECT_EQ(
-      "group1, group2",
-      partitionColumn->getStrView(toEntityId(universe.getObjectId("host0"))));
-  EXPECT_EQ(
-      "group1",
-      partitionColumn->getStrView(toEntityId(universe.getObjectId("host3"))));
-  EXPECT_EQ(
-      "",
-      partitionColumn->getStrView(toEntityId(universe.getObjectId("host4"))));
+      "group1, group2", partitionColumn->getStrView(getRowId(table, "host0")));
+  EXPECT_EQ("group1", partitionColumn->getStrView(getRowId(table, "host3")));
+  EXPECT_EQ("", partitionColumn->getStrView(getRowId(table, "host4")));
 }
 
 TEST(LoadModelTest, DynamicDimensionTableUsesGroupRowsForCompactStorage) {
@@ -513,52 +517,36 @@ TEST(ModelTest, MoveGroupTogether) {
 
   auto explorerModel = LoadModel::buildData(std::move(bundle));
   addObjectTable(explorerModel);
-  const auto& universe = *explorerModel.universe;
   const auto& tableData = explorerModel.tableData;
 
-  const auto& objectColumnData = tableData.at("host").getColumnData();
-  for (auto& column : objectColumnData) {
+  const auto& objectTable = tableData.at("host");
+  const auto& objectColumnData = objectTable.getColumnData();
+  const auto host0RowId = getRowId(objectTable, "host0");
+  const auto host1RowId = getRowId(objectTable, "host1");
+  const auto host3RowId = getRowId(objectTable, "host3");
+  const auto host4RowId = getRowId(objectTable, "host4");
+  for (const auto& column : objectColumnData) {
     if (column->getColumnName() == "src.rack") {
       // assert host0 and host1 were initially at rack 0
-      EXPECT_EQ(
-          "rack0",
-          column->getStrView(toEntityId(universe.getObjectId("host0"))));
-      EXPECT_EQ(
-          "rack0",
-          column->getStrView(toEntityId(universe.getObjectId("host1"))));
+      EXPECT_EQ("rack0", column->getStrView(host0RowId));
+      EXPECT_EQ("rack0", column->getStrView(host1RowId));
       // host 3 remained at rack 0
-      EXPECT_EQ(
-          "rack0",
-          column->getStrView(toEntityId(universe.getObjectId("host3"))));
+      EXPECT_EQ("rack0", column->getStrView(host3RowId));
       // host 4 moved from rack1
-      EXPECT_EQ(
-          "rack1",
-          column->getStrView(toEntityId(universe.getObjectId("host4"))));
+      EXPECT_EQ("rack1", column->getStrView(host4RowId));
     } else if (column->getColumnName() == "dst.rack") {
       // assert host0 and host1 moved to rack1
-      EXPECT_EQ(
-          "rack1",
-          column->getStrView(toEntityId(universe.getObjectId("host0"))));
-      EXPECT_EQ(
-          "rack1",
-          column->getStrView(toEntityId(universe.getObjectId("host1"))));
+      EXPECT_EQ("rack1", column->getStrView(host0RowId));
+      EXPECT_EQ("rack1", column->getStrView(host1RowId));
       // host 3 remained at rack0
-      EXPECT_EQ(
-          "rack0",
-          column->getStrView(toEntityId(universe.getObjectId("host3"))));
+      EXPECT_EQ("rack0", column->getStrView(host3RowId));
       // host 4 moved from rack2
-      EXPECT_EQ(
-          "rack2",
-          column->getStrView(toEntityId(universe.getObjectId("host4"))));
+      EXPECT_EQ("rack2", column->getStrView(host4RowId));
     } else if (column->getColumnName() == kEquivSetPartition.data()) {
       // expect two equivalence sets, one for host0 and host1, and one for
       // host3 and host4
-      EXPECT_EQ(
-          column->getStrView(toEntityId(universe.getObjectId("host0"))),
-          column->getStrView(toEntityId(universe.getObjectId("host1"))));
-      EXPECT_EQ(
-          column->getStrView(toEntityId(universe.getObjectId("host3"))),
-          column->getStrView(toEntityId(universe.getObjectId("host4"))));
+      EXPECT_EQ(column->getStrView(host0RowId), column->getStrView(host1RowId));
+      EXPECT_EQ(column->getStrView(host3RowId), column->getStrView(host4RowId));
     }
   }
 }
@@ -581,35 +569,27 @@ TEST(LoadModelTest, IsMovableTest) {
       {.spec = std::move(spec), .inProgressSpec = std::move(inProgressSpec)});
   auto explorerModel = LoadModel::buildData(std::move(bundle));
   addObjectTable(explorerModel);
-  const auto& universe = *explorerModel.universe;
   const auto& tableData = explorerModel.tableData;
-
-  const auto getObjectId = [&universe](const std::string& name) {
-    return universe.getObjectId(name);
-  };
 
   const auto& objectsTable = tableData.at("host");
   const auto& objectColumnData = objectsTable.getColumnData();
+  const auto host0RowId = getRowId(objectsTable, "host0");
+  const auto host1RowId = getRowId(objectsTable, "host1");
+  const auto host3RowId = getRowId(objectsTable, "host3");
   const auto& isMovableColumn = objectColumnData.at(1);
   EXPECT_EQ("is_movable", isMovableColumn->getColumnName());
   EXPECT_EQ(ColumnType::INTEGER, isMovableColumn->getColumnType());
-  EXPECT_DOUBLE_EQ(
-      1, isMovableColumn->getDouble(toEntityId(getObjectId("host0"))));
-  EXPECT_DOUBLE_EQ(
-      0, isMovableColumn->getDouble(toEntityId(getObjectId("host1"))));
-  EXPECT_DOUBLE_EQ(
-      0, isMovableColumn->getDouble(toEntityId(getObjectId("host3"))));
+  EXPECT_DOUBLE_EQ(1, isMovableColumn->getDouble(host0RowId));
+  EXPECT_DOUBLE_EQ(0, isMovableColumn->getDouble(host1RowId));
+  EXPECT_DOUBLE_EQ(0, isMovableColumn->getDouble(host3RowId));
 
   const auto& movesInProgressColumn = objectColumnData.at(2);
   EXPECT_EQ("has_move_in_progress", movesInProgressColumn->getColumnName());
   EXPECT_EQ(ColumnType::INTEGER, movesInProgressColumn->getColumnType());
   EXPECT_FALSE(movesInProgressColumn->isPrimaryKey());
-  EXPECT_DOUBLE_EQ(
-      0, movesInProgressColumn->getDouble(toEntityId(getObjectId("host0"))));
-  EXPECT_DOUBLE_EQ(
-      0, movesInProgressColumn->getDouble(toEntityId(getObjectId("host1"))));
-  EXPECT_DOUBLE_EQ(
-      1, movesInProgressColumn->getDouble(toEntityId(getObjectId("host3"))));
+  EXPECT_DOUBLE_EQ(0, movesInProgressColumn->getDouble(host0RowId));
+  EXPECT_DOUBLE_EQ(0, movesInProgressColumn->getDouble(host1RowId));
+  EXPECT_DOUBLE_EQ(1, movesInProgressColumn->getDouble(host3RowId));
   EXPECT_EQ(
       "1 when object is part of a MovesInProgressSpec, 0 otherwise",
       movesInProgressColumn->getDescription());
@@ -622,7 +602,6 @@ TEST(LoadModelTest, BasicWithNoSolutionObject) {
   auto bundle = TestUtils::buildBundle(buildOptions);
   auto explorerModel = LoadModel::buildData(std::move(bundle));
   addObjectTable(explorerModel);
-  const auto& universe = *explorerModel.universe;
   auto tableData = std::move(explorerModel.tableData);
 
   const std::set<std::string> expectedObjectColumnsSet = {
@@ -687,31 +666,31 @@ TEST(LoadModelTest, BasicWithNoSolutionObject) {
       std::set<std::string>(containerColumns.begin(), containerColumns.end());
   EXPECT_EQ(expectedContainerColumnsSet, containerColumnsSet);
 
-  const auto& objectColumnData = tableData.at("host").getColumnData();
-  for (auto& column : objectColumnData) {
+  const auto& objectTable = tableData.at("host");
+  const auto& objectColumnData = objectTable.getColumnData();
+  const auto host0RowId = getRowId(objectTable, "host0");
+  const auto host2RowId = getRowId(objectTable, "host2");
+  const auto host3RowId = getRowId(objectTable, "host3");
+  for (const auto& column : objectColumnData) {
     // Only the host column is a primary key.
     EXPECT_EQ(column->isPrimaryKey(), column->getColumnName() == "host");
     if (column->getColumnName() == "ram") {
       // assert normal object dimension
-      EXPECT_DOUBLE_EQ(
-          128000, column->getDouble(toEntityId(universe.getObjectId("host2"))));
+      EXPECT_DOUBLE_EQ(128000, column->getDouble(host2RowId));
     } else if (column->getColumnName() == "dst.dynamicLoad") {
-      EXPECT_DOUBLE_EQ(
-          1.0, column->getDouble(toEntityId(universe.getObjectId("host0"))));
+      EXPECT_DOUBLE_EQ(1.0, column->getDouble(host0RowId));
+    } else if (column->getColumnName() == "dst.rack") {
+      EXPECT_EQ("", column->getStrView(host0RowId));
     } else if (column->getColumnName() == "network_0") {
-      EXPECT_DOUBLE_EQ(
-          3.0, column->getDouble(toEntityId(universe.getObjectId("host3"))));
+      EXPECT_DOUBLE_EQ(3.0, column->getDouble(host3RowId));
     } else if (column->getColumnName() == "network_1") {
-      EXPECT_DOUBLE_EQ(
-          4.5, column->getDouble(toEntityId(universe.getObjectId("host3"))));
+      EXPECT_DOUBLE_EQ(4.5, column->getDouble(host3RowId));
     } else if (column->getColumnName() == "network_2") {
-      EXPECT_DOUBLE_EQ(
-          1.0, column->getDouble(toEntityId(universe.getObjectId("host3"))));
+      EXPECT_DOUBLE_EQ(1.0, column->getDouble(host3RowId));
     } else if (column->getColumnName() == kEquivSetPartition.data()) {
-      const auto allObjectIds = universe.getObjects().getObjectIds();
       std::set<std::string> equivSetNames;
-      for (auto objectId : allObjectIds) {
-        equivSetNames.emplace(column->getStrView(toEntityId(objectId)));
+      for (const auto rowId : objectTable.getRowIds()) {
+        equivSetNames.emplace(column->getStrView(rowId));
       }
 
       // assert all objects are in the same equivalence set, since there is no

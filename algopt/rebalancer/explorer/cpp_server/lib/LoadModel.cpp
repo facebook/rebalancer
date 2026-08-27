@@ -53,6 +53,32 @@ std::string makeScalarDimensionName(
                          : dimensionName;
 }
 
+struct DynamicObjectDimensionColumns {
+  std::shared_ptr<const Column> source;
+  std::shared_ptr<const Column> destination;
+};
+
+using ObjectIdToContainerId = std::vector<ContainerId>;
+
+ObjectIdToContainerId buildObjectIdToContainerId(
+    const Map<ContainerId, std::vector<ObjectId>>& containerIdToObjectIds,
+    const std::size_t objectCount) {
+  if (containerIdToObjectIds.empty()) {
+    return {};
+  }
+
+  // A nonempty assignment contains every object exactly once, so every entry
+  // is overwritten below.
+  ObjectIdToContainerId objectIdToContainerId(
+      objectCount, containerIdToObjectIds.begin()->first);
+  for (const auto& [containerId, objectIds] : containerIdToObjectIds) {
+    for (const auto objectId : objectIds) {
+      objectIdToContainerId.at(objectId.asIndex()) = containerId;
+    }
+  }
+  return objectIdToContainerId;
+}
+
 } // namespace
 
 static EquivalenceSetsData buildEquivalenceSetData(
@@ -138,74 +164,58 @@ static std::shared_ptr<Universe> buildUniverse(
 }
 
 static std::vector<std::shared_ptr<const Column>> buildPartitionCols(
+    const ColumnTableBuilder<ObjectId>& builder,
     const Universe& universe,
     const EquivalenceSetsData& eqSetsData) {
   std::vector<std::shared_ptr<const Column>> columns;
-  for (auto partitionId : universe.getPartitionIds()) {
-    auto& partition = universe.getPartition(partitionId);
-    auto& partitionName = universe.getEntityName(partitionId);
-    Map<EntityId, DataCell> objectToCell;
-    for (const auto& [objectId, groupIds] : partition.getObjectIdToGroupIds()) {
-      if (groupIds.size() == 1) {
-        objectToCell[toEntityId(objectId)] =
-            DataCell(universe.getEntityName(groupIds.front()));
-      } else {
-        std::vector<std::string> groupNames;
-        groupNames.reserve(groupIds.size());
-        for (const auto groupId : groupIds) {
-          groupNames.push_back(universe.getEntityName(groupId));
-        }
-        std::sort(groupNames.begin(), groupNames.end());
-        objectToCell[toEntityId(objectId)] =
-            DataCell(folly::join(", ", groupNames));
-      }
+  columns.reserve(universe.getPartitionIds().size() + 1);
+  for (const auto partitionId : universe.getPartitionIds()) {
+    const auto& partition = universe.getPartition(partitionId);
+    const ColumnMetadata metadata = {
+        .name = universe.getEntityName(partitionId),
+        .type = ColumnType::PARTITION};
+    if (partition.isDisjoint()) {
+      columns.push_back(builder.make(
+          metadata, [&universe, &partition](const ObjectId objectId) {
+            const auto* groupIds =
+                folly::get_ptr(partition.getObjectIdToGroupIds(), objectId);
+            return std::cref(
+                groupIds && groupIds->size() == 1
+                    ? universe.getEntityName(groupIds->front())
+                    : kEmptyString);
+          }));
+    } else {
+      columns.push_back(builder.make(
+          metadata,
+          [&universe, &partition](const ObjectId objectId) -> std::string {
+            const auto* groupIds =
+                folly::get_ptr(partition.getObjectIdToGroupIds(), objectId);
+            if (!groupIds) {
+              return std::string();
+            }
+            if (groupIds->size() == 1) {
+              return universe.getEntityName(groupIds->front());
+            }
+
+            std::vector<std::string> groupNames;
+            groupNames.reserve(groupIds->size());
+            for (const auto groupId : *groupIds) {
+              groupNames.push_back(universe.getEntityName(groupId));
+            }
+            std::sort(groupNames.begin(), groupNames.end());
+            return folly::join(", ", groupNames);
+          }));
     }
-    DataCell defaultPartition("");
-    auto columnData = std::make_shared<Column>(
-        std::move(objectToCell),
-        std::move(defaultPartition),
-        partitionName,
-        ColumnType::PARTITION);
-    columns.push_back(std::move(columnData));
   }
 
-  // Add equivalence set data as a partition column
-  Map<EntityId, DataCell> objectToCell;
-  for (const auto& [objectId, groupName] : eqSetsData.objectIdToGroupName) {
-    objectToCell[toEntityId(objectId)] = DataCell(groupName);
-  }
-  DataCell defaultPartition("");
-  auto columnData = std::make_shared<Column>(
-      std::move(objectToCell),
-      std::move(defaultPartition),
-      eqSetsData.partitionName,
-      ColumnType::PARTITION);
-  columns.push_back(std::move(columnData));
-
+  columns.push_back(builder.make(
+      {.name = eqSetsData.partitionName, .type = ColumnType::PARTITION},
+      [&eqSetsData](const ObjectId objectId) {
+        const auto* groupName =
+            folly::get_ptr(eqSetsData.objectIdToGroupName, objectId);
+        return std::cref(groupName ? *groupName : kEmptyString);
+      }));
   return columns;
-}
-
-// For every object in assignment, compute the value of the object for the given
-// `scalarDimension`.
-static Map<EntityId, DataCell> getObjectDimensionValues(
-    const Map<ContainerId, std::vector<ObjectId>>& assignment,
-    const ObjectScalarDimension& scalarDimension,
-    const Universe& universe) {
-  Map<EntityId, DataCell> objectIdToDimensionValue;
-  const Scope* scope = nullptr;
-  if (scalarDimension.isDynamic()) {
-    scope = &universe.getScope(scalarDimension.getScopeId());
-  }
-
-  for (const auto& [container, objects] : assignment) {
-    const std::optional<ScopeItemId> scopeItem =
-        scope ? scope->getScopeItemId(container) : std::nullopt;
-    for (const ObjectId& objectId : objects) {
-      objectIdToDimensionValue[toEntityId(objectId)].doubleValue =
-          scalarDimension.getValue(objectId, scopeItem);
-    }
-  }
-  return objectIdToDimensionValue;
 }
 
 Table LoadModel::buildDynamicDimensionTable(
@@ -294,38 +304,34 @@ Table LoadModel::buildDynamicDimensionTable(
 }
 
 static std::vector<std::shared_ptr<const Column>>
-buildStaticObjectDimensionCols(const entities::Universe& universe) {
-  std::vector<std::shared_ptr<const Column>> staticDimensionColumns;
+buildStaticObjectDimensionCols(
+    const ColumnTableBuilder<ObjectId>& builder,
+    const entities::Universe& universe) {
+  std::vector<std::shared_ptr<const Column>> columns;
 
-  auto& initialAssignment = universe.getContainers().getInitialAssignment();
-  for (auto dimId : universe.getObjects().getDimensionIds()) {
-    auto& dimName = universe.getEntityName(dimId);
-    auto& objectDimension = universe.getObjects().getDimension(dimId);
+  const auto& objects = universe.getObjects();
+  for (const auto dimId : objects.getDimensionIds()) {
+    const auto& dimName = universe.getEntityName(dimId);
+    const auto& objectDimension = objects.getDimension(dimId);
 
     for (int i = 0; i < objectDimension.size(); i++) {
-      auto& scalarDimension = objectDimension.at(i);
+      const auto& scalarDimension = objectDimension.at(i);
       // Skip ObjectPartitionRoutingDimension to prevent an exception below.
       if (scalarDimension.isRoutingConfigBased()) {
         continue;
       }
-      auto colName =
-          makeScalarDimensionName(dimName, objectDimension.size(), i);
-
-      if (!scalarDimension.isDynamic()) {
-        DataCell defaultDimension(0.0);
-        // construct a static dimension column for every object in
-        // `initialAssignment`.
-        auto columnData = std::make_shared<Column>(
-            getObjectDimensionValues(
-                initialAssignment, scalarDimension, universe),
-            std::move(defaultDimension),
-            colName,
-            ColumnType::DIMENSION);
-        staticDimensionColumns.push_back(std::move(columnData));
+      if (scalarDimension.isDynamic()) {
+        continue;
       }
+      columns.push_back(builder.make(
+          {.name = makeScalarDimensionName(dimName, objectDimension.size(), i),
+           .type = ColumnType::DIMENSION},
+          [&scalarDimension](const ObjectId objectId) {
+            return scalarDimension.getValue(objectId);
+          }));
     }
   }
-  return staticDimensionColumns;
+  return columns;
 }
 
 static std::pair<Map<ObjectId, ContainerId>, Map<ObjectId, ContainerId>>
@@ -388,50 +394,38 @@ static std::vector<std::shared_ptr<const Column>> buildScopeDimensionCols(
 }
 
 static std::vector<std::shared_ptr<const Column>> buildAssignmentCols(
+    const ColumnTableBuilder<ObjectId>& builder,
     const Universe& universe,
-    const Map<ContainerId, std::vector<ObjectId>>& finalAssignment) {
+    const ObjectIdToContainerId& initialObjectIdToContainerId,
+    const ObjectIdToContainerId& finalObjectIdToContainerId) {
   std::vector<std::shared_ptr<const Column>> columns;
-  const DataCell defaultAssignment("");
-  for (auto scopeId : universe.getScopeIds()) {
-    auto& scope = universe.getScope(scopeId);
-    auto& scopeName = universe.getEntityName(scopeId);
+  columns.reserve(2 * universe.getScopeIds().size());
+  const auto buildAssignmentColumn =
+      [&](const Scope& scope,
+          std::string name,
+          const ObjectIdToContainerId& objectIdToContainerId) {
+        return builder.make(
+            {.name = std::move(name), .type = ColumnType::ASSIGNMENT},
+            [&](const ObjectId objectId) {
+              if (objectIdToContainerId.empty()) {
+                return std::cref(kEmptyString);
+              }
+              const auto containerId =
+                  objectIdToContainerId.at(objectId.asIndex());
+              const auto scopeItemId = scope.getScopeItemId(containerId);
+              return std::cref(
+                  scopeItemId ? universe.getEntityName(*scopeItemId)
+                              : kEmptyString);
+            });
+      };
 
-    Map<EntityId, DataCell> objectToInitialCell;
-    Map<EntityId, DataCell> objectToFinalCell;
-
-    for (auto scopeItemId : scope.getScopeItemIds()) {
-      auto& scopeItemName = universe.getEntityName(scopeItemId);
-      for (auto containerId : scope.getContainerIds(scopeItemId)) {
-        // initial assignment
-        for (auto objectId :
-             universe.getContainers().getInitialObjectIds(containerId)) {
-          DataCell scopeValue(scopeItemName);
-          objectToInitialCell[toEntityId(objectId)] = std::move(scopeValue);
-        }
-
-        // final assignment
-        if (finalAssignment.contains(containerId)) {
-          for (auto objectId : finalAssignment.at(containerId)) {
-            DataCell scopeValue(scopeItemName);
-            objectToFinalCell[toEntityId(objectId)] = std::move(scopeValue);
-          }
-        }
-      }
-    }
-
-    auto srcColumnData = std::make_shared<Column>(
-        std::move(objectToInitialCell),
-        defaultAssignment,
-        fmt::format("src.{}", scopeName),
-        ColumnType::ASSIGNMENT);
-    columns.push_back(std::move(srcColumnData));
-
-    auto dstColumnData = std::make_shared<Column>(
-        std::move(objectToFinalCell),
-        defaultAssignment,
-        fmt::format("dst.{}", scopeName),
-        ColumnType::ASSIGNMENT);
-    columns.push_back(std::move(dstColumnData));
+  for (const auto scopeId : universe.getScopeIds()) {
+    const auto& scope = universe.getScope(scopeId);
+    const auto& scopeName = universe.getEntityName(scopeId);
+    columns.push_back(buildAssignmentColumn(
+        scope, fmt::format("src.{}", scopeName), initialObjectIdToContainerId));
+    columns.push_back(buildAssignmentColumn(
+        scope, fmt::format("dst.{}", scopeName), finalObjectIdToContainerId));
   }
   return columns;
 }
@@ -622,64 +616,59 @@ static std::vector<std::shared_ptr<const Column>> buildUtilizationCols(
 }
 
 static std::vector<std::shared_ptr<const Column>> buildMovableCols(
+    const ColumnTableBuilder<ObjectId>& builder,
     const Universe& universe) {
-  Map<EntityId, DataCell> objectToIsMovableCell;
-  Map<EntityId, DataCell> objectToInProgressCell;
-  for (auto constraintId : universe.getConstraints().getConstraintIds()) {
-    const auto& constarint =
+  Set<ObjectId> immovableObjectIds;
+  Set<ObjectId> moveInProgressObjectIds;
+  for (const auto constraintId : universe.getConstraints().getConstraintIds()) {
+    const auto& constraint =
         universe.getConstraints().getConstraint(constraintId);
-    const auto& spec = constarint.getSpec();
+    const auto& spec = constraint.getSpec();
     if (spec.getType() == ConstraintSpecs::Type::movesInProgressSpec) {
       for (const auto& move : *spec.movesInProgressSpec()->moves()) {
         const auto& objectName = *move.objName();
-        auto objectId = universe.getObjectId(objectName);
-        objectToIsMovableCell[toEntityId(objectId)] = DataCell(0.0);
-        objectToInProgressCell[toEntityId(objectId)] = DataCell(1.0);
+        const auto objectId = universe.getObjectId(objectName);
+        immovableObjectIds.emplace(objectId);
+        moveInProgressObjectIds.emplace(objectId);
       }
     } else if (spec.getType() == ConstraintSpecs::Type::avoidMovingSpec) {
       for (const auto& objectName : *spec.avoidMovingSpec()->objects()) {
-        auto objectId = universe.getObjectId(objectName);
-        objectToIsMovableCell[toEntityId(objectId)] = DataCell(0.0);
+        const auto objectId = universe.getObjectId(objectName);
+        immovableObjectIds.emplace(objectId);
       }
     }
   }
 
   std::vector<std::shared_ptr<const Column>> columns;
-  columns.push_back(
-      std::make_shared<Column>(
-          std::move(objectToIsMovableCell),
-          DataCell(1.0), // by default objects are movable
-          "is_movable",
-          explorer::ColumnType::INTEGER));
+  columns.push_back(builder.make(
+      {.name = "is_movable", .type = explorer::ColumnType::INTEGER},
+      [&immovableObjectIds](const ObjectId objectId) {
+        return !immovableObjectIds.contains(objectId);
+      }));
 
-  // only add column if there are movesInProgress
-  if (!objectToInProgressCell.empty()) {
-    columns.push_back(
-        std::make_shared<Column>(
-            std::move(objectToInProgressCell),
-            DataCell(0.0), // by default objects are not part of movesInProgress
-            "has_move_in_progress",
-            explorer::ColumnType::INTEGER,
-            /*isPrimaryKey=*/false,
-            "1 when object is part of a MovesInProgressSpec, 0 otherwise"));
+  if (!moveInProgressObjectIds.empty()) {
+    columns.push_back(builder.make(
+        {.name = "has_move_in_progress",
+         .type = explorer::ColumnType::INTEGER,
+         .description =
+             "1 when object is part of a MovesInProgressSpec, 0 otherwise"},
+        [&moveInProgressObjectIds](const ObjectId objectId) {
+          return moveInProgressObjectIds.contains(objectId);
+        }));
   }
   return columns;
 }
 
-static std::shared_ptr<const Column> buildObjectCol(const Universe& universe) {
-  auto& objectColumn = universe.getObjectTypeName();
-  Map<EntityId, DataCell> objectCell;
-  for (auto objectId : universe.getObjects().getObjectIds()) {
-    DataCell cell(universe.getEntityName(objectId));
-    objectCell[toEntityId(objectId)] = std::move(cell);
-  }
-  DataCell defaultCell("");
-  return std::make_shared<Column>(
-      std::move(objectCell),
-      std::move(defaultCell),
-      objectColumn,
-      ColumnType::ENTITY_NAME,
-      /*primaryKey=*/true);
+static std::shared_ptr<const Column> buildObjectCol(
+    const ColumnTableBuilder<ObjectId>& builder,
+    const Universe& universe) {
+  return builder.make(
+      {.name = universe.getObjectTypeName(),
+       .type = ColumnType::ENTITY_NAME,
+       .isPrimaryKey = true},
+      [&universe](const ObjectId objectId) {
+        return std::cref(universe.getEntityName(objectId));
+      });
 }
 
 static std::shared_ptr<const Column> buildContainerScopeColumn(
@@ -865,133 +854,126 @@ void LoadModel::initDynamicDimensionTables(
   }
 }
 
-// Coroutine that builds and inserts a single dynamic dimension's srcColumn and
-// dstColumn into the objects table.
-static folly::coro::Task<std::vector<std::shared_ptr<const Column>>>
-buildDynamicObjectDimensionColAsync(
+static folly::coro::Task<DynamicObjectDimensionColumns>
+buildDynamicObjectDimensionColumnsAsync(
+    const ColumnTableBuilder<ObjectId>& builder,
     const Universe& universe,
     DimensionId dimId,
     int index,
     std::string scalarDimName,
-    const Map<entities::ContainerId, std::vector<entities::ObjectId>>&
-        finalAssignment) {
-  algopt::treeprof::EventRecorder event("Build dynamic object dimension cols");
+    const ObjectIdToContainerId& initialObjectIdToContainerId,
+    const ObjectIdToContainerId& finalObjectIdToContainerId) {
+  const algopt::treeprof::EventRecorder event(
+      "Build dynamic object dimension cols");
   XLOG(INFO) << "Building object dimension cols for " << scalarDimName;
   const algopt::Timer timer(true);
 
   const ObjectDimension& dimension = universe.getObjects().getDimension(dimId);
   const ObjectScalarDimension& scalarDimension = dimension.at(index);
 
-  // Compute srcColumn and dstColumn independently
-  const DataCell defaultCell(scalarDimension.getDefaultValue());
-  const Map<ContainerId, std::vector<ObjectId>>& initialAssignment =
-      universe.getContainers().getInitialAssignment();
-
-  auto srcColumn = std::make_shared<Column>(
-      getObjectDimensionValues(initialAssignment, scalarDimension, universe),
-      defaultCell,
-      fmt::format("src.{}", scalarDimName),
-      ColumnType::DIMENSION);
-
-  auto dstColumn = std::make_shared<Column>(
-      getObjectDimensionValues(finalAssignment, scalarDimension, universe),
-      defaultCell,
-      fmt::format("dst.{}", scalarDimName),
-      ColumnType::DIMENSION);
-
-  // Insert columns into the objects table
-  std::vector<std::shared_ptr<const Column>> result;
-  result.reserve(2);
-  result.emplace_back(std::move(srcColumn));
-  result.emplace_back(std::move(dstColumn));
+  const auto& scope = universe.getScope(scalarDimension.getScopeId());
+  const auto defaultValue = scalarDimension.getDefaultValue();
+  const auto buildColumn =
+      [&](std::string name,
+          const ObjectIdToContainerId& objectIdToContainerId) {
+        return builder.make(
+            {.name = std::move(name), .type = ColumnType::DIMENSION},
+            [&](const ObjectId objectId) {
+              if (objectIdToContainerId.empty()) {
+                return defaultValue;
+              }
+              const auto containerId =
+                  objectIdToContainerId.at(objectId.asIndex());
+              return scalarDimension.getValue(
+                  objectId, scope.getScopeItemId(containerId));
+            });
+      };
+  auto source = buildColumn(
+      fmt::format("src.{}", scalarDimName), initialObjectIdToContainerId);
+  auto destination = buildColumn(
+      fmt::format("dst.{}", scalarDimName), finalObjectIdToContainerId);
 
   XLOG(INFO) << "Built object dimension cols for " << scalarDimName << " in "
              << timer.getSeconds() << " seconds";
-  event.stop();
-  co_return result;
+  co_return DynamicObjectDimensionColumns{
+      .source = std::move(source), .destination = std::move(destination)};
 }
 
-static folly::coro::Task<std::vector<std::shared_ptr<const Column>>>
-buildDynamicObjectDimensionColsAsync(
+static folly::coro::Task<std::vector<DynamicObjectDimensionColumns>>
+buildAllDynamicObjectDimensionColumnsAsync(
+    const ColumnTableBuilder<ObjectId>& builder,
     const Universe& universe,
-    const Map<entities::ContainerId, std::vector<entities::ObjectId>>&
-        finalAssignment,
+    const ObjectIdToContainerId& initialObjectIdToContainerId,
+    const ObjectIdToContainerId& finalObjectIdToContainerId,
     folly::Executor* executor) {
-  algopt::treeprof::EventRecorder event(
+  const algopt::treeprof::EventRecorder event(
       "Build dynamic object dimension cols async");
 
-  // Collect all tasks to run in parallel
-  std::vector<
-      folly::coro::TaskWithExecutor<std::vector<std::shared_ptr<const Column>>>>
+  std::vector<folly::coro::TaskWithExecutor<DynamicObjectDimensionColumns>>
       tasks;
 
-  for (const DimensionId& dimId : universe.getObjects().getDimensionIds()) {
-    const ObjectDimension& dimension =
-        universe.getObjects().getDimension(dimId);
+  const auto& objects = universe.getObjects();
+  for (const DimensionId& dimId : objects.getDimensionIds()) {
+    const ObjectDimension& dimension = objects.getDimension(dimId);
     const std::string& dimName = universe.getEntityName(dimId);
     for (int i = 0; i < dimension.size(); i++) {
       const ObjectScalarDimension& scalarDimension = dimension.at(i);
       if (scalarDimension.isDynamic()) {
         auto scalarDimName =
             makeScalarDimensionName(dimName, dimension.size(), i);
-        // Launch the coroutine on the thread pool
         tasks.push_back(
             folly::coro::co_withExecutor(
                 executor,
-                buildDynamicObjectDimensionColAsync(
+                buildDynamicObjectDimensionColumnsAsync(
+                    builder,
                     universe,
                     dimId,
                     i,
                     std::move(scalarDimName),
-                    finalAssignment)));
+                    initialObjectIdToContainerId,
+                    finalObjectIdToContainerId)));
       }
     }
   }
-  // Collect all results from parallel tasks using collectAllRange
-  auto results = co_await folly::coro::collectAllRange(std::move(tasks));
-
-  // Flatten all columns into a single vector (single-threaded insertion)
-  std::vector<std::shared_ptr<const Column>> allColumns;
-  for (auto& columnVec : results) {
-    for (auto& col : columnVec) {
-      allColumns.push_back(std::move(col));
-    }
-  }
-
-  event.stop();
-  co_return allColumns;
+  co_return co_await folly::coro::collectAllRange(std::move(tasks));
 }
 
 folly::coro::Task<Table> LoadModel::buildObjectTable(
     const Universe& universe,
-    const Map<ContainerId, std::vector<ObjectId>>& finalAssignment,
+    const Map<ContainerId, std::vector<ObjectId>>& containerIdToFinalObjectIds,
     const EquivalenceSetsData& equivalenceSetsData,
     folly::Executor* executor) {
-  const auto& objectIds = universe.getObjects().getObjectIds();
-  std::vector<EntityId> rowIds;
-  rowIds.reserve(objectIds.size());
-  for (const auto objectId : objectIds) {
-    rowIds.push_back(toEntityId(objectId));
+  const auto objectIds =
+      universe.getObjects().getObjectIds() | ranges::to<std::vector>;
+  ColumnTableBuilder<ObjectId> builder(objectIds);
+  const auto initialObjectIdToContainerId = buildObjectIdToContainerId(
+      universe.getContainers().getInitialAssignment(), objectIds.size());
+  const auto finalObjectIdToContainerId =
+      buildObjectIdToContainerId(containerIdToFinalObjectIds, objectIds.size());
+
+  builder.add(buildObjectCol(builder, universe));
+  for (auto& column : buildMovableCols(builder, universe)) {
+    builder.add(std::move(column));
+  }
+  builder.addSorted(buildStaticObjectDimensionCols(builder, universe));
+  for (auto& columns : co_await buildAllDynamicObjectDimensionColumnsAsync(
+           builder,
+           universe,
+           initialObjectIdToContainerId,
+           finalObjectIdToContainerId,
+           executor)) {
+    builder.add(std::move(columns.source)).add(std::move(columns.destination));
   }
 
-  Table table(std::move(rowIds));
-  table.insertColumn(buildObjectCol(universe));
-  for (auto& column : buildMovableCols(universe)) {
-    table.insertColumn(std::move(column));
+  builder.addSorted(buildPartitionCols(builder, universe, equivalenceSetsData));
+  for (auto& column : buildAssignmentCols(
+           builder,
+           universe,
+           initialObjectIdToContainerId,
+           finalObjectIdToContainerId)) {
+    builder.add(std::move(column));
   }
-  table.insertColumnsInSortedOrder(buildStaticObjectDimensionCols(universe));
-
-  for (auto& column : co_await buildDynamicObjectDimensionColsAsync(
-           universe, finalAssignment, executor)) {
-    table.insertColumn(std::move(column));
-  }
-
-  table.insertColumnsInSortedOrder(
-      buildPartitionCols(universe, equivalenceSetsData));
-  for (auto& column : buildAssignmentCols(universe, finalAssignment)) {
-    table.insertColumn(std::move(column));
-  }
-  co_return table;
+  co_return builder.build();
 }
 
 ExplorerModel LoadModel::buildData(interface::Bundle&& bundle) {

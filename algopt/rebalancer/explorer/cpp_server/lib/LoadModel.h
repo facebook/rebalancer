@@ -50,7 +50,7 @@ class LoadModel {
       const entities::Universe& universe,
       const entities::Map<
           entities::ContainerId,
-          std::vector<entities::ObjectId>>& finalAssignment,
+          std::vector<entities::ObjectId>>& containerIdToFinalObjectIds,
       const EquivalenceSetsData& equivalenceSetsData,
       folly::Executor* executor);
   static Table buildDynamicDimensionTable(
