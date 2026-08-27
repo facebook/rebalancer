@@ -2,27 +2,30 @@
 
 #pragma once
 
-#include "algopt/rebalancer/algopt_common/CompressedIdMap.h"
 #include "algopt/rebalancer/algopt_common/DynamicBitSet.h"
 #include "algopt/rebalancer/entities/Identifiers.h"
 #include "algopt/rebalancer/entities/Map.h"
 #include "rebalancer/explorer/if/gen-cpp2/explorer_types.h"
 
 #include <fmt/core.h>
-#include <folly/lang/SafeAssert.h>
+#include <folly/container/irange.h>
 
+#include <algorithm>
 #include <concepts>
 #include <cstddef>
+#include <functional>
 #include <optional>
 #include <ranges>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <variant>
 #include <vector>
 
 namespace facebook::rebalancer::explorer {
 
 using EntityId = entities::EntityId<struct ExplorerTag>;
+using BorrowedString = std::reference_wrapper<const std::string>;
 
 template <typename T>
 constexpr EntityId toEntityId(T id) {
@@ -57,109 +60,6 @@ class Column {
   static inline const std::string kEmptyString;
 
  public:
-  // Once a non-default value is stored for a row, later emplace calls do not
-  // replace it.
-  using DoubleStorage = algopt::CompressedIdMap<EntityId, double>;
-
-  class BoolStorage {
-   public:
-    BoolStorage(std::size_t totalSize, bool defaultValue)
-        : defaultValue_(defaultValue), nonDefaultValues_(totalSize) {}
-
-    void emplace(EntityId entityId, bool value) {
-      const auto index = indexFor(entityId);
-      if (value != defaultValue_) {
-        nonDefaultValues_.set(index);
-      }
-    }
-
-    bool getValue(EntityId entityId) const {
-      const auto hasNonDefaultValue =
-          nonDefaultValues_.isSet(indexFor(entityId));
-      return hasNonDefaultValue ? !defaultValue_ : defaultValue_;
-    }
-
-    std::size_t totalSize() const {
-      return nonDefaultValues_.size();
-    }
-
-   private:
-    std::size_t indexFor(EntityId entityId) const {
-      const auto index = entityId.asIndex();
-      FOLLY_SAFE_CHECK(
-          index < nonDefaultValues_.size(),
-          "BoolStorage: entity ID out of range: ",
-          index);
-      return index;
-    }
-
-    bool defaultValue_;
-    algopt::DynamicBitSet nonDefaultValues_;
-  };
-
-  // Inserted strings must remain at the same address and outlive the storage.
-  class BorrowedStringStorage {
-   public:
-    BorrowedStringStorage(
-        std::size_t totalSize,
-        std::size_t expectedNonDefaultSize)
-        : values_(totalSize, nullptr, expectedNonDefaultSize) {}
-
-    BorrowedStringStorage(
-        entities::Map<EntityId, const std::string*>&& keyToValue,
-        std::size_t totalSize)
-        : values_(std::move(keyToValue), nullptr, totalSize) {}
-
-    void emplace(EntityId entityId, const std::string& value) {
-      if (!value.empty()) {
-        values_.emplace(entityId, &value);
-      }
-    }
-    void emplace(EntityId, std::string&&) = delete;
-
-    std::string_view getValue(EntityId entityId) const {
-      const auto* value = values_.getValue(entityId);
-      return value ? std::string_view(*value) : std::string_view{};
-    }
-
-    std::size_t totalSize() const {
-      return values_.totalSize();
-    }
-
-   private:
-    algopt::CompressedIdMap<EntityId, const std::string*> values_;
-  };
-
-  class OwnedStringStorage {
-   public:
-    OwnedStringStorage(
-        std::size_t totalSize,
-        std::string defaultValue,
-        std::size_t expectedNonDefaultSize)
-        : values_(totalSize, std::move(defaultValue), expectedNonDefaultSize) {}
-
-    OwnedStringStorage(
-        entities::Map<EntityId, std::string>&& keyToValue,
-        std::string defaultValue,
-        std::size_t totalSize)
-        : values_(std::move(keyToValue), std::move(defaultValue), totalSize) {}
-
-    void emplace(EntityId entityId, std::string value) {
-      values_.emplace(entityId, std::move(value));
-    }
-
-    const std::string& getValue(EntityId entityId) const {
-      return values_.getValue(entityId);
-    }
-
-    std::size_t totalSize() const {
-      return values_.totalSize();
-    }
-
-   private:
-    algopt::CompressedIdMap<EntityId, std::string> values_;
-  };
-
   // TODO: Delete this constructor with LegacyStorage after all tables use
   // typed storage.
   Column(
@@ -170,14 +70,6 @@ class Column {
       bool primaryKey = false,
       std::string description = kEmptyString,
       bool excludeFromAggregation = false);
-
-  template <typename T>
-    requires(
-        std::same_as<T, DoubleStorage> || std::same_as<T, BoolStorage> ||
-        std::same_as<T, BorrowedStringStorage> ||
-        std::same_as<T, OwnedStringStorage>)
-  Column(T storage, ColumnMetadata metadata)
-      : Column(Storage(std::move(storage)), std::move(metadata)) {}
 
   double getDouble(EntityId entityId) const;
   std::string_view getStrView(EntityId entityId) const;
@@ -201,6 +93,8 @@ class Column {
  private:
   friend class Table;
   friend class Utils;
+  template <typename>
+  friend class ColumnTableBuilder;
 
   bool matches(EntityId entityId, const DataCell& expected) const;
   bool hasValuesMatchingType(const std::vector<EntityId>& entityIds) const;
@@ -209,6 +103,54 @@ class Column {
   struct LegacyStorage {
     entities::Map<EntityId, DataCell> nonDefaultValues;
     DataCell defaultValue;
+  };
+
+  struct DoubleStorage {
+    std::vector<double> values;
+
+    double getValue(EntityId entityId) const {
+      return values.at(entityId.asIndex());
+    }
+
+    std::size_t totalSize() const {
+      return values.size();
+    }
+  };
+
+  struct BoolStorage {
+    algopt::DynamicBitSet values;
+
+    bool getValue(EntityId entityId) const {
+      return values.isSet(entityId.asIndex());
+    }
+
+    std::size_t totalSize() const {
+      return values.size();
+    }
+  };
+
+  struct BorrowedStringStorage {
+    std::vector<BorrowedString> values;
+
+    std::string_view getValue(EntityId entityId) const {
+      return values.at(entityId.asIndex()).get();
+    }
+
+    std::size_t totalSize() const {
+      return values.size();
+    }
+  };
+
+  struct OwnedStringStorage {
+    std::vector<std::string> values;
+
+    const std::string& getValue(EntityId entityId) const {
+      return values.at(entityId.asIndex());
+    }
+
+    std::size_t totalSize() const {
+      return values.size();
+    }
   };
 
   static const DataCell& legacyCellAt(
@@ -222,8 +164,11 @@ class Column {
       BorrowedStringStorage,
       OwnedStringStorage>;
 
+ public:
+  // Must be public because std::make_shared cannot call a private constructor.
   Column(Storage storage, ColumnMetadata metadata);
 
+ private:
   const Storage storage_;
   const std::string columnName_;
   const ColumnType columnType_;
@@ -244,6 +189,7 @@ class Column {
 class Table {
   /* Stores details about Table */
  public:
+  explicit Table(std::size_t rowCount);
   explicit Table(std::vector<EntityId> rowIds);
   void insertColumn(std::shared_ptr<const Column> columnData);
   void insertColumnsInSortedOrder(
@@ -270,6 +216,110 @@ class Table {
   std::vector<EntityId> rowIds_;
   std::vector<const Column*> primaryKeyColumns_;
   bool idColExists_ = false;
+};
+
+template <typename RowKey>
+class ColumnTableBuilder {
+ public:
+  // rowKeys must remain valid and unchanged until build().
+  explicit ColumnTableBuilder(const std::vector<RowKey>& rowKeys)
+      : rowKeys_(rowKeys), table_(rowKeys.size()) {}
+
+  ColumnTableBuilder(std::vector<RowKey>&&) = delete;
+  ColumnTableBuilder(const std::vector<RowKey>&&) = delete;
+
+  // Strings borrowed with std::cref must outlive the built table.
+  template <typename GetValue>
+    requires std::invocable<GetValue&, const RowKey&>
+  std::shared_ptr<const Column> make(ColumnMetadata metadata, GetValue getValue)
+      const {
+    checkNotBuilt();
+    using Value = std::invoke_result_t<GetValue&, const RowKey&>;
+    auto storage = [&]() -> Column::Storage {
+      if constexpr (std::same_as<Value, bool>) {
+        return buildBoolStorage(getValue);
+      } else if constexpr (std::same_as<Value, double>) {
+        return buildVectorStorage<double, Column::DoubleStorage>(getValue);
+      } else if constexpr (std::same_as<Value, BorrowedString>) {
+        return buildVectorStorage<
+            BorrowedString,
+            Column::BorrowedStringStorage>(getValue);
+      } else if constexpr (std::same_as<Value, std::string>) {
+        return buildVectorStorage<std::string, Column::OwnedStringStorage>(
+            getValue);
+      } else {
+        static_assert(
+            !std::same_as<Value, Value>,
+            "Column callback must return bool, double, std::string, or BorrowedString");
+      }
+    }();
+
+    return std::make_shared<Column>(std::move(storage), std::move(metadata));
+  }
+
+  template <typename GetValue>
+    requires std::invocable<GetValue&, const RowKey&>
+  ColumnTableBuilder& add(ColumnMetadata metadata, GetValue getValue) {
+    table_.insertColumn(make(std::move(metadata), std::move(getValue)));
+    return *this;
+  }
+
+  ColumnTableBuilder& add(std::shared_ptr<const Column> column) {
+    checkNotBuilt();
+    if (!column) {
+      throw std::runtime_error("Cannot add a null column");
+    }
+    table_.insertColumn(std::move(column));
+    return *this;
+  }
+
+  ColumnTableBuilder& addSorted(
+      std::vector<std::shared_ptr<const Column>> columns) {
+    checkNotBuilt();
+    table_.insertColumnsInSortedOrder(std::move(columns));
+    return *this;
+  }
+
+  Table build() {
+    if (built_) {
+      throw std::runtime_error("Cannot build the same table more than once");
+    }
+    built_ = true;
+    return std::move(table_);
+  }
+
+ private:
+  void checkNotBuilt() const {
+    if (built_) {
+      throw std::runtime_error("Cannot add columns after table is built");
+    }
+  }
+
+  template <typename GetValue>
+  Column::BoolStorage buildBoolStorage(GetValue& getValue) const {
+    Column::BoolStorage storage{
+        .values = algopt::DynamicBitSet(rowKeys_.size())};
+    for (const auto index : folly::irange(rowKeys_.size())) {
+      if (getValue(rowKeys_[index])) {
+        storage.values.set(index);
+      }
+    }
+    return storage;
+  }
+
+  template <typename Value, typename Storage, typename GetValue>
+  Storage buildVectorStorage(GetValue& getValue) const {
+    std::vector<Value> values;
+    values.reserve(rowKeys_.size());
+    for (const auto& rowKey : rowKeys_) {
+      values.push_back(getValue(rowKey));
+    }
+    return Storage{.values = std::move(values)};
+  }
+
+  const std::vector<RowKey>& rowKeys_;
+  Table table_;
+  bool built_ = false;
 };
 
 class TableBuilder {

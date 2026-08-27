@@ -5,8 +5,8 @@
 
 #include <gtest/gtest.h>
 
+#include <functional>
 #include <limits>
-#include <stdexcept>
 
 namespace entities = facebook::rebalancer::entities;
 
@@ -121,41 +121,35 @@ TEST_F(UtilsTest, ExistsRowWrongNumberOfValues) {
       "Number of values must match number of columns in table");
 }
 
-TEST_F(UtilsTest, ExistsRowWithTypedStorage) {
+TEST_F(UtilsTest, ExistsRowWithColumnTableBuilder) {
+  struct Row {
+    double load;
+    bool active;
+    BorrowedString name;
+    std::string label;
+  };
   const std::string task0 = "Task0";
-  Table table({EntityId(0), EntityId(1)});
-  Column::DoubleStorage loads(
-      /*totalSize=*/2, /*defaultValue=*/0.0, /*expectedNonDefaultSize=*/1);
-  loads.emplace(EntityId(0), 25.0);
-  table.insertColumn(
-      std::make_shared<Column>(
-          std::move(loads),
-          ColumnMetadata{.name = "Load", .type = ColumnType::DOUBLE}));
+  const std::string empty;
+  const std::vector<Row> rows = {
+      {.load = 25.0, .active = false, .name = task0, .label = "owned"},
+      {.load = 0.0, .active = true, .name = empty, .label = "unknown"}};
 
-  Column::BoolStorage active(/*totalSize=*/2, /*defaultValue=*/true);
-  active.emplace(EntityId(0), false);
-  table.insertColumn(
-      std::make_shared<Column>(
-          std::move(active),
-          ColumnMetadata{.name = "Active", .type = ColumnType::INTEGER}));
+  ColumnTableBuilder<Row> builder(rows);
+  builder
+      .add(
+          {.name = "Load", .type = ColumnType::DOUBLE},
+          [](const Row& row) { return row.load; })
+      .add(
+          {.name = "Active", .type = ColumnType::INTEGER},
+          [](const Row& row) { return row.active; })
+      .add(
+          {.name = "Name", .type = ColumnType::STRING},
+          [](const Row& row) { return row.name; })
+      .add({.name = "Label", .type = ColumnType::STRING}, [](const Row& row) {
+        return row.label;
+      });
 
-  entities::Map<EntityId, const std::string*> names;
-  names.emplace(EntityId(0), &task0);
-  table.insertColumn(
-      std::make_shared<Column>(
-          Column::BorrowedStringStorage(std::move(names), /*totalSize=*/2),
-          ColumnMetadata{.name = "Name", .type = ColumnType::STRING}));
-
-  Column::OwnedStringStorage labels(
-      /*totalSize=*/2,
-      /*defaultValue=*/"unknown",
-      /*expectedNonDefaultSize=*/1);
-  labels.emplace(EntityId(0), "owned");
-  table.insertColumn(
-      std::make_shared<Column>(
-          std::move(labels),
-          ColumnMetadata{.name = "Label", .type = ColumnType::STRING}));
-
+  const auto table = builder.build();
   const std::vector<DataCell> expectedRow = {
       DataCell(25.0), DataCell(0.0), DataCell("Task0"), DataCell("owned")};
   EXPECT_TRUE(Utils::existsRow(table, expectedRow));
@@ -198,6 +192,113 @@ TEST_F(UtilsTest, ExistsRowWithTypedStorage) {
       Utils::existsRow(
           table,
           {DataCell(25.0), DataCell(0.0), DataCell("Task0"), DataCell(1.0)}));
+}
+
+TEST_F(UtilsTest, ColumnTableBuilderBuildsColumnsFromRowKeys) {
+  const std::vector<entities::ScopeItemId> scopeItemIds = {
+      entities::ScopeItemId(8),
+      entities::ScopeItemId(3),
+      entities::ScopeItemId(5)};
+  const std::string item8 = "item8";
+  const std::string item3 = "item3";
+  const std::string empty;
+
+  ColumnTableBuilder<entities::ScopeItemId> builder(scopeItemIds);
+  builder
+      .add(
+          {.name = "Scope Item",
+           .type = ColumnType::ENTITY_NAME,
+           .isPrimaryKey = true},
+          [&](const entities::ScopeItemId scopeItemId) {
+            if (scopeItemId == entities::ScopeItemId(8)) {
+              return std::cref(item8);
+            }
+            return std::cref(
+                scopeItemId == entities::ScopeItemId(3) ? item3 : empty);
+          })
+      .add(
+          {.name = "Load", .type = ColumnType::DOUBLE},
+          [](const entities::ScopeItemId scopeItemId) {
+            return static_cast<double>(scopeItemId.asIndex());
+          });
+
+  std::vector<std::shared_ptr<const Column>> sortedColumns;
+  sortedColumns.push_back(builder.make(
+      {.name = "Owned", .type = ColumnType::STRING},
+      [](const entities::ScopeItemId scopeItemId) {
+        return scopeItemId == entities::ScopeItemId(8) ? std::string("owned8")
+                                                       : std::string("unknown");
+      }));
+  sortedColumns.push_back(builder.make(
+      {.name = "Enabled", .type = ColumnType::INTEGER},
+      [](const entities::ScopeItemId scopeItemId) {
+        return scopeItemId != entities::ScopeItemId(8);
+      }));
+  builder.addSorted(std::move(sortedColumns));
+
+  const Table table = builder.build();
+  const std::vector<EntityId> expectedRowIds = {
+      EntityId(0), EntityId(1), EntityId(2)};
+  const std::vector<std::string> expectedColumnNames = {
+      "Scope Item", "Load", "Enabled", "Owned"};
+  const auto& columns = table.getColumnData();
+  const auto stringValues = [&](const std::size_t columnIndex) {
+    std::vector<std::string> values;
+    for (const auto rowId : table.getRowIds()) {
+      values.emplace_back(columns.at(columnIndex)->getStrView(rowId));
+    }
+    return values;
+  };
+  const auto doubleValues = [&](const std::size_t columnIndex) {
+    std::vector<double> values;
+    for (const auto rowId : table.getRowIds()) {
+      values.push_back(columns.at(columnIndex)->getDouble(rowId));
+    }
+    return values;
+  };
+
+  EXPECT_EQ(expectedRowIds, table.getRowIds());
+  EXPECT_EQ(expectedColumnNames, table.getColumnNames());
+  EXPECT_EQ("Scope Item", table.getOnlyPrimaryKeyColumn()->getColumnName());
+  EXPECT_EQ((std::vector<std::string>{item8, item3, ""}), stringValues(0));
+  EXPECT_EQ((std::vector<double>{8.0, 3.0, 5.0}), doubleValues(1));
+  EXPECT_EQ((std::vector<double>{0.0, 1.0, 1.0}), doubleValues(2));
+  EXPECT_EQ(
+      (std::vector<std::string>{"owned8", "unknown", "unknown"}),
+      stringValues(3));
+
+  REBALANCER_EXPECT_RUNTIME_ERROR(
+      builder.add(
+          {.name = "Late", .type = ColumnType::DOUBLE},
+          [](const entities::ScopeItemId) { return 0.0; }),
+      "Cannot add columns after table is built");
+  REBALANCER_EXPECT_RUNTIME_ERROR(
+      builder.build(), "Cannot build the same table more than once");
+}
+
+TEST_F(UtilsTest, ColumnTableBuilderBuildsEmptyTable) {
+  const std::vector<entities::ScopeItemId> noRows;
+  const std::string empty;
+  ColumnTableBuilder<entities::ScopeItemId> builder(noRows);
+  builder
+      .add(
+          {.name = "Name", .type = ColumnType::STRING},
+          [&empty](const entities::ScopeItemId) { return std::cref(empty); })
+      .add(
+          {.name = "Load", .type = ColumnType::DOUBLE},
+          [](const entities::ScopeItemId) { return 0.0; });
+
+  const auto table = builder.build();
+  EXPECT_TRUE(table.getRowIds().empty());
+  EXPECT_EQ(2, table.getColumnData().size());
+}
+
+TEST_F(UtilsTest, ColumnTableBuilderRejectsNullColumn) {
+  const std::vector<int> noRows;
+  ColumnTableBuilder<int> builder(noRows);
+
+  REBALANCER_EXPECT_RUNTIME_ERROR(
+      builder.add(std::shared_ptr<const Column>{}), "Cannot add a null column");
 }
 
 TEST_F(UtilsTest, TableBuilderBasic) {
@@ -400,147 +501,20 @@ TEST_F(UtilsTest, ColumnTypedAccessors) {
       "Reading a double value requires a numeric column, but column 'string' is a string");
 }
 
-TEST_F(UtilsTest, ColumnDoubleStorage) {
-  Column::DoubleStorage numericValues(
-      /*totalSize=*/100, /*defaultValue=*/0.0, /*expectedNonDefaultSize=*/1);
-  numericValues.emplace(EntityId(0), 1.5);
-  numericValues.emplace(EntityId(0), 2.0);
-  const Column numeric(
-      std::move(numericValues),
-      {.name = "numeric", .type = ColumnType::DOUBLE});
-  EXPECT_DOUBLE_EQ(1.5, numeric.getDouble(EntityId(0)));
-  EXPECT_DOUBLE_EQ(0.0, numeric.getDouble(EntityId(99)));
-  EXPECT_EQ("1.500000", numeric.toString(EntityId(0)));
-  REBALANCER_EXPECT_RUNTIME_ERROR(
-      numeric.getStrView(EntityId(0)),
-      "Reading a string value requires a string column, but column 'numeric' is numeric");
-}
-
-TEST_F(UtilsTest, ColumnBoolStorage) {
-  Column::BoolStorage boolValues(/*totalSize=*/2, /*defaultValue=*/true);
-  boolValues.emplace(EntityId(0), false);
-  boolValues.emplace(EntityId(0), true);
-  const Column boolean(
-      std::move(boolValues), {.name = "boolean", .type = ColumnType::INTEGER});
-  EXPECT_DOUBLE_EQ(0.0, boolean.getDouble(EntityId(0)));
-  EXPECT_DOUBLE_EQ(1.0, boolean.getDouble(EntityId(1)));
-  EXPECT_EQ("0.000000", boolean.toString(EntityId(0)));
-
-  Column::BoolStorage falseDefaultValues(
-      /*totalSize=*/2, /*defaultValue=*/false);
-  falseDefaultValues.emplace(EntityId(0), true);
-  falseDefaultValues.emplace(EntityId(0), false);
-  const Column falseDefault(
-      std::move(falseDefaultValues),
-      {.name = "false_default", .type = ColumnType::INTEGER});
-  EXPECT_DOUBLE_EQ(1.0, falseDefault.getDouble(EntityId(0)));
-  EXPECT_DOUBLE_EQ(0.0, falseDefault.getDouble(EntityId(1)));
-}
-
-TEST_F(UtilsTest, ColumnBorrowedStringStorage) {
-  const std::string empty;
-  const std::string first = "first";
-  const std::string second = "second";
-  Column::BorrowedStringStorage referencedValues(
-      /*totalSize=*/100, /*expectedNonDefaultSize=*/1);
-  referencedValues.emplace(EntityId(0), empty);
-  referencedValues.emplace(EntityId(0), first);
-  referencedValues.emplace(EntityId(0), second);
-  const Column referenced(
-      std::move(referencedValues),
-      {.name = "referenced", .type = ColumnType::STRING});
-  EXPECT_EQ(first, referenced.getStrView(EntityId(0)));
-  EXPECT_EQ("", referenced.getStrView(EntityId(99)));
-  EXPECT_EQ("first", referenced.toString(EntityId(0)));
-  EXPECT_EQ("", referenced.toString(EntityId(99)));
-}
-
-TEST_F(UtilsTest, ColumnOwnedStringStorage) {
-  Column::OwnedStringStorage ownedValues(
-      /*totalSize=*/2,
-      /*defaultValue=*/"unknown",
-      /*expectedNonDefaultSize=*/1);
-  ownedValues.emplace(EntityId(0), "owned");
-  ownedValues.emplace(EntityId(0), "replacement");
-  ownedValues.emplace(EntityId(0), "unknown");
-  const Column owned(
-      std::move(ownedValues),
-      ColumnMetadata{.name = "owned", .type = ColumnType::STRING});
-  EXPECT_EQ("owned", owned.getStrView(EntityId(0)));
-  EXPECT_EQ("unknown", owned.getStrView(EntityId(1)));
-  EXPECT_EQ("owned", owned.toString(EntityId(0)));
-}
-
-TEST_F(UtilsTest, ColumnOwnedStringStorageConsumesMap) {
-  entities::Map<EntityId, std::string> rowIdToValue;
-  rowIdToValue.emplace(EntityId(0), "owned");
-  const Column owned(
-      Column::OwnedStringStorage(
-          std::move(rowIdToValue), /*defaultValue=*/"unknown", /*totalSize=*/2),
-      ColumnMetadata{.name = "owned", .type = ColumnType::STRING});
-
-  EXPECT_EQ("owned", owned.getStrView(EntityId(0)));
-  EXPECT_EQ("unknown", owned.getStrView(EntityId(1)));
-}
-
-TEST_F(UtilsTest, ColumnRejectsMismatchedTypedStorage) {
-  const auto constructMismatchedColumn = [] {
-    return Column(
-        Column::DoubleStorage(
-            /*totalSize=*/0,
-            /*defaultValue=*/0.0,
-            /*expectedNonDefaultSize=*/0),
-        ColumnMetadata{.name = "double_as_string", .type = ColumnType::STRING});
-  };
-  REBALANCER_EXPECT_RUNTIME_ERROR(
-      constructMismatchedColumn(),
-      "Column 'double_as_string' storage does not match its type");
-
-  const auto constructMismatchedStringColumn = [] {
-    return Column(
-        Column::OwnedStringStorage(
-            /*totalSize=*/0,
-            /*defaultValue=*/"",
-            /*expectedNonDefaultSize=*/0),
-        ColumnMetadata{.name = "owned_as_double", .type = ColumnType::DOUBLE});
-  };
-  REBALANCER_EXPECT_RUNTIME_ERROR(
-      constructMismatchedStringColumn(),
-      "Column 'owned_as_double' storage does not match its type");
-
-  const auto constructMismatchedBorrowedColumn = [] {
-    return Column(
-        Column::BorrowedStringStorage(
-            /*totalSize=*/0, /*expectedNonDefaultSize=*/0),
-        ColumnMetadata{
-            .name = "borrowed_as_double", .type = ColumnType::DOUBLE});
-  };
-  REBALANCER_EXPECT_RUNTIME_ERROR(
-      constructMismatchedBorrowedColumn(),
-      "Column 'borrowed_as_double' storage does not match its type");
-
-  const auto constructMismatchedBoolColumn = [] {
-    return Column(
-        Column::BoolStorage(/*totalSize=*/0, /*defaultValue=*/false),
-        ColumnMetadata{.name = "bool_as_double", .type = ColumnType::DOUBLE});
-  };
-  REBALANCER_EXPECT_RUNTIME_ERROR(
-      constructMismatchedBoolColumn(),
-      "Column 'bool_as_double' storage does not match its type");
-}
-
-TEST_F(UtilsTest, TableRejectsTypedStorageWithoutEveryRow) {
-  Table table({EntityId(0), EntityId(1)});
-  auto column = std::make_shared<Column>(
-      Column::DoubleStorage(
-          /*totalSize=*/1,
-          /*defaultValue=*/0.0,
-          /*expectedNonDefaultSize=*/0),
-      ColumnMetadata{.name = "numeric", .type = ColumnType::DOUBLE});
+TEST_F(UtilsTest, ColumnTableBuilderRejectsMismatchedColumnType) {
+  const std::vector<int> rows = {1};
+  ColumnTableBuilder<int> builder(rows);
 
   REBALANCER_EXPECT_RUNTIME_ERROR(
-      table.insertColumn(std::move(column)),
-      "Column 'numeric' must have exactly one value matching its type for every table row");
+      builder.make(
+          {.name = "numeric_as_string", .type = ColumnType::STRING},
+          [](const int value) { return static_cast<double>(value); }),
+      "Column 'numeric_as_string' storage does not match its type");
+  REBALANCER_EXPECT_RUNTIME_ERROR(
+      builder.make(
+          {.name = "string_as_numeric", .type = ColumnType::DOUBLE},
+          [](const int) { return std::string("value"); }),
+      "Column 'string_as_numeric' storage does not match its type");
 }
 
 TEST_F(UtilsTest, InsertMultipleIdentifierColumnsViaInsertColumn) {

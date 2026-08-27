@@ -188,6 +188,13 @@ bool Column::matches(const EntityId entityId, const DataCell& expected) const {
                      : getStrView(entityId) == *expected.strValue;
 }
 
+Table::Table(const std::size_t rowCount) {
+  rowIds_.reserve(rowCount);
+  for (const auto index : folly::irange(rowCount)) {
+    rowIds_.push_back(toEntityId(index));
+  }
+}
+
 Table::Table(std::vector<EntityId> rowIds) : rowIds_(std::move(rowIds)) {}
 
 void Table::insertColumn(std::shared_ptr<const Column> columnData) {
