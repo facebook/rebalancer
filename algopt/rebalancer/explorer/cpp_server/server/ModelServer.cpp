@@ -907,7 +907,8 @@ MoveSetsResponse ModelServer::getMoveSets(
   }
 
   const auto existsPartitionName = request.partitionName().has_value();
-  const auto existsScopeName = request.scopeName().has_value();
+  auto scopeName = request.scopeName();
+  const auto existsScopeName = scopeName.has_value();
   const bool hasStageId =
       solverSpec_.getType() == SolverT::Type::localSearchStageSolverSpec ||
       solverSpec_.getType() == SolverT::Type::rasHybridSolverSpec;
@@ -917,62 +918,18 @@ MoveSetsResponse ModelServer::getMoveSets(
       std::any_of(movesSummary.begin(), movesSummary.end(), [](const auto& ms) {
         return ms.cycleId().has_value();
       });
-  TableBuilder tableBuilder;
-  tableBuilder.addColumnDefinition(
-      {.name = problemOnlyHasSingleMoves_ ? "Move #" : "MoveSet #",
-       .type = ColumnType::IDENTIFIER,
-       .isPrimaryKey = true,
-       .description = kMoveSetColDesc});
-  if (objectiveNamesRef) {
-    // these are deliberately placed right next to MoveSet column so that we
-    // will only see one value per moveSet in explorer (this because of how
-    // XDSPivotTable renders tables)
-    for (const auto& objective : *objectiveNamesRef) {
-      tableBuilder.addColumnDefinition(
-          {.name = fmt::format("{} ({})", objective, kDeltaSymbol),
-           .type = ColumnType::DOUBLE,
-           .description = kObjectiveColDesc});
-    }
-  }
-  tableBuilder
-      .addColumnDefinition(
-          {.name = existsPartitionName ? "Group" : "Object",
-           .type = ColumnType::STRING,
-           .isPrimaryKey = true})
-      .addColumnDefinition(
-          {.name = existsScopeName ? "Source ScopeItem" : "Source Container",
-           .type = ColumnType::STRING,
-           .isPrimaryKey = true})
-      .addColumnDefinition(
-          {.name = existsScopeName ? "Destination ScopeItem"
-                                   : "Destination Container",
-           .type = ColumnType::STRING,
-           .isPrimaryKey = true});
-  if (existsPartitionName) {
-    tableBuilder.addColumnDefinition(
-        {.name = "Object Count",
-         .type = ColumnType::INTEGER,
-         .isPrimaryKey = true,
-         .description = kObjectCountColDesc});
-  }
-  if (hasStageId) {
-    tableBuilder.addColumnDefinition(
-        {.name = "Stage Id",
-         .type = ColumnType::INTEGER,
-         .isPrimaryKey = true,
-         .description = kStageIdColDesc,
-         .excludeFromAggregation = true});
-  }
-  if (hasCycleId) {
-    tableBuilder.addColumnDefinition(
-        {.name = "Cycle Id",
-         .type = ColumnType::INTEGER,
-         .description = kCycleIdColDesc,
-         .excludeFromAggregation = true});
-  }
 
-  const auto scopePtr = request.scopeName().has_value()
-      ? &universe_->getScope(universe_->getScopeId(*request.scopeName()))
+  struct Row {
+    std::size_t moveSetIndex;
+    std::string groupOrObject;
+    std::string source;
+    std::string destination;
+    int objectCount;
+  };
+  std::vector<Row> rows;
+
+  const auto scopePtr = scopeName
+      ? &universe_->getScope(universe_->getScopeId(*scopeName))
       : nullptr;
   for (auto moveSetIdx = startMoveSetIdx; moveSetIdx < endMoveSetIdx;
        ++moveSetIdx) {
@@ -992,44 +949,90 @@ MoveSetsResponse ModelServer::getMoveSets(
           std::make_tuple(std::move(groupName), std::move(src), std::move(dst));
       groupSrcDstToCount[std::move(key)]++;
     }
-
     for (const auto& [grpSrcDst, count] : groupSrcDstToCount) {
       const auto& [grpName, srcName, dstName] = grpSrcDst;
-      // shift indices by one so that the moveset indices start at 1 instead
-      // of
-      // 0
-      const auto moveSetId = moveSetIdx + 1;
-      std::vector<DataCell> row;
-      row.emplace_back(moveSetId);
-
-      if (objectiveNamesRef) {
-        for (const auto& objName : *objectiveNamesRef) {
-          row.emplace_back(getChangeInObjective(objName, moveSetIdx));
-        }
-      }
-
-      row.emplace_back(grpName);
-      row.emplace_back(srcName);
-      row.emplace_back(dstName);
-      if (existsPartitionName) {
-        row.emplace_back(count);
-      }
-      if (hasStageId) {
-        // for really old saved instances, it is possible that stageId is not
-        // set, so use NaN to indicate that
-        const auto stageId = moveSet.stageId().has_value()
-            ? *moveSet.stageId()
-            : std::numeric_limits<double>::quiet_NaN();
-        row.emplace_back(stageId);
-      }
-      if (hasCycleId) {
-        const auto cycleId = moveSet.cycleId().has_value()
-            ? *moveSet.cycleId()
-            : std::numeric_limits<double>::quiet_NaN();
-        row.emplace_back(cycleId);
-      }
-      tableBuilder.addRowWithCells(row);
+      rows.push_back(
+          {.moveSetIndex = static_cast<std::size_t>(moveSetIdx),
+           .groupOrObject = grpName,
+           .source = srcName,
+           .destination = dstName,
+           .objectCount = count});
     }
+  }
+
+  ColumnTableBuilder tableBuilder(rows);
+  tableBuilder.add(
+      {.name = problemOnlyHasSingleMoves_ ? "Move #" : "MoveSet #",
+       .type = ColumnType::IDENTIFIER,
+       .isPrimaryKey = true,
+       .description = kMoveSetColDesc},
+      [](const Row& row) {
+        // Display move-set indices starting at 1.
+        return static_cast<double>(row.moveSetIndex + 1);
+      });
+  if (objectiveNamesRef) {
+    // Keep objectives next to the MoveSet column so XDSPivotTable displays one
+    // value per move set.
+    for (const auto& objectiveName : *objectiveNamesRef) {
+      tableBuilder.add(
+          {.name = fmt::format("{} ({})", objectiveName, kDeltaSymbol),
+           .type = ColumnType::DOUBLE,
+           .description = kObjectiveColDesc},
+          [this, objectiveName](const Row& row) {
+            return getChangeInObjective(objectiveName, row.moveSetIndex);
+          });
+    }
+  }
+  tableBuilder
+      .add(
+          {.name = existsPartitionName ? "Group" : "Object",
+           .type = ColumnType::STRING,
+           .isPrimaryKey = true},
+          [](const Row& row) { return row.groupOrObject; })
+      .add(
+          {.name = existsScopeName ? "Source ScopeItem" : "Source Container",
+           .type = ColumnType::STRING,
+           .isPrimaryKey = true},
+          [](const Row& row) { return row.source; })
+      .add(
+          {.name = existsScopeName ? "Destination ScopeItem"
+                                   : "Destination Container",
+           .type = ColumnType::STRING,
+           .isPrimaryKey = true},
+          [](const Row& row) { return row.destination; });
+  if (existsPartitionName) {
+    tableBuilder.add(
+        {.name = "Object Count",
+         .type = ColumnType::INTEGER,
+         .isPrimaryKey = true,
+         .description = kObjectCountColDesc},
+        [](const Row& row) { return static_cast<double>(row.objectCount); });
+  }
+  // Use NaN for stage or cycle IDs omitted from old saved instances.
+  if (hasStageId) {
+    tableBuilder.add(
+        {.name = "Stage Id",
+         .type = ColumnType::INTEGER,
+         .isPrimaryKey = true,
+         .description = kStageIdColDesc,
+         .excludeFromAggregation = true},
+        [&movesSummary](const Row& row) {
+          auto stageId = movesSummary.at(row.moveSetIndex).stageId();
+          return stageId.has_value() ? static_cast<double>(*stageId)
+                                     : std::numeric_limits<double>::quiet_NaN();
+        });
+  }
+  if (hasCycleId) {
+    tableBuilder.add(
+        {.name = "Cycle Id",
+         .type = ColumnType::INTEGER,
+         .description = kCycleIdColDesc,
+         .excludeFromAggregation = true},
+        [&movesSummary](const Row& row) {
+          auto cycleId = movesSummary.at(row.moveSetIndex).cycleId();
+          return cycleId.has_value() ? static_cast<double>(*cycleId)
+                                     : std::numeric_limits<double>::quiet_NaN();
+        });
   }
 
   MoveSetsResponse response;
