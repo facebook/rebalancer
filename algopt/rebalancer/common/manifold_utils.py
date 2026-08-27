@@ -84,9 +84,7 @@ async def unarchiveFromManifold(prefixes: list[str], run_uuid):
     same directory
     """
     try:
-        # pyre-fixme[24]: Generic type `tempfile.TemporaryDirectory` expects 1 type
-        #  parameter.
-        temp_dir: tempfile.TemporaryDirectory = tempfile.TemporaryDirectory()
+        temp_dir: tempfile.TemporaryDirectory[str] = tempfile.TemporaryDirectory()
         for prefix in prefixes:
             with tempfile.NamedTemporaryFile(suffix=".tgz") as temp_file:
                 # NamedTemporaryFile returns a wrapper around the file object,
