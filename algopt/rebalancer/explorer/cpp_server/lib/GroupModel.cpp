@@ -5,6 +5,8 @@
 #include "rebalancer/explorer/cpp_server/lib/Utils.h"
 #include "rebalancer/explorer/if/gen-cpp2/explorer_types.h"
 
+#include <folly/Conv.h>
+
 #include <string>
 #include <vector>
 
@@ -84,27 +86,26 @@ Table GroupModel::applyGroup(const Group& group, Table table) {
   auto groupByTableColumns = extractGroupByColumns(groupByColumns, columns);
   auto [newRowIds, origRowToGroupRow] =
       createNewRowIds(groupByTableColumns, filteredRows);
+  const auto groupCount = folly::to<EntityIdType>(newRowIds.size());
 
-  // new group_by table
-  Table groupByTable(std::move(newRowIds));
-  // first process group_by columns
+  ColumnTableBuilder<EntityId> builder(newRowIds);
   for (const auto& column : groupByTableColumns) {
-    Map<EntityId, DataCell> groupEntityToCell;
-    for (auto origRowId : filteredRows) {
-      auto newRowId = origRowToGroupRow.at(origRowId);
-      // different rows belonging to same group will have same value
-      // for the column, hence its okay to refer to any value
-      groupEntityToCell[newRowId] =
-          DataCell(std::string(column->getStrView(origRowId)));
+    Map<EntityId, std::string> groupRowIdToValue;
+    groupRowIdToValue.reserve(groupCount);
+    for (const auto origRowId : filteredRows) {
+      const auto groupRowId = origRowToGroupRow.at(origRowId);
+      // Every row in a group has the same value for a group-by column.
+      groupRowIdToValue.try_emplace(groupRowId, column->getStrView(origRowId));
     }
-    auto groupColumn = std::make_shared<Column>(
-        std::move(groupEntityToCell),
-        // This table should be complete, we shouldn't need any dafaults
-        DataCell(),
-        column->getColumnName(),
-        column->getColumnType(),
-        /*primaryKey=*/true);
-    groupByTable.insertColumn(groupColumn);
+    builder.add(
+        {
+            .name = column->getColumnName(),
+            .type = column->getColumnType(),
+            .isPrimaryKey = true,
+        },
+        [&groupRowIdToValue](const EntityId rowId) -> std::string {
+          return std::move(groupRowIdToValue.at(rowId));
+        });
   }
 
   for (const auto& column : columns) {
@@ -117,30 +118,25 @@ Table GroupModel::applyGroup(const Group& group, Table table) {
     }
     const auto isColTypeId =
         (column->getColumnType() == ColumnType::IDENTIFIER);
-    Map<EntityId, DataCell> groupEntityToCell;
-    for (auto origRowId : filteredRows) {
-      const auto newRowId = origRowToGroupRow.at(origRowId);
-      const auto cellValue = column->getDouble(origRowId);
-      auto cellPtr = folly::get_ptr(groupEntityToCell, newRowId);
-
-      // if colType is IDENTIFIER, then we just count the number of rows
-      if (cellPtr) {
-        *cellPtr->doubleValue += isColTypeId ? 1.0 : cellValue;
-      } else {
-        DataCell cell(isColTypeId ? 1.0 : cellValue);
-        groupEntityToCell[newRowId] = std::move(cell);
+    Map<EntityId, double> groupRowIdToTotal;
+    groupRowIdToTotal.reserve(groupCount);
+    for (const auto origRowId : filteredRows) {
+      const auto groupRowId = origRowToGroupRow.at(origRowId);
+      const double value = isColTypeId ? 1.0 : column->getDouble(origRowId);
+      const auto [totalIt, inserted] =
+          groupRowIdToTotal.try_emplace(groupRowId, value);
+      if (!inserted) {
+        totalIt->second += value;
       }
     }
-    const auto& colName = column->getColumnName();
-    auto groupColumn = std::make_shared<Column>(
-        std::move(groupEntityToCell),
-        // This table should be complete, we shouldn't need any dafaults
-        DataCell(),
-        isColTypeId ? kRowCount : colName,
-        isColTypeId ? ColumnType::INTEGER : column->getColumnType());
-    groupByTable.insertColumn(std::move(groupColumn));
+    builder.add(
+        {.name = isColTypeId ? kRowCount : column->getColumnName(),
+         .type = isColTypeId ? ColumnType::INTEGER : column->getColumnType()},
+        [&groupRowIdToTotal](const EntityId rowId) {
+          return groupRowIdToTotal.at(rowId);
+        });
   }
-  return groupByTable;
+  return builder.build();
 }
 
 } // namespace explorer
