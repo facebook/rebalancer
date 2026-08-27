@@ -36,7 +36,6 @@ class StateHolder(utils.Holder):
     tasks_data: dict[str, TaskData]
     jobs_data: dict[str, JobData]
     serf_scopes: dict[str, SerfScope]
-    # pyre-fixme[13]: Attribute `config_map` is never initialized.
     config_map: dict[str, Any]
     folder: str = ""
     sub_region_fd: dict[str, SubRegionFDScope]
@@ -44,6 +43,10 @@ class StateHolder(utils.Holder):
     power_dimensions: list[str]
     network_dimensions: list[str]
     groups_with_shortage: set[str]
+
+    def __init__(self, **kwargs: Any) -> None:
+        self.config_map = {}
+        super().__init__(**kwargs)
 
     def scopes(self) -> dict[str, ScopeT]:
         """Combines all scopes we have in one dict."""
