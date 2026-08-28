@@ -544,7 +544,8 @@ getScopeItemToInitialAndFinalRelativeUtils(
 }
 
 template <typename RowKey>
-static std::vector<std::shared_ptr<const Column>> buildUtilizationCols(
+static folly::coro::Task<std::vector<std::shared_ptr<const Column>>>
+buildUtilizationCols(
     const TableBuilder<RowKey>& builder,
     const Universe& universe,
     ScopeId scopeId,
@@ -574,47 +575,46 @@ static std::vector<std::shared_ptr<const Column>> buildUtilizationCols(
                   : 0.0;
             });
       };
-  folly::coro::blockingWait(
-      CoroUtils::runEachFuncAndUpdate(
-          dimensionIds.begin(),
-          dimensionIds.end(),
-          [&](auto it) -> std::optional<std::pair<
-                           Map<ScopeItemId, double>,
-                           Map<ScopeItemId, double>>> {
-            const auto dimensionId = *it;
-            const auto& scalarDimension =
-                universe.getObjects().getDimension(dimensionId).at(0);
-            if (scalarDimension.isRoutingConfigBased() ||
-                (scalarDimension.isDynamic() &&
-                 scalarDimension.getScopeId() != scopeId)) {
-              return std::nullopt;
-            }
+  co_await CoroUtils::runEachFuncAndUpdate(
+      dimensionIds.begin(),
+      dimensionIds.end(),
+      [&](auto it)
+          -> std::optional<
+              std::pair<Map<ScopeItemId, double>, Map<ScopeItemId, double>>> {
+        const auto dimensionId = *it;
+        const auto& scalarDimension =
+            universe.getObjects().getDimension(dimensionId).at(0);
+        if (scalarDimension.isRoutingConfigBased() ||
+            (scalarDimension.isDynamic() &&
+             scalarDimension.getScopeId() != scopeId)) {
+          return std::nullopt;
+        }
 
-            return getScopeItemToInitialAndFinalRelativeUtils(
-                dimensionId,
-                universe,
-                scopeId,
-                objectIdToInitialContainerId,
-                objectIdToFinalContainerId);
-          },
-          [&columns, &makeUtilizationColumn, &universe](
-              auto&& initialAndFinalUtilMaps, auto it) {
-            if (!initialAndFinalUtilMaps) {
-              return;
-            }
+        return getScopeItemToInitialAndFinalRelativeUtils(
+            dimensionId,
+            universe,
+            scopeId,
+            objectIdToInitialContainerId,
+            objectIdToFinalContainerId);
+      },
+      [&columns, &makeUtilizationColumn, &universe](
+          auto&& initialAndFinalUtilMaps, auto it) {
+        if (!initialAndFinalUtilMaps) {
+          return;
+        }
 
-            const auto& dimensionName = universe.getEntityName(*it);
-            const auto& [scopeItemIdToInitialUtilization, scopeItemIdToFinalUtilization] =
-                *initialAndFinalUtilMaps;
-            columns.push_back(makeUtilizationColumn(
-                fmt::format("{}.initUtil", dimensionName),
-                scopeItemIdToInitialUtilization));
-            columns.push_back(makeUtilizationColumn(
-                fmt::format("{}.finalUtil", dimensionName),
-                scopeItemIdToFinalUtilization));
-          },
-          std::move(executor)));
-  return columns;
+        const auto& dimensionName = universe.getEntityName(*it);
+        const auto& [scopeItemIdToInitialUtilization, scopeItemIdToFinalUtilization] =
+            *initialAndFinalUtilMaps;
+        columns.push_back(makeUtilizationColumn(
+            fmt::format("{}.initUtil", dimensionName),
+            scopeItemIdToInitialUtilization));
+        columns.push_back(makeUtilizationColumn(
+            fmt::format("{}.finalUtil", dimensionName),
+            scopeItemIdToFinalUtilization));
+      },
+      std::move(executor));
+  co_return columns;
 }
 
 static std::vector<std::shared_ptr<const Column>> buildMovableCols(
@@ -704,7 +704,7 @@ static std::shared_ptr<const Column> buildScopeNameColumn(
       });
 }
 
-static Table buildContainerTable(
+static folly::coro::Task<Table> buildContainerTable(
     const Universe& universe,
     const Map<ObjectId, ContainerId>& objectIdToInitialContainerId,
     const Map<ObjectId, ContainerId>& objectIdToFinalContainerId,
@@ -720,17 +720,18 @@ static Table buildContainerTable(
       universe.getScopeId(universe.getContainerTypeName());
   builder.addSorted(
       buildScopeDimensionCols(builder, universe, containerScopeId));
-  builder.addSorted(buildUtilizationCols(
-      builder,
-      universe,
-      containerScopeId,
-      objectIdToInitialContainerId,
-      objectIdToFinalContainerId,
-      std::move(executor)));
-  return builder.build();
+  builder.addSorted(
+      co_await buildUtilizationCols(
+          builder,
+          universe,
+          containerScopeId,
+          objectIdToInitialContainerId,
+          objectIdToFinalContainerId,
+          std::move(executor)));
+  co_return builder.build();
 }
 
-static Table buildScopeTable(
+static folly::coro::Task<Table> buildScopeTable(
     const Universe& universe,
     const ScopeId scopeId,
     const Map<ObjectId, ContainerId>& objectIdToInitialContainerId,
@@ -740,17 +741,18 @@ static Table buildScopeTable(
   TableBuilder<ScopeItemId> builder(scopeItemIds);
   builder.add(buildScopeNameColumn(builder, universe, scopeId));
   builder.addSorted(buildScopeDimensionCols(builder, universe, scopeId));
-  builder.addSorted(buildUtilizationCols(
-      builder,
-      universe,
-      scopeId,
-      objectIdToInitialContainerId,
-      objectIdToFinalContainerId,
-      std::move(executor)));
-  return builder.build();
+  builder.addSorted(
+      co_await buildUtilizationCols(
+          builder,
+          universe,
+          scopeId,
+          objectIdToInitialContainerId,
+          objectIdToFinalContainerId,
+          std::move(executor)));
+  co_return builder.build();
 }
 
-static Map<std::string, Table> buildPrebuiltTables(
+static folly::coro::Task<Map<std::string, Table>> buildPrebuiltTables(
     const Universe& universe,
     const Map<ObjectId, ContainerId>& objectIdToInitialContainerId,
     const Map<ObjectId, ContainerId>& objectIdToFinalContainerId,
@@ -758,7 +760,7 @@ static Map<std::string, Table> buildPrebuiltTables(
   Map<std::string, Table> tableNameToTable;
   tableNameToTable.emplace(
       universe.getContainerTypeName(),
-      buildContainerTable(
+      co_await buildContainerTable(
           universe,
           objectIdToInitialContainerId,
           objectIdToFinalContainerId,
@@ -770,14 +772,14 @@ static Map<std::string, Table> buildPrebuiltTables(
     }
     tableNameToTable.emplace(
         scopeName,
-        buildScopeTable(
+        co_await buildScopeTable(
             universe,
             scopeId,
             objectIdToInitialContainerId,
             objectIdToFinalContainerId,
             executor));
   }
-  return tableNameToTable;
+  co_return tableNameToTable;
 }
 
 // copy-pasted from problemsolverfactoy
@@ -1027,11 +1029,11 @@ ExplorerModel LoadModel::buildData(interface::Bundle&& bundle) {
   auto [objectIdToInitialContainerId, objectIdToFinalContainerId] =
       buildObjectToContainer(finalAssignment, *universe);
 
-  auto prebuiltTables = buildPrebuiltTables(
+  auto prebuiltTables = folly::coro::blockingWait(buildPrebuiltTables(
       *universe,
       objectIdToInitialContainerId,
       objectIdToFinalContainerId,
-      wrappedExecutor);
+      wrappedExecutor));
 
   auto dynamicDimensionNames = getDynamicDimensionNames(*universe);
 
