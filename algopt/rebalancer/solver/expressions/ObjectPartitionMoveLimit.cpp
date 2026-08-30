@@ -18,6 +18,12 @@
 #include "algopt/rebalancer/solver/expressions/Operators.h"
 #include "algopt/rebalancer/solver/expressions/TopToBottomEvaluator.h"
 
+#include <folly/container/Enumerate.h>
+
+#include <algorithm>
+#include <sstream>
+#include <vector>
+
 namespace {
 constexpr std::string_view type = "ObjectPartitionMoveLimit";
 }
@@ -329,10 +335,27 @@ std::optional<AffectedByChange> ObjectPartitionMoveLimit::isAffectedByChange(
   return AffectedByChange(true /*affectedByAllChanges*/);
 }
 
-std::string ObjectPartitionMoveLimit::innerDigest(
-    size_t /*maxChildren*/) const {
-  // TODO(pavanka): output appropriate string for digest
-  return "";
+std::string ObjectPartitionMoveLimit::innerDigest(size_t maxChildren) const {
+  std::stringstream ss;
+  ss << "move_limits:";
+  // Sort by group name for deterministic output across hash-map orderings and
+  // across platforms (raw GroupId values depend on insertion order through
+  // unordered maps and are not portable).
+  std::vector<std::pair<std::string, double>> sortedEntries;
+  sortedEntries.reserve(groupLimits_.size());
+  for (const auto& [groupId, limit] : groupLimits_) {
+    sortedEntries.emplace_back(universe_->getEntityName(groupId), limit);
+  }
+  std::sort(sortedEntries.begin(), sortedEntries.end());
+  for (const auto [idx, entry] : folly::enumerate(sortedEntries)) {
+    const auto& [groupName, limit] = entry;
+    if (idx >= maxChildren) {
+      ss << " ... " << sortedEntries.size() - maxChildren << " more";
+      break;
+    }
+    ss << (idx > 0 ? ", " : " ") << fmt::format("{}={}", groupName, limit);
+  }
+  return ss.str();
 }
 
 void ObjectPartitionMoveLimit::updateExprForLp() {

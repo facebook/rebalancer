@@ -23,6 +23,7 @@
 #include "algopt/rebalancer/solver/expressions/ObjectLookup.h"
 #include "algopt/rebalancer/solver/expressions/ObjectPartition.h"
 #include "algopt/rebalancer/solver/expressions/ObjectPartitionLookup.h"
+#include "algopt/rebalancer/solver/expressions/ObjectPartitionMoveLimit.h"
 #include "algopt/rebalancer/solver/expressions/ObjectVector.h"
 #include "algopt/rebalancer/solver/expressions/Operators.h"
 #include "algopt/rebalancer/solver/expressions/Piecewise.h"
@@ -653,6 +654,58 @@ CO_TEST_F(DigestTest, ObjectPartitionLookup) {
       "ObjectPartitionLookup [4 → 4] containers(container0) 4 initial objects, "
       "groupsAllowed_: 0, groupLimitOverrides_({}), "
       "partition_value: group2=-2, group5=1, group8=3 ... 1 more\n");
+}
+
+CO_TEST_F(DigestTest, ObjectPartitionMoveLimit) {
+  constexpr int kGroupCount = 3;
+
+  setInitialAssignment(
+      entities::Map<std::string, std::vector<std::string>>{
+          {"container0", {"object0", "object1"}}, {"container1", {"object2"}}});
+
+  // One object per group, so group names line up with object names.
+  entities::Map<std::string, std::vector<std::string>> groupToObjects;
+  for (const auto j : folly::irange(kGroupCount)) {
+    groupToObjects[fmt::format("group{}", j)] = {fmt::format("object{}", j)};
+  }
+  co_await addPartition("partition1", groupToObjects);
+
+  entities::ObjectIdToDoubleMap objectToWeight(
+      kGroupCount, /*defaultValue=*/1.0, /*expectedNonDefaultSize=*/0);
+  co_await addObjectDimension(
+      "object_weight",
+      entities::ObjectDimensionData{
+          std::make_unique<const entities::ObjectDimension>(
+              std::move(objectToWeight))});
+
+  buildUniverse();
+  const auto& universe = getUniverse();
+
+  const auto partition1Id = partitionId("partition1");
+
+  // Distinct limits so the digest cannot pass by printing a constant.
+  PackerMap<entities::GroupId, double> groupLimits;
+  for (const auto j : folly::irange(kGroupCount)) {
+    groupLimits[groupId(partition1Id, fmt::format("group{}", j))] = j;
+  }
+
+  auto eMoveLimit = std::make_shared<ObjectPartitionMoveLimit>(
+      universe,
+      Assignment(universe.getContainers().getInitialAssignment()),
+      partition1Id,
+      dimensionId("object_weight"),
+      groupLimits,
+      /*sourceContainerIdsNotAffectingLimit=*/
+      entities::Set<entities::ContainerId>{},
+      /*destinationContainerIdsNotAffectingLimit=*/
+      entities::Set<entities::ContainerId>{});
+
+  auto problem = createTestProblem(
+      getUniversePtr(), {eMoveLimit}, eMoveLimit, {}, {}, false);
+  EXPECT_EQ(
+      eMoveLimit->digest(*problem),
+      "ObjectPartitionMoveLimit [0 → 0] move_limits: group0=0, group1=1, "
+      "group2=2\n");
 }
 
 // digest(Problem*) tests: verify [initial → final] comparison format.
