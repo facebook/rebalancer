@@ -880,8 +880,12 @@ struct MinimizeContainersSpec {
   1: string name;
   2: string scope;
   3: string dimension;
-  // TODO: the key of the map is actually a scopeItem name of this spec's scope, rename this
-  // field to scopeItemCosts
+  // Per-scope-item cost, keyed by scope item name of this spec's `scope`. With an
+  // empty `scope` the spec defaults to the container scope, so the keys are
+  // container names --- hence the field name; for any other `scope` they are that
+  // scope's item names. Defaults to 1.0 for any scope item not listed. Cost breaks
+  // ties during packing: among equally-loaded scope items, the higher-cost one is
+  // freed first.
   4: map<string, double> containerCosts;
   6: Filter filter;
   // The new formula will maintain the same behavior as the legacy formula
