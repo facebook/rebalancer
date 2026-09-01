@@ -420,30 +420,67 @@ static Result prepareResult(const Table& table, size_t totalRows) {
   return result;
 }
 
-static Table applyOrder(const Order& order, Table table) {
-  /* Sorts the table based on requested column */
+namespace {
 
+struct PageRange {
+  std::size_t begin;
+  std::size_t end;
+};
+
+PageRange getPageRange(const Page& page, const std::size_t rowCount) {
+  const auto offset = *page.offset();
+  const auto limit = *page.limit();
+  if (offset < 0 || limit < 0) {
+    throw std::runtime_error("Page offset and limit must be non-negative");
+  }
+
+  const auto begin = std::min(static_cast<std::size_t>(offset), rowCount);
+  const auto end = std::min(begin + static_cast<std::size_t>(limit), rowCount);
+  return {.begin = begin, .end = end};
+}
+
+} // namespace
+
+static Table applyOrder(
+    const Order& order,
+    const std::optional<PageRange>& pageRange,
+    Table table) {
   auto rowIds = table.getRowIds();
-  auto orderColumns = order.columns();
-  if (orderColumns->size() > 1) {
+  const auto& orderColumns = *order.columns();
+  if (orderColumns.size() > 1) {
     throw std::runtime_error("Ordering for multiple columns is not supported");
   }
-  const auto& orderRequest = orderColumns->at(0);
-  const auto& tableColumns = table.getColumnData();
+  const auto& orderRequest = orderColumns.at(0);
   const auto& orderTableColumn =
-      Utils::fetchColumn(tableColumns, *orderRequest.name());
+      Utils::fetchColumn(table.getColumnData(), *orderRequest.name());
   const auto& orderDirection = *orderRequest.direction();
 
   const auto sortRows = [&](const auto getValue) {
-    std::sort(
-        rowIds.begin(),
-        rowIds.end(),
-        [orderDirection, &getValue](RowId rowId1, RowId rowId2) {
-          const auto value1 = getValue(rowId1);
-          const auto value2 = getValue(rowId2);
-          return orderDirection == OrderDirection::ASCENDING ? value1 < value2
-                                                             : value1 > value2;
-        });
+    const auto compareRows = [orderDirection, &getValue](
+                                 RowId rowId1, RowId rowId2) {
+      const auto value1 = getValue(rowId1);
+      const auto value2 = getValue(rowId2);
+      return orderDirection == OrderDirection::ASCENDING ? value1 < value2
+                                                         : value1 > value2;
+    };
+    if (!pageRange) {
+      std::sort(rowIds.begin(), rowIds.end(), compareRows);
+      return;
+    }
+
+    const auto [beginIndex, endIndex] = *pageRange;
+    if (beginIndex == endIndex) {
+      return;
+    }
+    const auto begin = rowIds.begin() + beginIndex;
+    const auto end = rowIds.begin() + endIndex;
+    if (begin != rowIds.begin()) {
+      std::nth_element(rowIds.begin(), begin, rowIds.end(), compareRows);
+    }
+    if (end != rowIds.end()) {
+      std::nth_element(begin, end, rowIds.end(), compareRows);
+    }
+    std::sort(begin, end, compareRows);
   };
   if (orderTableColumn->isNumeric()) {
     sortRows(
@@ -452,18 +489,15 @@ static Table applyOrder(const Order& order, Table table) {
     sortRows(
         [&](const RowId rowId) { return orderTableColumn->getStrView(rowId); });
   }
-  table.updateRowIds(rowIds);
+  table.updateRowIds(std::move(rowIds));
   return table;
 }
 
-static Table applyPagination(const Page& page, Table table) {
+static Table applyPagination(const PageRange& pageRange, Table table) {
   /* Apply pagination. */
   const auto& rowIds = table.getRowIds();
-  const int startIndex = std::min(*page.offset(), int(rowIds.size()));
-  const int limit = *page.limit();
-  const int endIndex = std::min(startIndex + limit, int(rowIds.size()));
   std::vector<RowId> newRowIds(
-      rowIds.begin() + startIndex, rowIds.begin() + endIndex);
+      rowIds.begin() + pageRange.begin, rowIds.begin() + pageRange.end);
   table.updateRowIds(std::move(newRowIds));
   return table;
 }
@@ -471,7 +505,7 @@ static Table applyPagination(const Page& page, Table table) {
 Result ModelServer::processQueryOnTable(
     const Query& query,
     explorer::Table table) {
-  if (query.filter()) {
+  if (query.filter() && !query.filter()->rules()->empty()) {
     table = FilterModel::applyFilter(*query.filter(), std::move(table));
   }
 
@@ -479,13 +513,18 @@ Result ModelServer::processQueryOnTable(
     table = GroupModel::applyGroup(*query.group(), std::move(table));
   }
 
+  std::optional<PageRange> pageRange;
+  if (query.page()) {
+    pageRange = getPageRange(*query.page(), table.getRowIds().size());
+  }
+
   if (query.order()) {
-    table = applyOrder(*query.order(), std::move(table));
+    table = applyOrder(*query.order(), pageRange, std::move(table));
   }
 
   const auto totalRows = table.getRowIds().size();
-  if (query.page()) {
-    table = applyPagination(*query.page(), std::move(table));
+  if (pageRange) {
+    table = applyPagination(*pageRange, std::move(table));
   }
 
   return prepareResult(table, totalRows);

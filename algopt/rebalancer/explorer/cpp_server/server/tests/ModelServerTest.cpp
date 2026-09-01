@@ -24,6 +24,7 @@
 #include <gtest/gtest.h>
 
 #include <optional>
+#include <stdexcept>
 #include <string>
 
 using namespace facebook::rebalancer::entities;
@@ -236,6 +237,28 @@ TEST_F(ModelServerTest, ModelPageHigherOffset) {
   auto query = TestUtils::prepareQuery(std::string("host"), order, page);
   auto result = getData(*model, query);
   EXPECT_EQ(0, result.rows()->size());
+}
+
+TEST_F(ModelServerTest, ModelPageRejectsNegativeOffsetOrLimit) {
+  OrderColumn orderColumn;
+  orderColumn.name() = "host";
+  orderColumn.direction() = OrderDirection::DESCENDING;
+  Order order;
+  order.columns() = {orderColumn};
+
+  const auto expectInvalidPage = [&](const int32_t offset,
+                                     const int32_t limit) {
+    Page page;
+    page.offset() = offset;
+    page.limit() = limit;
+    const auto query =
+        TestUtils::prepareQuery(std::string("host"), order, page);
+    REBALANCER_EXPECT_RUNTIME_ERROR(
+        getData(*model, query), "Page offset and limit must be non-negative");
+  };
+
+  expectInvalidPage(-1, 1);
+  expectInvalidPage(0, -1);
 }
 
 TEST_F(ModelServerTest, ModelTypeHeadBasic) {
