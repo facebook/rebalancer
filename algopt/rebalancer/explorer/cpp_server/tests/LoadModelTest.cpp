@@ -39,8 +39,7 @@ std::set<T> makeSet(const std::vector<T>& items) {
 void colNameAndTypeAreAsExpected(
     const std::map<std::string, ColumnType>& expected,
     const std::string& tableName,
-    const PackerMap<std::string, Table>& tableNameToTable) {
-  const explorer::Table& table = tableNameToTable.at(tableName);
+    const Table& table) {
   const auto& columns = table.getColumnData();
   std::map<std::string, ColumnType> columnNameAndType;
   std::transform(
@@ -62,16 +61,20 @@ void colNameAndTypeAreAsExpected(
   }
 }
 
-void addObjectTable(ExplorerModel& model) {
-  auto executor = getTestExecutor();
-  auto table = folly::coro::blockingWait(
-      LoadModel::buildObjectTable(
-          *model.universe,
-          model.finalAssignment,
-          model.equivalenceSetsData,
-          executor.get()));
-  model.tableData.emplace(
-      model.universe->getObjectTypeName(), std::move(table));
+static const Table& buildTable(
+    const TableStore& tableStore,
+    const std::string& tableName) {
+  return folly::coro::blockingWait(tableStore.get(tableName));
+}
+
+TEST(LoadModelTest, DuplicateTableNamesFailConstruction) {
+  auto bundle = TestUtils::buildBundle();
+  auto& universeData = *bundle.problem()->universe();
+  universeData.objectTypeName() = *universeData.containerTypeName();
+
+  REBALANCER_EXPECT_RUNTIME_ERROR(
+      LoadModel::buildData(std::move(bundle)),
+      "Explorer table 'rack' is already defined");
 }
 
 RowId getRowId(const Table& table, const std::string& primaryKey) {
@@ -89,8 +92,7 @@ TEST(LoadModelTest, Basic) {
   auto bundle = TestUtils::buildBundle();
   auto explorerModel = LoadModel::buildData(std::move(bundle));
   EXPECT_FALSE(explorerModel.problemSpec.universe().has_value());
-  addObjectTable(explorerModel);
-  const auto& tableData = std::move(explorerModel.tableData);
+  const auto& objectTable = buildTable(explorerModel.tableStore, "host");
 
   // Verify column names and types for the host (object) table
   const std::map<std::string, ColumnType> expectedHostColumnNameAndType = {
@@ -116,9 +118,11 @@ TEST(LoadModelTest, Basic) {
        ColumnType::PARTITION} // equivalence set partition column is always
                               // added
   };
-  colNameAndTypeAreAsExpected(expectedHostColumnNameAndType, "host", tableData);
+  colNameAndTypeAreAsExpected(
+      expectedHostColumnNameAndType, "host", objectTable);
 
   // Verify column names and types for the rack (container) table
+  const auto& containerTable = buildTable(explorerModel.tableStore, "rack");
   const std::map<std::string, ColumnType> expectedRackColumnNameAndType = {
       {"rack", ColumnType::ENTITY_NAME},
       {"row", ColumnType::SCOPE},
@@ -131,9 +135,11 @@ TEST(LoadModelTest, Basic) {
       {"host_count.finalUtil", ColumnType::UTILIZATION},
       {"network.finalUtil", ColumnType::UTILIZATION},
       {"ram.finalUtil", ColumnType::UTILIZATION}};
-  colNameAndTypeAreAsExpected(expectedRackColumnNameAndType, "rack", tableData);
+  colNameAndTypeAreAsExpected(
+      expectedRackColumnNameAndType, "rack", containerTable);
 
   // Verify column names and types for the row table
+  const auto& rowTable = buildTable(explorerModel.tableStore, "row");
   const std::map<std::string, ColumnType> expectedRowColumnNameAndType = {
       {"row", ColumnType::ENTITY_NAME},
       {"network", ColumnType::DOUBLE},
@@ -143,11 +149,10 @@ TEST(LoadModelTest, Basic) {
       {"host_count.finalUtil", ColumnType::UTILIZATION},
       {"network.finalUtil", ColumnType::UTILIZATION},
       {"ram.finalUtil", ColumnType::UTILIZATION}};
-  colNameAndTypeAreAsExpected(expectedRowColumnNameAndType, "row", tableData);
+  colNameAndTypeAreAsExpected(expectedRowColumnNameAndType, "row", rowTable);
 
   // Verify column names and types for the msb (scope) table
-  // Note: dynamicLoad table is built in ModelServer, but dynamicLoad.initUtil
-  // and dynamicLoad.finalUtil are built in LoadModel for scope tables
+  const auto& msbTable = buildTable(explorerModel.tableStore, "msb");
   const std::map<std::string, ColumnType> expectedMsbColumnNameAndType = {
       {"msb", ColumnType::ENTITY_NAME},
       {"network", ColumnType::DIMENSION},
@@ -159,7 +164,7 @@ TEST(LoadModelTest, Basic) {
       {"ram.finalUtil", ColumnType::UTILIZATION},
       {"dynamicLoad.initUtil", ColumnType::UTILIZATION},
       {"dynamicLoad.finalUtil", ColumnType::UTILIZATION}};
-  colNameAndTypeAreAsExpected(expectedMsbColumnNameAndType, "msb", tableData);
+  colNameAndTypeAreAsExpected(expectedMsbColumnNameAndType, "msb", msbTable);
   const std::vector<std::string> expectedMsbColumns = {
       "msb",
       "network",
@@ -171,9 +176,8 @@ TEST(LoadModelTest, Basic) {
       "network.initUtil",
       "ram.finalUtil",
       "ram.initUtil"};
-  EXPECT_EQ(expectedMsbColumns, tableData.at("msb").getColumnNames());
+  EXPECT_EQ(expectedMsbColumns, msbTable.getColumnNames());
 
-  const auto& objectTable = tableData.at("host");
   const auto& objectColumnData = objectTable.getColumnData();
   const auto host0RowId = getRowId(objectTable, "host0");
   const auto host1RowId = getRowId(objectTable, "host1");
@@ -231,7 +235,6 @@ TEST(LoadModelTest, Basic) {
   }
 
   // assert container data
-  const auto& containerTable = tableData.at("rack");
   const auto& containerColumnData = containerTable.getColumnData();
   const auto rack0RowId = getRowId(containerTable, "rack0");
   const auto rack2RowId = getRowId(containerTable, "rack2");
@@ -253,7 +256,6 @@ TEST(LoadModelTest, Basic) {
   }
 
   // assert row data
-  const auto& rowTable = tableData.at("row");
   const auto& rowColumnData = rowTable.getColumnData();
   const auto row0RowId = getRowId(rowTable, "row0");
   const auto row1RowId = getRowId(rowTable, "row1");
@@ -267,7 +269,6 @@ TEST(LoadModelTest, Basic) {
   }
 
   // assert scope data
-  const auto& msbTable = tableData.at("msb");
   const auto& msbScopeColumnData = msbTable.getColumnData();
   const auto msb0RowId = getRowId(msbTable, "msb0");
   const auto msb1RowId = getRowId(msbTable, "msb1");
@@ -302,9 +303,7 @@ TEST(LoadModelTest, DynamicObjectDimensionUsesFinalAssignment) {
   bundle.solution()->assignment()->at("host0") = "rack1";
 
   auto explorerModel = LoadModel::buildData(std::move(bundle));
-  addObjectTable(explorerModel);
-
-  const auto& table = explorerModel.tableData.at("host");
+  const auto& table = buildTable(explorerModel.tableStore, "host");
   const auto column =
       Utils::fetchColumn(table.getColumnData(), "dst.dynamicLoad");
   EXPECT_DOUBLE_EQ(10.0, column->getDouble(getRowId(table, "host0")));
@@ -313,9 +312,7 @@ TEST(LoadModelTest, DynamicObjectDimensionUsesFinalAssignment) {
 TEST(LoadModelTest, OverlappingPartitionJoinsGroups) {
   auto bundle = TestUtils::buildBundle({.includeOverlappedPartition = true});
   auto explorerModel = LoadModel::buildData(std::move(bundle));
-  addObjectTable(explorerModel);
-
-  const auto& table = explorerModel.tableData.at("host");
+  const auto& table = buildTable(explorerModel.tableStore, "host");
   const auto partitionColumn =
       Utils::fetchColumn(table.getColumnData(), "overlapped");
   EXPECT_EQ(
@@ -326,14 +323,8 @@ TEST(LoadModelTest, OverlappingPartitionJoinsGroups) {
 
 TEST(LoadModelTest, DynamicDimensionTableStoresObjectRows) {
   auto bundle = TestUtils::buildBundle();
-  const entities::Universe universe(*bundle.problem()->universe());
-  const auto& dimension =
-      universe.getObjects()
-          .getDimension(universe.getDimensionId("dynamicLoad"))
-          .only();
-
-  const auto table =
-      LoadModel::buildDynamicDimensionTable(universe, dimension, "dynamicLoad");
+  auto explorerModel = LoadModel::buildData(std::move(bundle));
+  const auto& table = buildTable(explorerModel.tableStore, "dynamicLoad");
   ASSERT_EQ(2, table.getRowIds().size());
   const RowId objectRow(1);
   EXPECT_EQ(
@@ -367,37 +358,27 @@ TEST(LoadModelTest, DynamicDimensionTableUsesGroupRowsForCompactStorage) {
       "service",
       std::map<std::string, std::vector<std::string>>{
           {"web", {"host0", "host1"}}, {"db", {"host2"}}});
+  builder.setGroupBackedDynamicDimensions(true);
+  builder.addDynamicObjectDimension(
+      "load",
+      "zone",
+      "service",
+      std::map<std::string, std::map<std::string, double>>{
+          {"zone0", {{"web", 7.0}}}},
+      /*defaultValue=*/1.0);
 
-  const auto universe = builder.build();
-  const auto scopeId = universe->getScopeId("zone");
-  const auto zone0Id = universe->getScopeItemId(scopeId, "zone0");
-  const auto partitionId = universe->getPartitionId("service");
-  auto partition = std::shared_ptr<const entities::Partition>(
-      universe, &universe->getPartition(partitionId));
-
-  entities::GroupIdToDoubleMap groupValues;
-  groupValues.emplace(universe->getGroupId(partitionId, "web"), 7.0);
-  entities::Map<
-      entities::ScopeItemId,
-      std::shared_ptr<const entities::GroupIdToDoubleMap>>
-      scopeItemValues;
-  scopeItemValues.emplace(
-      zone0Id,
-      std::make_shared<const entities::GroupIdToDoubleMap>(
-          std::move(groupValues)));
-
-  const entities::ObjectDimension compactObjectDimension(
-      scopeId,
-      std::move(partition),
-      scopeItemValues,
-      /*defaultValue=*/1.0,
-      universe->getNumObjects(),
-      partitionId);
-  const auto& compactDimension = compactObjectDimension.only();
+  auto bundle = TestUtils::buildBundle({.includeSolutionObject = false});
+  bundle.problem()->universe() = builder.build()->toThrift();
+  auto explorerModel = LoadModel::buildData(std::move(bundle));
+  const auto& universe = *explorerModel.universe;
+  const auto scopeId = universe.getScopeId("zone");
+  const auto zone0Id = universe.getScopeItemId(scopeId, "zone0");
+  const auto dimensionId = universe.getDimensionId("load");
+  const auto& compactDimension =
+      universe.getObjects().getDimension(dimensionId).only();
   EXPECT_EQ(nullptr, compactDimension.values(zone0Id).asMapOrNull());
 
-  const auto table = LoadModel::buildDynamicDimensionTable(
-      *universe, compactDimension, "load");
+  const auto& table = buildTable(explorerModel.tableStore, "load");
   const auto objectNames = Utils::fetchColumn(table.getColumnData(), "service");
   const auto scopeItemNames = Utils::fetchColumn(table.getColumnData(), "zone");
   const auto dimensionValues =
@@ -434,9 +415,9 @@ TEST(LoadModelTest, MultiComponentDynamicDimensionsHaveUniqueNames) {
   scalarDimensions.push_back(scalarDimensions.front());
 
   auto explorerModel = LoadModel::buildData(std::move(bundle));
-  addObjectTable(explorerModel);
   const auto& universe = *explorerModel.universe;
-  auto dynamicDimensionName = explorerModel.dynamicDimensionNames.begin();
+  const auto& dynamicDimensionNames = explorerModel.dynamicDimensionNames;
+  auto dynamicDimensionName = dynamicDimensionNames.begin();
   std::set<std::string> detailColumnNames;
   for (const auto dimensionId : universe.getObjects().getDimensionIds()) {
     const auto& dimension = universe.getObjects().getDimension(dimensionId);
@@ -444,10 +425,9 @@ TEST(LoadModelTest, MultiComponentDynamicDimensionsHaveUniqueNames) {
       if (!dimension.at(scalarIndex).isDynamic()) {
         continue;
       }
-      ASSERT_NE(
-          dynamicDimensionName, explorerModel.dynamicDimensionNames.end());
-      const auto table = LoadModel::buildDynamicDimensionTable(
-          universe, dimension.at(scalarIndex), *dynamicDimensionName++);
+      ASSERT_NE(dynamicDimensionName, dynamicDimensionNames.end());
+      const auto& table =
+          buildTable(explorerModel.tableStore, *dynamicDimensionName++);
       for (const auto& column : table.getColumnData()) {
         if (column->getColumnType() == ColumnType::DIMENSION) {
           detailColumnNames.insert(column->getColumnName());
@@ -455,16 +435,16 @@ TEST(LoadModelTest, MultiComponentDynamicDimensionsHaveUniqueNames) {
       }
     }
   }
-  EXPECT_EQ(dynamicDimensionName, explorerModel.dynamicDimensionNames.end());
+  EXPECT_EQ(dynamicDimensionName, dynamicDimensionNames.end());
 
   const auto expectedDetailColumnNames =
       makeSet<std::string>({"dynamicLoad_0", "dynamicLoad_1"});
   EXPECT_EQ(expectedDetailColumnNames, detailColumnNames);
 
   std::set<std::string> objectColumnNames;
-  for (const auto& columnName :
-       explorerModel.tableData.at(universe.getObjectTypeName())
-           .getColumnNames()) {
+  const auto& objectTable =
+      buildTable(explorerModel.tableStore, universe.getObjectTypeName());
+  for (const auto& columnName : objectTable.getColumnNames()) {
     if (columnName.starts_with("src.dynamicLoad") ||
         columnName.starts_with("dst.dynamicLoad")) {
       objectColumnNames.insert(columnName);
@@ -541,10 +521,7 @@ TEST(ModelTest, MoveGroupTogether) {
   bundle.solution() = std::move(solution);
 
   auto explorerModel = LoadModel::buildData(std::move(bundle));
-  addObjectTable(explorerModel);
-  const auto& tableData = explorerModel.tableData;
-
-  const auto& objectTable = tableData.at("host");
+  const auto& objectTable = buildTable(explorerModel.tableStore, "host");
   const auto& objectColumnData = objectTable.getColumnData();
   const auto host0RowId = getRowId(objectTable, "host0");
   const auto host1RowId = getRowId(objectTable, "host1");
@@ -593,10 +570,7 @@ TEST(LoadModelTest, IsMovableTest) {
   auto bundle = TestUtils::buildBundle(
       {.spec = std::move(spec), .inProgressSpec = std::move(inProgressSpec)});
   auto explorerModel = LoadModel::buildData(std::move(bundle));
-  addObjectTable(explorerModel);
-  const auto& tableData = explorerModel.tableData;
-
-  const auto& objectsTable = tableData.at("host");
+  const auto& objectsTable = buildTable(explorerModel.tableStore, "host");
   const auto& objectColumnData = objectsTable.getColumnData();
   const auto host0RowId = getRowId(objectsTable, "host0");
   const auto host1RowId = getRowId(objectsTable, "host1");
@@ -626,8 +600,9 @@ TEST(LoadModelTest, BasicWithNoSolutionObject) {
 
   auto bundle = TestUtils::buildBundle(buildOptions);
   auto explorerModel = LoadModel::buildData(std::move(bundle));
-  addObjectTable(explorerModel);
-  auto tableData = std::move(explorerModel.tableData);
+  const auto& objectTable = buildTable(explorerModel.tableStore, "host");
+  const auto& msbTable = buildTable(explorerModel.tableStore, "msb");
+  const auto& rackTable = buildTable(explorerModel.tableStore, "rack");
 
   const std::set<std::string> expectedObjectColumnsSet = {
       "host",
@@ -652,7 +627,7 @@ TEST(LoadModelTest, BasicWithNoSolutionObject) {
           .data(), // equivalence set partition column is always added
   };
 
-  const auto& objectColumns = tableData.at("host").getColumnNames();
+  const auto& objectColumns = objectTable.getColumnNames();
   auto objectColumnSet =
       std::set<std::string>(objectColumns.begin(), objectColumns.end());
   EXPECT_EQ(expectedObjectColumnsSet, objectColumnSet);
@@ -669,7 +644,7 @@ TEST(LoadModelTest, BasicWithNoSolutionObject) {
       // dynamic dimensions only appear in the appropriate scope
       "dynamicLoad.initUtil",
       "dynamicLoad.finalUtil"};
-  const auto& scopeColumns = tableData.at("msb").getColumnNames();
+  const auto& scopeColumns = msbTable.getColumnNames();
   auto scopeColumnsSet =
       std::set<std::string>(scopeColumns.begin(), scopeColumns.end());
   EXPECT_EQ(expectedMsbColumnsSet, scopeColumnsSet);
@@ -686,12 +661,11 @@ TEST(LoadModelTest, BasicWithNoSolutionObject) {
       "host_count.finalUtil",
       "network.finalUtil",
       "ram.finalUtil"};
-  const auto& containerColumns = tableData.at("rack").getColumnNames();
+  const auto& containerColumns = rackTable.getColumnNames();
   auto containerColumnsSet =
       std::set<std::string>(containerColumns.begin(), containerColumns.end());
   EXPECT_EQ(expectedContainerColumnsSet, containerColumnsSet);
 
-  const auto& objectTable = tableData.at("host");
   const auto& objectColumnData = objectTable.getColumnData();
   const auto host0RowId = getRowId(objectTable, "host0");
   const auto host2RowId = getRowId(objectTable, "host2");
@@ -727,7 +701,7 @@ TEST(LoadModelTest, BasicWithNoSolutionObject) {
   }
 
   // assert row data
-  const auto& rowTable = tableData.at("row");
+  const auto& rowTable = buildTable(explorerModel.tableStore, "row");
   const auto& rowColumnData = rowTable.getColumnData();
   const auto row0RowId = getRowId(rowTable, "row0");
   for (auto& column : rowColumnData) {
@@ -737,7 +711,6 @@ TEST(LoadModelTest, BasicWithNoSolutionObject) {
   }
 
   // assert scope data
-  const auto& msbTable = tableData.at("msb");
   const auto& msbScopeColumnData = msbTable.getColumnData();
   const auto msb0RowId = getRowId(msbTable, "msb0");
   const auto msb1RowId = getRowId(msbTable, "msb1");

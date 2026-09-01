@@ -7,12 +7,9 @@
 #include "algopt/rebalancer/entities/Universe.h"
 #include "algopt/rebalancer/interface/thrift/gen-cpp2/AssignmentProblem_types.h"
 #include "algopt/rebalancer/solver/utils/MaterializedProblem.h"
+#include "algopt/rebalancer/treeprof/ExecutorWrapper.h"
+#include "rebalancer/explorer/cpp_server/lib/TableStore.h"
 #include "rebalancer/explorer/cpp_server/lib/Utils.h"
-
-#include <folly/coro/AsyncScope.h>
-#include <folly/executors/CPUThreadPoolExecutor.h>
-#include <folly/futures/SharedPromise.h>
-#include <folly/Synchronized.h>
 
 #include <string>
 #include <vector>
@@ -28,14 +25,15 @@ struct EquivalenceSetsData {
 struct ExplorerModel {
   interface::AssignmentProblem problemSpec;
   std::shared_ptr<const entities::Universe> universe;
-  entities::Map<std::string, Table> tableData;
+  TableStore tableStore;
   entities::Map<entities::ContainerId, std::vector<entities::ObjectId>>
       finalAssignment;
   std::optional<interface::AssignmentSolution> solution;
   std::shared_ptr<const MaterializedProblem> materialized;
   std::vector<std::string> dynamicDimensionNames;
   std::unique_ptr<Problem> problem;
-  EquivalenceSetsData equivalenceSetsData;
+  std::shared_ptr<const EquivalenceSetsData> equivalenceSetsData;
+  std::shared_ptr<algopt::treeprof::ExecutorWrapper> executor;
 };
 
 class LoadModel {
@@ -46,25 +44,6 @@ class LoadModel {
 
  public:
   static ExplorerModel buildData(interface::Bundle&& bundle);
-  static folly::coro::Task<Table> buildObjectTable(
-      const entities::Universe& universe,
-      const entities::Map<
-          entities::ContainerId,
-          std::vector<entities::ObjectId>>& containerIdToFinalObjectIds,
-      const EquivalenceSetsData& equivalenceSetsData,
-      folly::Executor* executor);
-  static Table buildDynamicDimensionTable(
-      const entities::Universe& universe,
-      const entities::ObjectScalarDimension& dimension,
-      const std::string& dimensionName);
-  static void initDynamicDimensionTables(
-      const entities::Universe& universe,
-      entities::Map<std::string, std::shared_ptr<folly::SharedPromise<Table>>>&
-          tablePromises,
-      folly::coro::AsyncScope& asyncScope,
-      folly::Executor* executor);
-  static std::vector<std::string> getDynamicDimensionNames(
-      const entities::Universe& universe);
 };
 
 } // namespace facebook::rebalancer::explorer

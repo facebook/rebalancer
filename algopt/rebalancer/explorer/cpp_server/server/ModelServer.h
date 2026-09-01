@@ -14,13 +14,11 @@
 #include "rebalancer/explorer/cpp_server/lib/Utils.h"
 #include "rebalancer/explorer/if/gen-cpp2/explorer_types.h"
 
-#include <folly/coro/AsyncScope.h>
 #include <folly/coro/Task.h>
+#include <folly/Executor.h>
 #include <folly/futures/Future.h>
-#include <folly/futures/SharedPromise.h>
 #include <folly/hash/Hash.h>
 #include <folly/synchronization/CallOnce.h>
-#include <folly/Synchronized.h>
 
 #include <string>
 
@@ -87,9 +85,6 @@ struct hash<facebook::rebalancer::explorer::ExportTableRequest> {
 
 namespace facebook::rebalancer::explorer {
 
-using TablePromises =
-    entities::Map<std::string, std::shared_ptr<folly::SharedPromise<Table>>>;
-
 class ModelServer {
   /* Creates model and performs operation on them. */
 
@@ -146,8 +141,6 @@ class ModelServer {
   void initExpressionIdToPtr();
   void initExpressionIdToPtr(Expression* expression);
   void initObjectiveNameToExpr();
-  void startTableDataAsync(entities::Map<std::string, Table> prebuiltTables);
-  void waitForTableData() const;
   std::optional<folly::F14FastMap<std::string, std::vector<double>>>
   computeObjectiveToChangePerMoveSet() const;
 
@@ -187,12 +180,12 @@ class ModelServer {
   entities::Map<entities::ContainerId, std::vector<entities::ObjectId>>
       finalAssignment_;
   std::set<std::string> partitionNames_;
-  EquivalenceSetsData equivalenceSetsData_;
+  std::shared_ptr<const EquivalenceSetsData> equivalenceSetsData_;
   entities::Map<entities::ObjectId, entities::GroupId> partToMoveGroup_;
   std::optional<interface::AssignmentSolution> solution_;
   std::shared_ptr<const MaterializedProblem> materialized_;
-  entities::Map<int64_t, Expression*> expressionIdToPtr_;
   std::vector<std::string> dynamicDimensionNames_;
+  entities::Map<int64_t, Expression*> expressionIdToPtr_;
   folly::F14FastMap<std::string, ExprPtr> objectiveNameToExpr_;
   entities::Map<std::string, interface::thrift::MetricCollectionType>
       metricCollectionNameToType_;
@@ -218,9 +211,8 @@ class ModelServer {
   std::optional<folly::F14FastMap<std::string, std::vector<double>>>
       objectiveToChangePerMoveSet_ = std::nullopt;
 
-  folly::coro::AsyncScope asyncScope_;
-  TablePromises tablePromises_;
-  std::shared_ptr<folly::CPUThreadPoolExecutor> executor_;
+  std::shared_ptr<algopt::treeprof::ExecutorWrapper> executor_;
+  TableStore tableStore_;
 
   // Bundles metrics->fullApply() + initObjectiveNameToExpr() into a single
   // async task that runs them serially.
@@ -229,9 +221,6 @@ class ModelServer {
   void waitForMetricsAndObjectiveInit() const;
   mutable folly::SemiFuture<folly::Unit> metricsAndObjectiveInitFuture_;
   mutable folly::once_flag metricsAndObjectiveInitOnceFlag_;
-
-  mutable folly::SemiFuture<folly::Unit> tableDataFuture_;
-  mutable folly::once_flag tableDataOnceFlag_;
 };
 
 } // namespace facebook::rebalancer::explorer

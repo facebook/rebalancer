@@ -15,7 +15,9 @@
 #include "datainfra/presto/client_next/ligen/cpp_bindings/presto_next.h"
 #endif
 
+#include <folly/container/irange.h>
 #include <folly/coro/BlockingWait.h>
+#include <folly/coro/Collect.h>
 #include <folly/coro/GtestHelpers.h>
 #include <folly/coro/Timeout.h>
 #include <folly/Portability.h>
@@ -1436,5 +1438,24 @@ TEST_F(ModelServerTest, GetDataUnknownEntityThrows) {
   auto query =
       TestUtils::prepareQuery(std::string("nonexistent_entity"), order);
   REBALANCER_EXPECT_RUNTIME_ERROR(
-      getData(*model, query), "Unknown entity: 'nonexistent_entity'");
+      getData(*model, query), "Table 'nonexistent_entity' not found");
+}
+
+CO_TEST_F(ModelServerTest, SupportsConcurrentAndRepeatedTableQueries) {
+  const auto query = TestUtils::prepareQuery("host", std::vector<FilterRule>{});
+  constexpr std::size_t kRequestCount = 100;
+  std::vector<folly::coro::Task<Result>> requests;
+  requests.reserve(kRequestCount);
+  for ([[maybe_unused]] const auto _ : folly::irange(kRequestCount)) {
+    requests.push_back(model->getData(query));
+  }
+
+  const auto results =
+      co_await folly::coro::collectAllRange(std::move(requests));
+
+  EXPECT_EQ(kRequestCount, results.size());
+  for (const auto& result : results) {
+    EXPECT_EQ(results.front(), result);
+  }
+  EXPECT_EQ(results.front(), co_await model->getData(query));
 }

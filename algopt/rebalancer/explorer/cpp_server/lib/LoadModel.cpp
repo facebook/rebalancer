@@ -21,10 +21,9 @@
 #include <range/v3/range/conversion.hpp>
 
 #include <fmt/core.h>
-#include <folly/FileUtil.h>
-#include <folly/futures/SharedPromise.h>
+#include <folly/container/irange.h>
+#include <folly/executors/CPUThreadPoolExecutor.h>
 #include <folly/String.h>
-#include <folly/Synchronized.h>
 #include <folly/system/HardwareConcurrency.h>
 
 #include <algorithm>
@@ -66,6 +65,16 @@ using ObjectIdToContainerId = std::vector<ContainerId>;
 struct ObjectAssignments {
   ObjectIdToContainerId objectIdToInitialContainerId;
   ObjectIdToContainerId objectIdToFinalContainerId;
+};
+
+struct NamedTableBuildTask {
+  std::string tableName;
+  folly::coro::Task<Table> buildTask;
+};
+
+struct TableStoreBuildResult {
+  TableStore tableStore;
+  std::vector<std::string> dynamicDimensionNames;
 };
 
 ObjectIdToContainerId buildObjectIdToContainerId(
@@ -226,10 +235,14 @@ static std::vector<std::shared_ptr<const Column>> buildPartitionCols(
   return columns;
 }
 
-Table LoadModel::buildDynamicDimensionTable(
-    const Universe& universe,
-    const ObjectScalarDimension& dimension,
-    const std::string& dimensionName) {
+static folly::coro::Task<Table> buildDynamicDimensionTable(
+    std::shared_ptr<const Universe> universePtr,
+    const DimensionId dimensionId,
+    const int scalarIndex,
+    std::string dimensionName) {
+  const auto& universe = *universePtr;
+  const auto& dimension =
+      universe.getObjects().getDimension(dimensionId).at(scalarIndex);
   if (!dimension.isDynamic()) {
     throw std::runtime_error(
         fmt::format(
@@ -307,7 +320,7 @@ Table LoadModel::buildDynamicDimensionTable(
   table.insertColumn(
       {.name = dimensionName, .type = ColumnType::DIMENSION},
       std::move(values));
-  return table;
+  co_return table;
 }
 
 static std::vector<std::shared_ptr<const Column>>
@@ -694,9 +707,10 @@ static std::shared_ptr<const Column> buildScopeNameColumn(
 }
 
 static folly::coro::Task<Table> buildContainerTable(
-    const Universe& universe,
-    const ObjectAssignments& objectAssignments,
+    std::shared_ptr<const Universe> universePtr,
+    std::shared_ptr<const ObjectAssignments> objectAssignments,
     std::shared_ptr<algopt::treeprof::ExecutorWrapper> executor) {
+  const auto& universe = *universePtr;
   const auto containerIds =
       universe.getContainers().getContainerIds() | ranges::to<std::vector>;
   TableBuilder<ContainerId> builder(containerIds);
@@ -713,121 +727,52 @@ static folly::coro::Task<Table> buildContainerTable(
           builder,
           universe,
           containerScopeId,
-          objectAssignments,
+          *objectAssignments,
           std::move(executor)));
   co_return builder.build();
 }
 
 static folly::coro::Task<Table> buildScopeTable(
-    const Universe& universe,
+    std::shared_ptr<const Universe> universePtr,
     const ScopeId scopeId,
-    const ObjectAssignments& objectAssignments,
+    std::shared_ptr<const ObjectAssignments> objectAssignments,
     std::shared_ptr<algopt::treeprof::ExecutorWrapper> executor) {
+  const auto& universe = *universePtr;
   const auto& scopeItemIds = universe.getScope(scopeId).getScopeItemIds();
   TableBuilder<ScopeItemId> builder(scopeItemIds);
   builder.add(buildScopeNameColumn(builder, universe, scopeId));
   builder.addSorted(buildScopeDimensionCols(builder, universe, scopeId));
   builder.addSorted(
       co_await buildUtilizationCols(
-          builder, universe, scopeId, objectAssignments, std::move(executor)));
+          builder, universe, scopeId, *objectAssignments, std::move(executor)));
   co_return builder.build();
 }
-
-static folly::coro::Task<Map<std::string, Table>> buildPrebuiltTables(
-    const Universe& universe,
-    const ObjectAssignments& objectAssignments,
-    const std::shared_ptr<algopt::treeprof::ExecutorWrapper>& executor) {
-  Map<std::string, Table> tableNameToTable;
-  tableNameToTable.emplace(
-      universe.getContainerTypeName(),
-      co_await buildContainerTable(universe, objectAssignments, executor));
-  for (const auto scopeId : universe.getScopeIds()) {
-    const auto& scopeName = universe.getEntityName(scopeId);
-    if (scopeName == universe.getContainerTypeName()) {
-      continue;
-    }
-    tableNameToTable.emplace(
-        scopeName,
-        co_await buildScopeTable(
-            universe, scopeId, objectAssignments, executor));
-  }
-  co_return tableNameToTable;
-}
-
 // copy-pasted from problemsolverfactoy
 static int get_core_count() {
   return folly::available_concurrency();
 }
 
-std::vector<std::string> LoadModel::getDynamicDimensionNames(
-    const Universe& universe) {
-  algopt::treeprof::EventRecorder event("Build dynamic dimension names");
-  std::vector<std::string> dynamicDimensionNames;
-  for (const auto dimId : universe.getObjects().getDimensionIds()) {
-    const ObjectDimension& dimension =
-        universe.getObjects().getDimension(dimId);
-    const std::string& dimName = universe.getEntityName(dimId);
-    for (int i = 0; i < dimension.size(); i++) {
-      const ObjectScalarDimension& scalarDimension = dimension.at(i);
-      if (scalarDimension.isDynamic()) {
-        dynamicDimensionNames.emplace_back(
-            makeScalarDimensionName(dimName, dimension.size(), i));
+static std::vector<NamedTableBuildTask> buildDynamicDimensionTableTasks(
+    std::shared_ptr<const Universe> universe) {
+  std::vector<NamedTableBuildTask> tasks;
+  const auto& objects = universe->getObjects();
+  for (const auto dimensionId : objects.getDimensionIds()) {
+    const auto& dimension = objects.getDimension(dimensionId);
+    const auto& dimensionName = universe->getEntityName(dimensionId);
+    for (const auto scalarIndex : folly::irange(dimension.size())) {
+      if (!dimension.at(scalarIndex).isDynamic()) {
+        continue;
       }
+      auto tableName =
+          makeScalarDimensionName(dimensionName, dimension.size(), scalarIndex);
+      auto buildTask = buildDynamicDimensionTable(
+          universe, dimensionId, scalarIndex, tableName);
+      tasks.push_back(
+          {.tableName = std::move(tableName),
+           .buildTask = std::move(buildTask)});
     }
   }
-  event.stop();
-  return dynamicDimensionNames;
-}
-
-folly::coro::Task<void> buildDynamicTableAsync(
-    const Universe& universe,
-    DimensionId dimId,
-    int index,
-    std::string scalarDimName,
-    std::shared_ptr<folly::SharedPromise<Table>> promise) {
-  try {
-    const ObjectDimension& dimension =
-        universe.getObjects().getDimension(dimId);
-    const ObjectScalarDimension& scalarDimension = dimension.at(index);
-    promise->setValue(
-        LoadModel::buildDynamicDimensionTable(
-            universe, scalarDimension, scalarDimName));
-  } catch (...) {
-    promise->setException(folly::exception_wrapper(std::current_exception()));
-  }
-  co_return;
-}
-
-// Initializes and populates a table for every dynamic dimension.
-// Each such table contains three columns - one for object names, one for
-// scope item names and one for the corresponding value.
-void LoadModel::initDynamicDimensionTables(
-    const Universe& universe,
-    Map<std::string, std::shared_ptr<folly::SharedPromise<Table>>>&
-        tablePromises,
-    folly::coro::AsyncScope& asyncScope,
-    folly::Executor* executor) {
-  // Add a table for each dynamic dimension
-  for (const auto dimId : universe.getObjects().getDimensionIds()) {
-    const ObjectDimension& dimension =
-        universe.getObjects().getDimension(dimId);
-    const std::string& dimName = universe.getEntityName(dimId);
-    for (int i = 0; i < dimension.size(); i++) {
-      const ObjectScalarDimension& scalarDimension = dimension.at(i);
-      if (scalarDimension.isDynamic()) {
-        auto scalarDimName =
-            makeScalarDimensionName(dimName, dimension.size(), i);
-        auto promise = std::make_shared<folly::SharedPromise<Table>>();
-        tablePromises[scalarDimName] = promise;
-        // Launch the coroutine on the thread pool
-        asyncScope.add(
-            folly::coro::co_withExecutor(
-                executor,
-                buildDynamicTableAsync(
-                    universe, dimId, i, std::move(scalarDimName), promise)));
-      }
-    }
-  }
+  return tasks;
 }
 
 static folly::coro::Task<DynamicObjectDimensionColumns>
@@ -915,16 +860,17 @@ buildAllDynamicObjectDimensionColumnsAsync(
   co_return co_await folly::coro::collectAllRange(std::move(tasks));
 }
 
-folly::coro::Task<Table> LoadModel::buildObjectTable(
-    const Universe& universe,
-    const Map<ContainerId, std::vector<ObjectId>>& containerIdToFinalObjectIds,
-    const EquivalenceSetsData& equivalenceSetsData,
-    folly::Executor* executor) {
+static folly::coro::Task<Table> buildObjectTable(
+    std::shared_ptr<const Universe> universePtr,
+    std::shared_ptr<const ObjectAssignments> objectAssignmentsPtr,
+    std::shared_ptr<const EquivalenceSetsData> equivalenceSetsDataPtr,
+    std::shared_ptr<algopt::treeprof::ExecutorWrapper> executor) {
+  const auto& universe = *universePtr;
+  const auto& objectAssignments = *objectAssignmentsPtr;
+  const auto& equivalenceSetsData = *equivalenceSetsDataPtr;
   const auto objectIds =
       universe.getObjects().getObjectIds() | ranges::to<std::vector>;
   TableBuilder<ObjectId> builder(objectIds);
-  const auto objectAssignments =
-      buildObjectAssignments(containerIdToFinalObjectIds, universe);
 
   builder.add(buildObjectCol(builder, universe));
   for (auto& column : buildMovableCols(builder, universe)) {
@@ -932,7 +878,7 @@ folly::coro::Task<Table> LoadModel::buildObjectTable(
   }
   builder.addSorted(buildStaticObjectDimensionCols(builder, universe));
   for (auto& columns : co_await buildAllDynamicObjectDimensionColumnsAsync(
-           builder, universe, objectAssignments, executor)) {
+           builder, universe, objectAssignments, executor.get())) {
     builder.add(std::move(columns.source)).add(std::move(columns.destination));
   }
 
@@ -942,6 +888,53 @@ folly::coro::Task<Table> LoadModel::buildObjectTable(
     builder.add(std::move(column));
   }
   co_return builder.build();
+}
+
+static TableStoreBuildResult buildTableStore(
+    std::shared_ptr<const Universe> universe,
+    std::shared_ptr<const ObjectAssignments> objectAssignments,
+    std::shared_ptr<const EquivalenceSetsData> equivalenceSetsData,
+    std::shared_ptr<algopt::treeprof::ExecutorWrapper> executor) {
+  TableStore::BuildTaskMap tableNameToBuildTask;
+  const auto addTable = [&tableNameToBuildTask](
+                            const std::string& tableName,
+                            folly::coro::Task<Table> buildTask) {
+    const auto [it, inserted] =
+        tableNameToBuildTask.emplace(tableName, std::move(buildTask));
+    if (!inserted) {
+      throw std::runtime_error(
+          fmt::format("Explorer table '{}' is already defined", it->first));
+    }
+  };
+
+  addTable(
+      universe->getObjectTypeName(),
+      buildObjectTable(
+          universe, objectAssignments, equivalenceSetsData, executor));
+
+  addTable(
+      universe->getContainerTypeName(),
+      buildContainerTable(universe, objectAssignments, executor));
+
+  for (const auto scopeId : universe->getScopeIds()) {
+    const auto& scopeName = universe->getEntityName(scopeId);
+    if (scopeName == universe->getContainerTypeName()) {
+      continue;
+    }
+    addTable(
+        scopeName,
+        buildScopeTable(universe, scopeId, objectAssignments, executor));
+  }
+
+  std::vector<std::string> dynamicDimensionNames;
+  for (auto& tableBuild : buildDynamicDimensionTableTasks(universe)) {
+    dynamicDimensionNames.push_back(tableBuild.tableName);
+    addTable(tableBuild.tableName, std::move(tableBuild.buildTask));
+  }
+
+  return {
+      .tableStore = TableStore(executor, std::move(tableNameToBuildTask)),
+      .dynamicDimensionNames = std::move(dynamicDimensionNames)};
 }
 
 ExplorerModel LoadModel::buildData(interface::Bundle&& bundle) {
@@ -987,29 +980,26 @@ ExplorerModel LoadModel::buildData(interface::Bundle&& bundle) {
   };
   auto problem =
       std::make_unique<Problem>(universe, materialized, problemConfigs);
-  auto equivalenceSetsData =
-      buildEquivalenceSetData(problem->makeEquivalenceSetInfo(), *universe);
+  auto equivalenceSetsData = std::make_shared<const EquivalenceSetsData>(
+      buildEquivalenceSetData(problem->makeEquivalenceSetInfo(), *universe));
+  auto objectAssignments = std::make_shared<const ObjectAssignments>(
+      buildObjectAssignments(finalAssignment, *universe));
+  auto tableStoreBuildResult = buildTableStore(
+      universe, objectAssignments, equivalenceSetsData, wrappedExecutor);
 
-  const auto objectAssignments =
-      buildObjectAssignments(finalAssignment, *universe);
-
-  auto prebuiltTables = folly::coro::blockingWait(
-      buildPrebuiltTables(*universe, objectAssignments, wrappedExecutor));
-
-  auto dynamicDimensionNames = getDynamicDimensionNames(*universe);
-
-  ExplorerModel explorerModel = {
+  return ExplorerModel{
       .problemSpec = std::move(problemSpec),
       .universe = std::move(universe),
-      .tableData = std::move(prebuiltTables),
+      .tableStore = std::move(tableStoreBuildResult.tableStore),
       .finalAssignment = std::move(finalAssignment),
       .solution = std::move(solution),
       .materialized = std::move(materialized),
-      .dynamicDimensionNames = std::move(dynamicDimensionNames),
+      .dynamicDimensionNames =
+          std::move(tableStoreBuildResult.dynamicDimensionNames),
       .problem = std::move(problem),
       .equivalenceSetsData = std::move(equivalenceSetsData),
+      .executor = std::move(wrappedExecutor),
   };
-  return explorerModel;
 }
 
 } // namespace facebook::rebalancer::explorer

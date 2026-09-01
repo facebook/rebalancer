@@ -15,9 +15,7 @@
 #include "rebalancer/explorer/if/gen-cpp2/explorer_types.h"
 
 #include <folly/coro/BlockingWait.h>
-#include <folly/executors/CPUThreadPoolExecutor.h>
 #include <folly/futures/Future.h>
-#include <folly/system/HardwareConcurrency.h>
 #include <thrift/lib/cpp/util/EnumUtils.h>
 
 #ifndef REBALANCER_OSS_BUILD
@@ -178,7 +176,9 @@ ModelServer::ModelServer(ExplorerModel&& explorerModel)
       materialized_(std::move(explorerModel.materialized)),
       dynamicDimensionNames_(std::move(explorerModel.dynamicDimensionNames)),
       problem_(std::move(explorerModel.problem)),
-      solverSpec_(problemSpec_.strategy()->solvers()->at(0)) {
+      solverSpec_(problemSpec_.strategy()->solvers()->at(0)),
+      executor_(std::move(explorerModel.executor)),
+      tableStore_(std::move(explorerModel.tableStore)) {
   if (materialized_->metrics) {
     // Build the metricCollectionNameToType_ map synchronously (cheap — just
     // iterates available collections). The expensive fullApply is deferred
@@ -199,17 +199,7 @@ ModelServer::ModelServer(ExplorerModel&& explorerModel)
 
   // Add equivalence set partition name to partitionNames_; useful to treat
   // equivalence sets as a partition for groupBy kind of operations
-  partitionNames_.insert(equivalenceSetsData_.partitionName);
-
-  executor_ = std::make_shared<folly::CPUThreadPoolExecutor>(
-      folly::available_concurrency(),
-      std::make_unique<folly::LifoSemMPMCQueue<
-          folly::CPUThreadPoolExecutor::CPUTask,
-          folly::QueueBehaviorIfFull::BLOCK>>(
-          folly::CPUThreadPoolExecutor::kDefaultMaxQueueSize),
-      std::make_shared<folly::NamedThreadFactory>("CPUThreadPoolExecutor"));
-
-  startTableDataAsync(std::move(explorerModel.tableData));
+  partitionNames_.insert(equivalenceSetsData_->partitionName);
 
   initExpressionIdToPtr();
 
@@ -222,73 +212,6 @@ ModelServer::~ModelServer() {
   } catch (const std::exception& e) {
     XLOG(ERR) << "Exception in waitForMetricsAndObjectiveInit: " << e.what();
   }
-  try {
-    waitForTableData();
-  } catch (const std::exception& e) {
-    XLOG(ERR) << "Exception in waitForTableData: " << e.what();
-  }
-  try {
-    folly::coro::blockingWait(asyncScope_.joinAsync());
-  } catch (const std::exception& e) {
-    XLOG(ERR) << "Exception in asyncScope join: " << e.what();
-  }
-}
-
-void ModelServer::startTableDataAsync(
-    entities::Map<std::string, Table> prebuiltTables) {
-  tableDataFuture_ =
-      co_withExecutor(
-          executor_.get(),
-          folly::coro::co_invoke(
-              [this, prebuiltTables = std::move(prebuiltTables)]() mutable
-                  -> folly::coro::Task<folly::Unit> {
-                if (!dynamicDimensionNames_.empty()) {
-                  LoadModel::initDynamicDimensionTables(
-                      *universe_, tablePromises_, asyncScope_, executor_.get());
-                }
-
-                for (auto& [tableName, table] : prebuiltTables) {
-                  auto promise =
-                      std::make_shared<folly::SharedPromise<Table>>();
-                  promise->setValue(std::move(table));
-                  tablePromises_[tableName] = std::move(promise);
-                }
-
-                const auto& objectsTableName = universe_->getObjectTypeName();
-                auto promise = std::make_shared<folly::SharedPromise<Table>>();
-                tablePromises_[objectsTableName] = promise;
-
-                asyncScope_.add(
-                    folly::coro::co_withExecutor(
-                        executor_.get(),
-                        folly::coro::co_invoke(
-                            [this, promise = std::move(promise)]() mutable
-                                -> folly::coro::Task<void> {
-                              try {
-                                promise->setValue(
-                                    co_await LoadModel::buildObjectTable(
-                                        *universe_,
-                                        finalAssignment_,
-                                        equivalenceSetsData_,
-                                        executor_.get()));
-                              } catch (...) {
-                                promise->setException(
-                                    folly::exception_wrapper(
-                                        std::current_exception()));
-                              }
-                            })));
-
-                co_return folly::unit;
-              }))
-          .start();
-}
-
-void ModelServer::waitForTableData() const {
-  folly::call_once(tableDataOnceFlag_, [this]() {
-    if (tableDataFuture_.valid()) {
-      std::move(tableDataFuture_).get();
-    }
-  });
 }
 
 void ModelServer::initObjectiveNameToExpr() {
@@ -569,14 +492,9 @@ Result ModelServer::processQueryOnTable(
 }
 
 folly::coro::Task<Result> ModelServer::getData(const Query& query) const {
-  waitForTableData();
   const auto& entity = *query.entity();
-  const auto promisePtr = folly::get_ptr(tablePromises_, entity);
-  if (!promisePtr) {
-    throw std::runtime_error(fmt::format("Unknown entity: '{}'", entity));
-  }
-  const auto tableData = co_await (*promisePtr)->getSemiFuture();
-  co_return processQueryOnTable(query, tableData);
+  const auto& table = co_await tableStore_.get(entity);
+  co_return processQueryOnTable(query, table);
 }
 
 static std::string convertToLower(std::string request) {
@@ -587,7 +505,6 @@ static std::string convertToLower(std::string request) {
 
 folly::coro::Task<TypeaheadResponse> ModelServer::getTypeahead(
     const TypeaheadRequest& request) const {
-  waitForTableData();
   const auto& query = convertToLower(*request.query());
   std::vector<std::string> matchingRows;
   const auto addToMatchingRows = [&matchingRows, &query](const auto& rowName) {
@@ -597,16 +514,15 @@ folly::coro::Task<TypeaheadResponse> ModelServer::getTypeahead(
   };
 
   const auto& entity = *request.entity();
-  if (auto promisePtr = folly::get_ptr(tablePromises_, entity)) {
-    const auto table = co_await (*promisePtr)->getSemiFuture();
-    const auto pk = table.getOnlyPrimaryKeyColumn();
-    for (auto rowId : table.getRowIds()) {
+  if (const auto* table = co_await tableStore_.tryGet(entity)) {
+    const auto pk = table->getOnlyPrimaryKeyColumn();
+    for (auto rowId : table->getRowIds()) {
       addToMatchingRows(pk->toString(rowId));
     }
   } else if (partitionNames_.contains(entity)) {
     // check if it is equivalence set partition
-    if (entity == equivalenceSetsData_.partitionName) {
-      for (const auto& groupName : equivalenceSetsData_.groupNames) {
+    if (entity == equivalenceSetsData_->partitionName) {
+      for (const auto& groupName : equivalenceSetsData_->groupNames) {
         addToMatchingRows(groupName);
       }
     } else {
@@ -1045,9 +961,9 @@ std::string ModelServer::getGroupName(
     const std::string& objectName,
     const std::string& partitionName) const {
   const auto objectId = universe_->getObjectId(objectName);
-  if (partitionName == equivalenceSetsData_.partitionName) {
+  if (partitionName == equivalenceSetsData_->partitionName) {
     const auto groupNamePtr =
-        folly::get_ptr(equivalenceSetsData_.objectIdToGroupName, objectId);
+        folly::get_ptr(equivalenceSetsData_->objectIdToGroupName, objectId);
     return groupNamePtr
         ? *groupNamePtr
         : fmt::format("Not in partition (object: {})", objectName);
@@ -1095,13 +1011,8 @@ linspace(int64_t start, int64_t end, int64_t maxPoints) {
 folly::coro::Task<MetricDistributionResponse>
 ModelServer::getMetricDistribution(
     const MetricDistributionRequest& request) const {
-  waitForTableData();
   const auto& entity = *request.entity();
-  const auto promisePtr = folly::get_ptr(tablePromises_, entity);
-  if (!promisePtr) {
-    throw std::runtime_error(fmt::format("Unknown entity: '{}'", entity));
-  }
-  const auto& table = co_await (*promisePtr)->getSemiFuture();
+  const auto& table = co_await tableStore_.get(entity);
   const auto& seriesColumn =
       Utils::fetchColumn(table.getColumnData(), *request.metric());
   seriesColumn->requireNumeric("Metric distribution");
@@ -1566,15 +1477,10 @@ ExpressionPropertyValue ModelServer::replaceIdsWithNames(
 
 folly::coro::Task<ExportTableResponse> ModelServer::exportTable(
     const ExportTableRequest& request) const {
-  waitForTableData();
   const auto& tableName = *request.tableName();
-  std::optional<Table> tableFromPromise;
-  const Table* tablePtr = nullptr;
+  const auto* tablePtr = co_await tableStore_.tryGet(tableName);
 
-  if (auto promisePtr = folly::get_ptr(tablePromises_, tableName)) {
-    tableFromPromise = co_await (*promisePtr)->getSemiFuture();
-    tablePtr = &(*tableFromPromise);
-  } else {
+  if (!tablePtr) {
     auto metricCollectionPtr =
         folly::get_ptr(metricCollectionNameToType_, tableName);
     if (metricCollectionPtr) {
