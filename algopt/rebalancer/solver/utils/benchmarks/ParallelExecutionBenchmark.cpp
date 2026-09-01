@@ -227,7 +227,7 @@ BenchmarkResult runBenchmarkPair(
           doWork<kBaselineIterations*(WorkMultiplier)>,
           makeInit(),
           makeAggregate(),
-          facebook::rebalancer::ParallelExecutionConfig{
+          facebook::rebalancer::BatchingExecutionOptions{
               .batchSize = static_cast<size_t>(batchSize)});
       batchTimer.stop();
       folly::doNotOptimizeAway(result);
@@ -525,7 +525,7 @@ void exportToCsv(const std::string& filename) {
         doWork<kBaselineIterations*(w)>,                             \
         makeInit(),                                                  \
         makeAggregate(),                                             \
-        facebook::rebalancer::ParallelExecutionConfig{});            \
+        facebook::rebalancer::BatchingExecutionOptions{});           \
     folly::doNotOptimizeAway(result);                                \
     return n;                                                        \
   }

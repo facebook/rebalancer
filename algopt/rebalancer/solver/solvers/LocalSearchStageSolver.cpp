@@ -85,10 +85,8 @@ void applyStageSolverConfigOverrides(
           config.hottestTraversalConfig().value();
     }
 
-    // if value for 'parallelExecutionConfig' is NOT set at stage level
-    // (LocalSearchSolverSpec), but IS set at stage solver level
-    // (LocalSearchStageSolverSpec), then use the stage solver level value as
-    // a fallback. This allows per-stage customization to take precedence.
+    // A stage-specific parallel execution config takes precedence over the
+    // stage solver-level config.
     if (!stageConfig.parallelExecutionConfig().has_value() &&
         config.parallelExecutionConfig().has_value()) {
       stageConfig.parallelExecutionConfig() =

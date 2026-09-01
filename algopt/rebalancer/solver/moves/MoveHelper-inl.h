@@ -18,6 +18,7 @@
 #include "algopt/rebalancer/solver/utils/ParallelExecution.h"
 
 #include <functional>
+#include <stdexcept>
 
 namespace facebook::rebalancer {
 
@@ -57,22 +58,38 @@ inline auto MoveHelper::execute(
   Timeout<InputCollection> timeoutInputs(inputs, timeout);
   timeoutInputs.start_timer();
 
-  const auto strategy = execSpec
-      ? *execSpec->strategy()
-      : interface::ParallelExecutionStrategy::SLIDING_WINDOW;
-
-  if (strategy == interface::ParallelExecutionStrategy::BATCHING) {
-    ParallelExecutionConfig config;
-    if (execSpec && *execSpec->batchSize() != 0) {
-      config.batchSize = static_cast<size_t>(*execSpec->batchSize());
-    }
-    return executeParallelBatch(
-        executor, timeoutInputs, process, initialize, aggregate, config);
-  } else {
+  const auto executeBatch =
+      [&](const interface::BatchingExecutionConfig& batchingConfig) {
+        BatchingExecutionOptions options;
+        if (*batchingConfig.batchSize() != 0) {
+          options.batchSize = static_cast<size_t>(*batchingConfig.batchSize());
+        }
+        if (*batchingConfig.maxConcurrency() > 0) {
+          options.maxConcurrency =
+              static_cast<size_t>(*batchingConfig.maxConcurrency());
+        }
+        return executeParallelBatch(
+            executor, timeoutInputs, process, initialize, aggregate, options);
+      };
+  const auto executeSlidingWindow = [&]() {
     const int windowSize = static_cast<int>(10 + executor->numThreads());
     return executeParallelWindow(
         executor, timeoutInputs, process, initialize, aggregate, windowSize);
+  };
+
+  if (execSpec) {
+    switch (execSpec->getType()) {
+      case interface::ParallelExecutionConfig::Type::batching: {
+        return executeBatch(execSpec->get_batching());
+      }
+      case interface::ParallelExecutionConfig::Type::slidingWindow:
+        return executeSlidingWindow();
+      case interface::ParallelExecutionConfig::Type::__EMPTY__:
+        throw std::invalid_argument(
+            "Parallel execution config cannot be empty");
+    }
   }
+  return executeSlidingWindow();
 }
 
 template <typename RNG>

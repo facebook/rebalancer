@@ -19,7 +19,9 @@
 #include <gtest/gtest.h>
 
 #include <chrono>
+#include <mutex>
 #include <numeric>
+#include <set>
 #include <thread>
 
 using namespace facebook::rebalancer;
@@ -56,7 +58,7 @@ auto runExecution(
     const InitializeFn& initialize,
     const AggregateFn& aggregate,
     const int window_size = 2,
-    const ParallelExecutionConfig& config = {})
+    const BatchingExecutionOptions& config = {})
     -> std::invoke_result_t<InitializeFn> {
   switch (mode) {
     case ExecutionMode::SlidingWindow:
@@ -200,7 +202,7 @@ TEST(ExecuteParallelBatchTest, CustomBatchSize) {
   auto initialize = []() { return std::vector<int>{}; };
 
   // Test with small batch size
-  const ParallelExecutionConfig smallBatch{.batchSize = 16};
+  const BatchingExecutionOptions smallBatch{.batchSize = 16};
   auto result1 = executeParallelBatch(
       &executor,
       inputs,
@@ -211,7 +213,7 @@ TEST(ExecuteParallelBatchTest, CustomBatchSize) {
   EXPECT_EQ(result1.size(), 500);
 
   // Test with large batch size
-  const ParallelExecutionConfig largeBatch{.batchSize = 512};
+  const BatchingExecutionOptions largeBatch{.batchSize = 512};
   auto result2 = executeParallelBatch(
       &executor,
       inputs,
@@ -231,10 +233,46 @@ TEST(ExecuteParallelBatchTest, DefaultConfig) {
   CPUThreadPoolExecutor executor(2);
   const std::vector<int> inputs = {1, 2, 3, 4, 5};
   const std::function<int(int)> process = [](int x) { return x; };
-  auto initialize = []() { return 0; };
-  auto aggregate = [](int& acc, int&& val) { acc += val; };
+  const auto initialize = []() { return 0; };
+  const auto aggregate = [](int& acc, int&& val) { acc += val; };
 
   auto result =
       executeParallelBatch(&executor, inputs, process, initialize, aggregate);
   EXPECT_EQ(result, 15);
+}
+
+TEST(ExecuteParallelBatchTest, MaxConcurrencyLimitsConsumers) {
+  CPUThreadPoolExecutor executor(4);
+  std::vector<int> inputs(100);
+  std::iota(inputs.begin(), inputs.end(), 1);
+  std::mutex mutex;
+  std::set<std::thread::id> workerThreads;
+  const std::function<int(int)> process = [&](int input) {
+    const std::lock_guard lock(mutex);
+    workerThreads.insert(std::this_thread::get_id());
+    return input;
+  };
+  const auto initialize = []() { return 0; };
+  const auto aggregate = [](int& acc, int&& val) { acc += val; };
+  const BatchingExecutionOptions config{.batchSize = 1, .maxConcurrency = 1};
+
+  const auto result = executeParallelBatch(
+      &executor, inputs, process, initialize, aggregate, config);
+
+  EXPECT_EQ(result, 5050);
+  EXPECT_EQ(workerThreads.size(), 1);
+}
+
+TEST(ExecuteParallelBatchTest, RejectsZeroMaxConcurrency) {
+  CPUThreadPoolExecutor executor(2);
+  const std::vector<int> inputs = {1};
+  const std::function<int(int)> process = [](int input) { return input; };
+  const auto initialize = []() { return 0; };
+  const auto aggregate = [](int& acc, int&& val) { acc += val; };
+  const BatchingExecutionOptions config{.maxConcurrency = 0};
+
+  EXPECT_THROW(
+      executeParallelBatch(
+          &executor, inputs, process, initialize, aggregate, config),
+      std::invalid_argument);
 }

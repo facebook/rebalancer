@@ -158,20 +158,21 @@ struct HottestTraversalConfig {
   1: bool pruneOptimalSubgraphs = false;
 }
 
-// Strategy for parallel move evaluation execution
-enum ParallelExecutionStrategy {
-  // Sliding window: maintains concurrent tasks, best for streaming/unknown sizes
-  SLIDING_WINDOW = 0,
-  // Batching: groups items into fixed-size batches, best for large collections
-  BATCHING = 1,
+struct SlidingWindowExecutionConfig {}
+
+struct BatchingExecutionConfig {
+  // Number of items processed by each batch consumer at a time.
+  1: i32 batchSize = 32;
+  // Maximum concurrent batch consumers, clamped to the executor thread count.
+  // If 0, uses all executor threads.
+  2: i32 maxConcurrency = 24;
 }
 
-// Configuration for parallel move evaluation execution
-struct ParallelExecutionConfig {
-  // Execution strategy to use (default: SLIDING_WINDOW for backward compatibility)
-  1: ParallelExecutionStrategy strategy = ParallelExecutionStrategy.SLIDING_WINDOW;
-  // Batch size for BATCHING strategy (ignored for SLIDING_WINDOW)
-  2: i32 batchSize = 32;
+// IDs 1 and 2 belong to the previous struct representation.
+@thrift.ReserveIds{ids = [1, 2]}
+union ParallelExecutionConfig {
+  3: SlidingWindowExecutionConfig slidingWindow;
+  4: BatchingExecutionConfig batching;
 }
 
 // Minimum improvement a cycle must achieve to justify starting the next cycle.

@@ -20,7 +20,10 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <mutex>
 #include <random>
+#include <set>
+#include <thread>
 
 using namespace folly;
 using namespace std;
@@ -103,15 +106,43 @@ TEST(MoveHelperTest, FindBestWithBatchingStrategy) {
         {});
   };
 
+  interface::BatchingExecutionConfig batchingConfig;
+  batchingConfig.batchSize() = 2;
   interface::ParallelExecutionConfig execSpec;
-  execSpec.strategy() = interface::ParallelExecutionStrategy::BATCHING;
-  execSpec.batchSize() = 2;
+  execSpec.set_batching(std::move(batchingConfig));
 
   auto best = MoveHelper::findBest(&executor, inputs, evaluate, 10, execSpec);
   EXPECT_EQ(5, best.getEvalsCount());
   EXPECT_EQ(-0.2, best.getValue().get(0));
   ASSERT_EQ(1, best.getMoveSet().size());
   EXPECT_EQ(object(1), best.getMoveSet().begin()->getObject());
+}
+
+TEST(MoveHelperTest, MaxConcurrencyLimitsParallelEvaluations) {
+  CPUThreadPoolExecutor executor(10);
+  const vector<int> inputs = {-2, -1, 0, 1, 2};
+  std::mutex mutex;
+  std::set<std::thread::id> workerThreads;
+
+  const std::function<MoveResult(int)> evaluate = [&](int /*input*/) {
+    {
+      const std::lock_guard lock(mutex);
+      workerThreads.insert(std::this_thread::get_id());
+    }
+    return MoveResult::makeValid(
+        MoveSet(), GlobalObjectiveValue({0}), GlobalObjectiveValue({0}));
+  };
+
+  interface::BatchingExecutionConfig batchingConfig;
+  batchingConfig.batchSize() = 1;
+  batchingConfig.maxConcurrency() = 1;
+  interface::ParallelExecutionConfig execSpec;
+  execSpec.set_batching(std::move(batchingConfig));
+
+  const auto best =
+      MoveHelper::findBest(&executor, inputs, evaluate, 10, execSpec);
+  EXPECT_EQ(5, best.getEvalsCount());
+  EXPECT_EQ(1, workerThreads.size());
 }
 
 TEST(MoveHelperTest, FindBestWithSlidingWindowStrategy) {
@@ -129,7 +160,7 @@ TEST(MoveHelperTest, FindBestWithSlidingWindowStrategy) {
   };
 
   interface::ParallelExecutionConfig execSpec;
-  execSpec.strategy() = interface::ParallelExecutionStrategy::SLIDING_WINDOW;
+  execSpec.set_slidingWindow(interface::SlidingWindowExecutionConfig{});
 
   auto best = MoveHelper::findBest(&executor, inputs, evaluate, 10, execSpec);
   EXPECT_EQ(5, best.getEvalsCount());

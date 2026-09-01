@@ -25,6 +25,8 @@
 #include <atomic>
 #include <cstddef>
 #include <memory>
+#include <optional>
+#include <stdexcept>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -129,12 +131,15 @@ FOLLY_ALWAYS_INLINE void consumeBatches(
 } // namespace detail
 
 // Configuration for batch-based parallel execution.
-struct ParallelExecutionConfig {
+struct BatchingExecutionOptions {
   // Number of items to process per batch.
   // Larger batches reduce queue contention but may cause uneven load
   // distribution. Smaller batches improve load balancing but increase queue
   // overhead.
   size_t batchSize = detail::kDefaultBatchSize;
+  // Maximum number of concurrent batch consumers. If unset, uses all threads
+  // in the executor.
+  std::optional<size_t> maxConcurrency;
 };
 
 // Sliding window parallel execution: maintains up to windowSize concurrent
@@ -267,7 +272,7 @@ auto executeParallelBatch(
     const ProcessFn& process,
     const InitializeFn& initialize,
     const AggregateFn& aggregate,
-    const ParallelExecutionConfig& config = {})
+    const BatchingExecutionOptions& config = {})
     -> std::invoke_result_t<InitializeFn> {
   using Accumulator = std::invoke_result_t<InitializeFn>;
   using Input = typename Collection::value_type;
@@ -279,8 +284,13 @@ auto executeParallelBatch(
   if (FOLLY_UNLIKELY(config.batchSize == 0)) {
     throw std::invalid_argument("batchSize must be greater than 0");
   }
+  if (FOLLY_UNLIKELY(config.maxConcurrency && *config.maxConcurrency == 0)) {
+    throw std::invalid_argument("maxConcurrency must be greater than 0");
+  }
 
-  const auto numConsumers = std::max(size_t{1}, executor->numThreads());
+  const auto executorConcurrency = std::max(size_t{1}, executor->numThreads());
+  const auto numConsumers = std::min(
+      executorConcurrency, config.maxConcurrency.value_or(executorConcurrency));
 
   using BatchPtr = detail::BatchPtr<Input>;
   folly::MPMCQueue<BatchPtr> queue(detail::kQueueCapacity);

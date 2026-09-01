@@ -1048,9 +1048,11 @@ TEST_F(MoveTypeFactoryTest, createSingleRandomStratifiedMoveType) {
 
 TEST_F(MoveTypeFactoryTest, ParallelExecutionConfigPropagation) {
   LocalSearchSolverSpec config;
+  BatchingExecutionConfig batchingConfig;
+  batchingConfig.batchSize() = 128;
+  batchingConfig.maxConcurrency() = 7;
   ParallelExecutionConfig execSpec;
-  execSpec.strategy() = ParallelExecutionStrategy::BATCHING;
-  execSpec.batchSize() = 128;
+  execSpec.set_batching(std::move(batchingConfig));
   config.parallelExecutionConfig() = execSpec;
 
   config.moveTypeList()->push_back(
@@ -1062,8 +1064,9 @@ TEST_F(MoveTypeFactoryTest, ParallelExecutionConfigPropagation) {
   const auto& move = moves.at(0);
   auto retrievedSpec = move->getParallelExecutionConfig();
   ASSERT_TRUE(retrievedSpec.has_value());
-  EXPECT_EQ(*retrievedSpec->strategy(), ParallelExecutionStrategy::BATCHING);
-  EXPECT_EQ(*retrievedSpec->batchSize(), 128);
+  ASSERT_EQ(retrievedSpec->getType(), ParallelExecutionConfig::Type::batching);
+  EXPECT_EQ(*retrievedSpec->get_batching().batchSize(), 128);
+  EXPECT_EQ(*retrievedSpec->get_batching().maxConcurrency(), 7);
 }
 
 TEST_F(MoveTypeFactoryTest, NoParallelExecutionConfigReturnsNullopt) {
@@ -1083,7 +1086,7 @@ TEST_F(MoveTypeFactoryTest, NoParallelExecutionConfigReturnsNullopt) {
 TEST_F(MoveTypeFactoryTest, AllMoveTypesGetSameParallelExecutionConfig) {
   LocalSearchSolverSpec config;
   ParallelExecutionConfig execSpec;
-  execSpec.strategy() = ParallelExecutionStrategy::SLIDING_WINDOW;
+  execSpec.set_slidingWindow(SlidingWindowExecutionConfig{});
   config.parallelExecutionConfig() = execSpec;
 
   config.moveTypeList()->push_back(
@@ -1100,7 +1103,7 @@ TEST_F(MoveTypeFactoryTest, AllMoveTypesGetSameParallelExecutionConfig) {
     auto retrievedSpec = move->getParallelExecutionConfig();
     ASSERT_TRUE(retrievedSpec.has_value());
     EXPECT_EQ(
-        *retrievedSpec->strategy(), ParallelExecutionStrategy::SLIDING_WINDOW);
+        retrievedSpec->getType(), ParallelExecutionConfig::Type::slidingWindow);
   }
 }
 

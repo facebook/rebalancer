@@ -142,7 +142,6 @@ EndReason = Literal[
 ]
 
 # SolverSpecs.thrift
-ParallelExecutionStrategy = Literal["SLIDING_WINDOW", "BATCHING"]
 OptimalSolverPackage = Literal["XPRESS", "GUROBI", "HIGHS"]
 MultiObjectiveSolveType = Literal["BLENDED", "HIERARCHICAL"]
 MoveStrategyType = Literal[
@@ -850,9 +849,20 @@ class HottestTraversalConfig(TypedDict, total=False):
     pruneOptimalSubgraphs: bool  # default False
 
 
-class ParallelExecutionConfig(TypedDict, total=False):
-    strategy: ParallelExecutionStrategy  # default "SLIDING_WINDOW"
+class SlidingWindowExecutionConfig(TypedDict, total=False):
+    pass
+
+
+class BatchingExecutionConfig(TypedDict, total=False):
     batchSize: int  # default 32
+    maxConcurrency: int  # default 24
+
+
+class ParallelExecutionConfig(TypedDict, total=False):
+    """Union: exactly one arm must be present."""
+
+    slidingWindow: NotRequired[SlidingWindowExecutionConfig]
+    batching: NotRequired[BatchingExecutionConfig]
 
 
 class MinCycleObjectiveImprovementConfig(TypedDict, total=False):
@@ -1173,8 +1183,8 @@ class LocalSearchSolverSpec(TypedDict, total=False):
     customEquivalenceSetConfig: CustomEquivalenceSetConfig
     moveTypeList: list[MoveTypeSpec]
     hottestTraversalConfig: HottestTraversalConfig
-    parallelExecutionConfig: ParallelExecutionConfig
     minCycleObjectiveImprovement: MinCycleObjectiveImprovementConfig
+    parallelExecutionConfig: ParallelExecutionConfig
     # Deprecated fields below — present so that saved scenarios still validate.
     moveTypes: list[str]
     randomContainerBatchSize: int

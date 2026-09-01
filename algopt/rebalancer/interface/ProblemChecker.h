@@ -211,6 +211,7 @@ class ProblemChecker {
   static void checkSolverSpec(const interface::OptimalSolverSpec& solverSpec);
   void checkSolverSpec(const LocalSearchSolverSpec& spec) const;
   void checkSolverSpec(const LocalSearchStageSolverSpec& spec) const;
+  static void checkExecutionConfig(const ParallelExecutionConfig& config);
   static void checkMultiStageConfig(const MultiStageConfig& multiStageConfig);
 
   static void checkAbsoluteEpsilon(const double absoluteEpsilon);

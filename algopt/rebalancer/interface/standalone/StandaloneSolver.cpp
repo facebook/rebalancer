@@ -133,6 +133,14 @@ DEFINE_int32(
     "Only used when --parallel_execution_strategy=batching. "
     "If 0, uses default (32).");
 
+DEFINE_int32(
+    batching_max_concurrency,
+    -1,
+    "Maximum concurrent batch consumers for the batching execution strategy. "
+    "Only used when --parallel_execution_strategy=batching. "
+    "-1 uses the configured default, 0 uses all executor threads, and positive "
+    "values set an explicit limit.");
+
 DEFINE_bool(
     enable_invalid_move_filter,
     false,
@@ -206,21 +214,35 @@ makeParallelExecutionConfigFromFlags() {
   interface::ParallelExecutionConfig spec;
 
   if (FLAGS_parallel_execution_strategy == "sliding_window") {
-    spec.strategy() = interface::ParallelExecutionStrategy::SLIDING_WINDOW;
+    spec.set_slidingWindow(interface::SlidingWindowExecutionConfig{});
     XLOGF(
         INFO,
         "Overriding parallel execution: strategy={}",
         FLAGS_parallel_execution_strategy);
   } else if (FLAGS_parallel_execution_strategy == "batching") {
-    spec.strategy() = interface::ParallelExecutionStrategy::BATCHING;
-    if (FLAGS_batch_size > 0) {
-      spec.batchSize() = FLAGS_batch_size;
+    if (FLAGS_batching_max_concurrency < -1) {
+      throw std::runtime_error(
+          fmt::format(
+              "Invalid batching_max_concurrency '{}'. Expected -1 or greater",
+              FLAGS_batching_max_concurrency));
     }
+    interface::BatchingExecutionConfig batchingConfig;
+    if (FLAGS_batch_size > 0) {
+      batchingConfig.batchSize() = FLAGS_batch_size;
+    }
+    if (FLAGS_batching_max_concurrency >= 0) {
+      batchingConfig.maxConcurrency() = FLAGS_batching_max_concurrency;
+    }
+    const auto batchSize = *batchingConfig.batchSize();
+    const auto maxConcurrency = *batchingConfig.maxConcurrency();
+    spec.set_batching(std::move(batchingConfig));
     XLOGF(
         INFO,
-        "Overriding parallel execution: strategy={}, batchSize={}",
+        "Overriding parallel execution: strategy={}, batchSize={}, "
+        "maxConcurrency={}",
         FLAGS_parallel_execution_strategy,
-        *spec.batchSize());
+        batchSize,
+        maxConcurrency);
   } else {
     throw std::runtime_error(
         fmt::format(

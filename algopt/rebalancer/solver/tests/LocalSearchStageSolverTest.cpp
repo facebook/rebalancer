@@ -23,21 +23,22 @@ namespace facebook::rebalancer::tests {
 
 namespace {
 
-// Solver level (LocalSearchStageSolverSpec) sets BATCHING/128.
+// Solver level (LocalSearchStageSolverSpec) sets batching/128.
 // Stage 0 sets nothing at stage level, so it must take the solver level value.
-// Stage 1 sets SLIDING_WINDOW at stage level, which must override it.
+// Stage 1 sets sliding-window at stage level, which must override it.
 LocalSearchStageSolverSpec makeTwoStageSpec() {
   LocalSearchStageSolverSpec spec;
 
+  BatchingExecutionConfig batchingConfig;
+  batchingConfig.batchSize() = 128;
   ParallelExecutionConfig solverLevelConfig;
-  solverLevelConfig.strategy() = ParallelExecutionStrategy::BATCHING;
-  solverLevelConfig.batchSize() = 128;
+  solverLevelConfig.set_batching(std::move(batchingConfig));
   spec.parallelExecutionConfig() = solverLevelConfig;
 
   spec.stageSpecs()->emplace_back();
 
   ParallelExecutionConfig stageLevelConfig;
-  stageLevelConfig.strategy() = ParallelExecutionStrategy::SLIDING_WINDOW;
+  stageLevelConfig.set_slidingWindow(SlidingWindowExecutionConfig{});
   spec.stageSpecs()->emplace_back();
   spec.stageSpecs()->back().solverSpec()->parallelExecutionConfig() =
       stageLevelConfig;
@@ -66,8 +67,8 @@ TEST(LocalSearchStageSolverTest, StageWithoutConfigTakesSolverLevelConfig) {
 
   const auto config = getStageConfig(solver, 0);
   ASSERT_TRUE(config.has_value());
-  EXPECT_EQ(*config->strategy(), ParallelExecutionStrategy::BATCHING);
-  EXPECT_EQ(*config->batchSize(), 128);
+  ASSERT_EQ(config->getType(), ParallelExecutionConfig::Type::batching);
+  EXPECT_EQ(*config->get_batching().batchSize(), 128);
 }
 
 TEST(LocalSearchStageSolverTest, StageLevelConfigOverridesSolverLevelConfig) {
@@ -75,7 +76,7 @@ TEST(LocalSearchStageSolverTest, StageLevelConfigOverridesSolverLevelConfig) {
 
   const auto config = getStageConfig(solver, 1);
   ASSERT_TRUE(config.has_value());
-  EXPECT_EQ(*config->strategy(), ParallelExecutionStrategy::SLIDING_WINDOW);
+  EXPECT_EQ(config->getType(), ParallelExecutionConfig::Type::slidingWindow);
 }
 
 } // namespace facebook::rebalancer::tests

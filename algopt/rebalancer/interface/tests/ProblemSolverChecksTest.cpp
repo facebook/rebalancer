@@ -3163,6 +3163,45 @@ TEST_P(ProblemSolverChecksTest, MultiStageConfigNoStagesTest) {
       "MultiStageConfig stage list must be non-empty");
 }
 
+TEST_P(ProblemSolverChecksTest, EmptyExecutionConfig) {
+  auto solver = makeInitializedSolver(GetParam());
+  ASSERT_NE(solver, nullptr);
+  LocalSearchSolverSpec solverSpec;
+  solverSpec.moveTypeList()->push_back(
+      ProblemSolver::makeMoveTypeSpec(SingleMoveTypeSpec{}));
+  solverSpec.parallelExecutionConfig() = ParallelExecutionConfig{};
+
+  REBALANCER_EXPECT_RUNTIME_ERROR(
+      solver->addSolver(solverSpec), "ParallelExecutionConfig cannot be empty");
+}
+
+TEST_P(ProblemSolverChecksTest, EmptyStageExecutionConfig) {
+  auto solver = makeInitializedSolver(GetParam());
+  ASSERT_NE(solver, nullptr);
+  LocalSearchStageSolverSpec solverSpec;
+  solverSpec.parallelExecutionConfig() = ParallelExecutionConfig{};
+
+  REBALANCER_EXPECT_RUNTIME_ERROR(
+      solver->addSolver(solverSpec), "ParallelExecutionConfig cannot be empty");
+}
+
+TEST_P(ProblemSolverChecksTest, NegativeBatchingMaxConcurrency) {
+  auto solver = makeInitializedSolver(GetParam());
+  ASSERT_NE(solver, nullptr);
+  BatchingExecutionConfig batchingConfig;
+  batchingConfig.maxConcurrency() = -1;
+  ParallelExecutionConfig executionConfig;
+  executionConfig.set_batching(std::move(batchingConfig));
+  LocalSearchSolverSpec solverSpec;
+  solverSpec.moveTypeList()->push_back(
+      ProblemSolver::makeMoveTypeSpec(SingleMoveTypeSpec{}));
+  solverSpec.parallelExecutionConfig() = std::move(executionConfig);
+
+  REBALANCER_EXPECT_RUNTIME_ERROR(
+      solver->addSolver(solverSpec),
+      "expected BatchingExecutionConfig.maxConcurrency to be non-negative but got -1");
+}
+
 TEST_P(ProblemSolverChecksTest, MultiStageConfigNegativeStageTest) {
   auto solver = makeInitializedSolver(GetParam());
   LocalSearchStageSolverSpec stageSolverSpec;
