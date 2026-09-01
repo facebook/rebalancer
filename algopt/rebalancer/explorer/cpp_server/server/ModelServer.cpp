@@ -165,17 +165,20 @@ TreeSearchResult findMatchingChildren(
 }
 } // namespace
 
-ModelServer::ModelServer(interface::Bundle&& bundle) {
-  auto explorerModel = LoadModel::buildData(std::move(bundle));
-  problemSpec_ = std::move(explorerModel.problemSpec);
-  universe_ = std::move(explorerModel.universe);
-  solution_ = std::move(explorerModel.solution);
-  materialized_ = std::move(explorerModel.materialized);
-  initialAssignment_ =
-      rebalancer::Assignment(materialized_->updatedInitialAssignment);
-  finalAssignment_ = std::move(explorerModel.finalAssignment);
-  dynamicDimensionNames_ = std::move(explorerModel.dynamicDimensionNames);
-  solverSpec_ = problemSpec_.strategy()->solvers()->at(0);
+ModelServer::ModelServer(interface::Bundle&& bundle)
+    : ModelServer(LoadModel::buildData(std::move(bundle))) {}
+
+ModelServer::ModelServer(ExplorerModel&& explorerModel)
+    : problemSpec_(std::move(explorerModel.problemSpec)),
+      universe_(std::move(explorerModel.universe)),
+      initialAssignment_(explorerModel.materialized->updatedInitialAssignment),
+      finalAssignment_(std::move(explorerModel.finalAssignment)),
+      equivalenceSetsData_(std::move(explorerModel.equivalenceSetsData)),
+      solution_(std::move(explorerModel.solution)),
+      materialized_(std::move(explorerModel.materialized)),
+      dynamicDimensionNames_(std::move(explorerModel.dynamicDimensionNames)),
+      problem_(std::move(explorerModel.problem)),
+      solverSpec_(problemSpec_.strategy()->solvers()->at(0)) {
   if (materialized_->metrics) {
     // Build the metricCollectionNameToType_ map synchronously (cheap — just
     // iterates available collections). The expensive fullApply is deferred
@@ -190,9 +193,6 @@ ModelServer::ModelServer(interface::Bundle&& bundle) {
       metricCollectionNameToType_.emplace(std::move(enumName), type);
     }
   }
-  problem_ = std::move(explorerModel.problem);
-  equivalenceSetsData_ = std::move(explorerModel.equivalenceSetsData);
-
   for (auto partitionId : universe_->getPartitionIds()) {
     partitionNames_.insert(universe_->getEntityName(partitionId));
   }

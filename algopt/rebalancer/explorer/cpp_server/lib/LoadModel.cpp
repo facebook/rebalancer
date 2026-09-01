@@ -63,6 +63,11 @@ struct DynamicObjectDimensionColumns {
 
 using ObjectIdToContainerId = std::vector<ContainerId>;
 
+struct ObjectAssignments {
+  ObjectIdToContainerId objectIdToInitialContainerId;
+  ObjectIdToContainerId objectIdToFinalContainerId;
+};
+
 ObjectIdToContainerId buildObjectIdToContainerId(
     const Map<ContainerId, std::vector<ObjectId>>& containerIdToObjectIds,
     const std::size_t objectCount) {
@@ -336,28 +341,15 @@ buildStaticObjectDimensionCols(
   return columns;
 }
 
-static std::pair<Map<ObjectId, ContainerId>, Map<ObjectId, ContainerId>>
-buildObjectToContainer(
+static ObjectAssignments buildObjectAssignments(
     const Map<ContainerId, std::vector<ObjectId>>& finalAssignment,
     const Universe& universe) {
-  Map<ObjectId, ContainerId> objectIdToInitialContainerId;
-  Map<ObjectId, ContainerId> objectIdToFinalContainerId;
-
-  for (auto containerId : universe.getContainers().getContainerIds()) {
-    for (auto objectId :
-         universe.getContainers().getInitialObjectIds(containerId)) {
-      objectIdToInitialContainerId.emplace(objectId, containerId);
-    }
-
-    if (finalAssignment.contains(containerId)) {
-      for (auto objectId : finalAssignment.at(containerId)) {
-        objectIdToFinalContainerId.emplace(objectId, containerId);
-      }
-    }
-  }
-  return std::pair(
-      std::move(objectIdToInitialContainerId),
-      std::move(objectIdToFinalContainerId));
+  const auto objectCount = universe.getObjects().getObjectIds().size();
+  return {
+      .objectIdToInitialContainerId = buildObjectIdToContainerId(
+          universe.getContainers().getInitialAssignment(), objectCount),
+      .objectIdToFinalContainerId =
+          buildObjectIdToContainerId(finalAssignment, objectCount)};
 }
 
 template <typename RowKey>
@@ -398,8 +390,11 @@ static std::vector<std::shared_ptr<const Column>> buildScopeDimensionCols(
 static std::vector<std::shared_ptr<const Column>> buildAssignmentCols(
     const TableBuilder<ObjectId>& builder,
     const Universe& universe,
-    const ObjectIdToContainerId& initialObjectIdToContainerId,
-    const ObjectIdToContainerId& finalObjectIdToContainerId) {
+    const ObjectAssignments& objectAssignments) {
+  const auto& initialObjectIdToContainerId =
+      objectAssignments.objectIdToInitialContainerId;
+  const auto& finalObjectIdToContainerId =
+      objectAssignments.objectIdToFinalContainerId;
   std::vector<std::shared_ptr<const Column>> columns;
   columns.reserve(2 * universe.getScopeIds().size());
   const auto buildAssignmentColumn =
@@ -445,8 +440,11 @@ getInitialAndFinalAbsoluteUtils(
     DimensionId dimensionId,
     ScopeId scopeId,
     const Universe& universe,
-    const Map<ObjectId, ContainerId>& objectIdToInitialContainerId,
-    const Map<ObjectId, ContainerId>& objectIdToFinalContainerId) {
+    const ObjectAssignments& objectAssignments) {
+  const auto& objectIdToInitialContainerId =
+      objectAssignments.objectIdToInitialContainerId;
+  const auto& objectIdToFinalContainerId =
+      objectAssignments.objectIdToFinalContainerId;
   Map<ScopeItemId, double> scopeItemIdToInitialUtilization;
   Map<ScopeItemId, double> scopeItemIdToFinalUtilization;
   const auto& scope = universe.getScope(scopeId);
@@ -476,7 +474,8 @@ getInitialAndFinalAbsoluteUtils(
     Map<ScopeItemId, double> scopeItemIdToInitialScalarUtilization;
     Map<ScopeItemId, double> scopeItemIdToFinalScalarUtilization;
     for (const auto objectId : universe.getObjects().getObjectIds()) {
-      const auto srcContainerId = objectIdToInitialContainerId.at(objectId);
+      const auto srcContainerId =
+          objectIdToInitialContainerId.at(objectId.asIndex());
       const auto srcScopeItemId = scope.getScopeItemId(srcContainerId);
       if (srcScopeItemId) {
         scopeItemIdToInitialScalarUtilization[*srcScopeItemId] +=
@@ -485,13 +484,13 @@ getInitialAndFinalAbsoluteUtils(
 
       // it is possible that the object may not be in the final assignment if
       // solution file is missing
-      const auto* dstContainerIdPtr =
-          folly::get_ptr(objectIdToFinalContainerId, objectId);
-      if (!dstContainerIdPtr) {
+      if (objectIdToFinalContainerId.empty()) {
         continue;
       }
 
-      const auto dstScopeItemId = scope.getScopeItemId(*dstContainerIdPtr);
+      const auto dstContainerId =
+          objectIdToFinalContainerId.at(objectId.asIndex());
+      const auto dstScopeItemId = scope.getScopeItemId(dstContainerId);
       if (dstScopeItemId) {
         scopeItemIdToFinalScalarUtilization[*dstScopeItemId] +=
             scalarDimension.getValue(objectId, *dstScopeItemId);
@@ -513,16 +512,11 @@ getScopeItemToInitialAndFinalRelativeUtils(
     DimensionId dimensionId,
     const Universe& universe,
     ScopeId scopeId,
-    const Map<ObjectId, ContainerId>& objectIdToInitialContainerId,
-    const Map<ObjectId, ContainerId>& objectIdToFinalContainerId) {
+    const ObjectAssignments& objectAssignments) {
   const auto& scope = universe.getScope(scopeId);
   auto [scopeItemIdToInitialUtilization, scopeItemIdToFinalUtilization] =
       getInitialAndFinalAbsoluteUtils(
-          dimensionId,
-          scopeId,
-          universe,
-          objectIdToInitialContainerId,
-          objectIdToFinalContainerId);
+          dimensionId, scopeId, universe, objectAssignments);
 
   const auto& dimension = scope.getDimension(dimensionId);
   for (const auto scopeItemId : scope.getScopeItemIds()) {
@@ -549,8 +543,7 @@ buildUtilizationCols(
     const TableBuilder<RowKey>& builder,
     const Universe& universe,
     ScopeId scopeId,
-    const Map<ObjectId, ContainerId>& objectIdToInitialContainerId,
-    const Map<ObjectId, ContainerId>& objectIdToFinalContainerId,
+    const ObjectAssignments& objectAssignments,
     std::shared_ptr<algopt::treeprof::ExecutorWrapper> executor) {
   XLOGF(
       INFO,
@@ -591,11 +584,7 @@ buildUtilizationCols(
         }
 
         return getScopeItemToInitialAndFinalRelativeUtils(
-            dimensionId,
-            universe,
-            scopeId,
-            objectIdToInitialContainerId,
-            objectIdToFinalContainerId);
+            dimensionId, universe, scopeId, objectAssignments);
       },
       [&columns, &makeUtilizationColumn, &universe](
           auto&& initialAndFinalUtilMaps, auto it) {
@@ -706,8 +695,7 @@ static std::shared_ptr<const Column> buildScopeNameColumn(
 
 static folly::coro::Task<Table> buildContainerTable(
     const Universe& universe,
-    const Map<ObjectId, ContainerId>& objectIdToInitialContainerId,
-    const Map<ObjectId, ContainerId>& objectIdToFinalContainerId,
+    const ObjectAssignments& objectAssignments,
     std::shared_ptr<algopt::treeprof::ExecutorWrapper> executor) {
   const auto containerIds =
       universe.getContainers().getContainerIds() | ranges::to<std::vector>;
@@ -725,8 +713,7 @@ static folly::coro::Task<Table> buildContainerTable(
           builder,
           universe,
           containerScopeId,
-          objectIdToInitialContainerId,
-          objectIdToFinalContainerId,
+          objectAssignments,
           std::move(executor)));
   co_return builder.build();
 }
@@ -734,8 +721,7 @@ static folly::coro::Task<Table> buildContainerTable(
 static folly::coro::Task<Table> buildScopeTable(
     const Universe& universe,
     const ScopeId scopeId,
-    const Map<ObjectId, ContainerId>& objectIdToInitialContainerId,
-    const Map<ObjectId, ContainerId>& objectIdToFinalContainerId,
+    const ObjectAssignments& objectAssignments,
     std::shared_ptr<algopt::treeprof::ExecutorWrapper> executor) {
   const auto& scopeItemIds = universe.getScope(scopeId).getScopeItemIds();
   TableBuilder<ScopeItemId> builder(scopeItemIds);
@@ -743,28 +729,18 @@ static folly::coro::Task<Table> buildScopeTable(
   builder.addSorted(buildScopeDimensionCols(builder, universe, scopeId));
   builder.addSorted(
       co_await buildUtilizationCols(
-          builder,
-          universe,
-          scopeId,
-          objectIdToInitialContainerId,
-          objectIdToFinalContainerId,
-          std::move(executor)));
+          builder, universe, scopeId, objectAssignments, std::move(executor)));
   co_return builder.build();
 }
 
 static folly::coro::Task<Map<std::string, Table>> buildPrebuiltTables(
     const Universe& universe,
-    const Map<ObjectId, ContainerId>& objectIdToInitialContainerId,
-    const Map<ObjectId, ContainerId>& objectIdToFinalContainerId,
+    const ObjectAssignments& objectAssignments,
     const std::shared_ptr<algopt::treeprof::ExecutorWrapper>& executor) {
   Map<std::string, Table> tableNameToTable;
   tableNameToTable.emplace(
       universe.getContainerTypeName(),
-      co_await buildContainerTable(
-          universe,
-          objectIdToInitialContainerId,
-          objectIdToFinalContainerId,
-          executor));
+      co_await buildContainerTable(universe, objectAssignments, executor));
   for (const auto scopeId : universe.getScopeIds()) {
     const auto& scopeName = universe.getEntityName(scopeId);
     if (scopeName == universe.getContainerTypeName()) {
@@ -773,11 +749,7 @@ static folly::coro::Task<Map<std::string, Table>> buildPrebuiltTables(
     tableNameToTable.emplace(
         scopeName,
         co_await buildScopeTable(
-            universe,
-            scopeId,
-            objectIdToInitialContainerId,
-            objectIdToFinalContainerId,
-            executor));
+            universe, scopeId, objectAssignments, executor));
   }
   co_return tableNameToTable;
 }
@@ -865,8 +837,11 @@ buildDynamicObjectDimensionColumnsAsync(
     DimensionId dimId,
     int index,
     std::string scalarDimName,
-    const ObjectIdToContainerId& initialObjectIdToContainerId,
-    const ObjectIdToContainerId& finalObjectIdToContainerId) {
+    const ObjectAssignments& objectAssignments) {
+  const auto& initialObjectIdToContainerId =
+      objectAssignments.objectIdToInitialContainerId;
+  const auto& finalObjectIdToContainerId =
+      objectAssignments.objectIdToFinalContainerId;
   const algopt::treeprof::EventRecorder event(
       "Build dynamic object dimension cols");
   XLOG(INFO) << "Building object dimension cols for " << scalarDimName;
@@ -907,8 +882,7 @@ static folly::coro::Task<std::vector<DynamicObjectDimensionColumns>>
 buildAllDynamicObjectDimensionColumnsAsync(
     const TableBuilder<ObjectId>& builder,
     const Universe& universe,
-    const ObjectIdToContainerId& initialObjectIdToContainerId,
-    const ObjectIdToContainerId& finalObjectIdToContainerId,
+    const ObjectAssignments& objectAssignments,
     folly::Executor* executor) {
   const algopt::treeprof::EventRecorder event(
       "Build dynamic object dimension cols async");
@@ -934,8 +908,7 @@ buildAllDynamicObjectDimensionColumnsAsync(
                     dimId,
                     i,
                     std::move(scalarDimName),
-                    initialObjectIdToContainerId,
-                    finalObjectIdToContainerId)));
+                    objectAssignments)));
       }
     }
   }
@@ -950,10 +923,8 @@ folly::coro::Task<Table> LoadModel::buildObjectTable(
   const auto objectIds =
       universe.getObjects().getObjectIds() | ranges::to<std::vector>;
   TableBuilder<ObjectId> builder(objectIds);
-  const auto initialObjectIdToContainerId = buildObjectIdToContainerId(
-      universe.getContainers().getInitialAssignment(), objectIds.size());
-  const auto finalObjectIdToContainerId =
-      buildObjectIdToContainerId(containerIdToFinalObjectIds, objectIds.size());
+  const auto objectAssignments =
+      buildObjectAssignments(containerIdToFinalObjectIds, universe);
 
   builder.add(buildObjectCol(builder, universe));
   for (auto& column : buildMovableCols(builder, universe)) {
@@ -961,20 +932,13 @@ folly::coro::Task<Table> LoadModel::buildObjectTable(
   }
   builder.addSorted(buildStaticObjectDimensionCols(builder, universe));
   for (auto& columns : co_await buildAllDynamicObjectDimensionColumnsAsync(
-           builder,
-           universe,
-           initialObjectIdToContainerId,
-           finalObjectIdToContainerId,
-           executor)) {
+           builder, universe, objectAssignments, executor)) {
     builder.add(std::move(columns.source)).add(std::move(columns.destination));
   }
 
   builder.addSorted(buildPartitionCols(builder, universe, equivalenceSetsData));
-  for (auto& column : buildAssignmentCols(
-           builder,
-           universe,
-           initialObjectIdToContainerId,
-           finalObjectIdToContainerId)) {
+  for (auto& column :
+       buildAssignmentCols(builder, universe, objectAssignments)) {
     builder.add(std::move(column));
   }
   co_return builder.build();
@@ -1026,14 +990,11 @@ ExplorerModel LoadModel::buildData(interface::Bundle&& bundle) {
   auto equivalenceSetsData =
       buildEquivalenceSetData(problem->makeEquivalenceSetInfo(), *universe);
 
-  auto [objectIdToInitialContainerId, objectIdToFinalContainerId] =
-      buildObjectToContainer(finalAssignment, *universe);
+  const auto objectAssignments =
+      buildObjectAssignments(finalAssignment, *universe);
 
-  auto prebuiltTables = folly::coro::blockingWait(buildPrebuiltTables(
-      *universe,
-      objectIdToInitialContainerId,
-      objectIdToFinalContainerId,
-      wrappedExecutor));
+  auto prebuiltTables = folly::coro::blockingWait(
+      buildPrebuiltTables(*universe, objectAssignments, wrappedExecutor));
 
   auto dynamicDimensionNames = getDynamicDimensionNames(*universe);
 

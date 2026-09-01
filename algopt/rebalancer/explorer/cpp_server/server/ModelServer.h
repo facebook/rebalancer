@@ -135,6 +135,8 @@ class ModelServer {
   int getExpressionCount() const;
 
  private:
+  explicit ModelServer(ExplorerModel&& explorerModel);
+
   rebalancer::Assignment getInitialAssignment() const;
   entities::Map<entities::ObjectId, entities::ContainerId> getObjectToContainer(
       const Assignment& assignment) const;
