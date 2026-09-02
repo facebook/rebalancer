@@ -1081,7 +1081,7 @@ struct ScopeItemPair {
 //    B_i = # of buffer servers in failure domain i
 // Implementation 1: MAX over failure scenarios
 //  { MAX_i (S_i + B_i) } - SUM(B_i)   [<= 0]
-// Implmentation 2: SUM over failure scenarios
+// Implementation 2: SUM over failure scenarios
 //  SUM_i { MAX( 0,  (S_i + B_i) - SUM_i(B_i)) }
 //
 // The alternate implementation is more friendly to local search

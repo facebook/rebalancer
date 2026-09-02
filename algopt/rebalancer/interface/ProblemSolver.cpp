@@ -688,7 +688,7 @@ AssignmentSolution ProblemSolver::solve() {
 
     // stop profiling and store the hierarchy tree in solution object
     treeProfiler.stop();
-    CoreSolver::printAndLogHierachicalProfile(
+    CoreSolver::printAndLogHierarchicalProfile(
         treeProfiler.getRoot(), *solution.value().problemProfile(), logger_);
     logProblemSetupTime();
     return solution.value();

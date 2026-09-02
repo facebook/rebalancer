@@ -108,7 +108,7 @@ AssignmentSolution RebalancerReplayer::replay(
       logger,
       std::move(learnedInvalidMoveFilter));
   treeProfiler.stop();
-  CoreSolver::printAndLogHierachicalProfile(
+  CoreSolver::printAndLogHierarchicalProfile(
       treeProfiler.getRoot(), *solution.problemProfile(), logger);
   return solution;
 }

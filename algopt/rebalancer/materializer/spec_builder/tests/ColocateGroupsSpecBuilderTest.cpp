@@ -137,7 +137,7 @@ CO_TEST_P(ColocateGroupsSpecBuilderTest, Goal) {
   spec.limits()->globalLimit() = 2;
   goal =
       co_await ColocateGroupsSpecBuilder(universe, spec).goalCoro(exprBuilder);
-  // value should be 0 as we allow objects in partition to span accross 2 scope
+  // value should be 0 as we allow objects in partition to span across 2 scope
   // items
   EXPECT_NEAR(
       0,

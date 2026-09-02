@@ -56,7 +56,7 @@ enum class ApplyStatus {
 // Therefore, we assign these variables to special subproblem. Index Zero is
 // chosen because subproblem partitionIds are guaranteed to be >= 1, and also
 // because partitionHeuristic over variables with partition zero in Gurobi makes
-// them part of of all subproblems.
+// them part of all subproblems.
 constexpr int SPECIAL_SUBPROBLEM_ID = 0;
 
 class DestinationsToExploreGenerator;

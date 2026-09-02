@@ -156,7 +156,7 @@ namespace interface {
 
 using Timer = facebook::algopt::Timer;
 
-void CoreSolver::printAndLogHierachicalProfile(
+void CoreSolver::printAndLogHierarchicalProfile(
     std::shared_ptr<const algopt::treeprof::Event> hierarchyTreeRoot,
     ProblemProfile& problemProfile,
     std::shared_ptr<RebalancerLog> logger) {

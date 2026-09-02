@@ -771,7 +771,7 @@ static void runInstance(Bundle&& bundle) {
         learnedFilter);
 
     treeProfiler.stop();
-    CoreSolver::printAndLogHierachicalProfile(
+    CoreSolver::printAndLogHierarchicalProfile(
         treeProfiler.getRoot(), *solution.problemProfile(), logger);
     if (!FLAGS_equivalence_sets_output_file.empty()) {
       writeEquivalenceSetsData(

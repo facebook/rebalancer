@@ -271,7 +271,7 @@ algopt::lp::Expression Max::n_to_n_plus_one_inner_lp(
     const LpEvaluator& evaluator,
     bool minimizing,
     const interface::OptimalSolverSpec& configs) {
-  /* 1. this max could be simplied to only have children with highest lb. for
+  /* 1. this max could be simplified to only have children with highest lb. for
    * example: max(var, var-1, var+1, -var, var+3, 2) == max(var+3)
    * 2. further more,
    * max(var+3) == max(var) + 3

@@ -48,7 +48,7 @@ class CoreSolver {
   static std::optional<std::string> getObjectOrderingDimensionName(
       const StrategyT& strategy);
 
-  static void printAndLogHierachicalProfile(
+  static void printAndLogHierarchicalProfile(
       std::shared_ptr<const algopt::treeprof::Event> hierarchyTreeRoot,
       ProblemProfile& problemProfile,
       std::shared_ptr<RebalancerLog> logger = nullptr);

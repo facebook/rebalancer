@@ -71,7 +71,7 @@ TEST_P(SingleColdestStratifiedTest, SampleOfOne) {
     BalanceSpec spec;
     spec.scope() = "host";
     spec.dimension() = "cpu";
-    // NOTE: SingleColdestStratifiedMoveType works best if the the final goal
+    // NOTE: SingleColdestStratifiedMoveType works best if the final goal
     // expr has the property that removing a container (along with objects it
     // holds) does not make the goal value(s) worse. An example goal expr where
     // such a property does not hold is the resulting formula when using

@@ -30,7 +30,7 @@ constexpr folly::StringPiece kSingleColdestStratifiedMoveTypeName =
 // containerPotential is defined using the contribution of the container to the
 // goal values and the number of objects it has.
 
-// NOTE: This moveType will work best when the the goal expr is such that
+// NOTE: This moveType will work best when the goal expr is such that
 // removing a container (along with the objects it has) does not result in
 // making the goal value(s) worse. (An example where the goal value becomes
 // worse when removing a container is when using the BalanceSpec with the

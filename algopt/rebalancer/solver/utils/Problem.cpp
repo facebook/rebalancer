@@ -138,7 +138,7 @@ Problem::Problem(
   // expression that may already have been initialized with lower and upper
   // bounds
   {
-    // Parrallelization may be slower when there are not enough roots because of
+    // Parallelization may be slower when there are not enough roots because of
     // lockings and waitings if many child expressions are shared.
     if (configs.enableParallelizedBoundsComputing &&
         configs.threadPool->numThreads() > 1) {

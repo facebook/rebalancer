@@ -736,7 +736,7 @@ ObjectPartitionLookup<Policy>::getObjectPotentials(bool descending) const {
   std::vector<ObjectPotential> potentials;
   for (auto objectId : contributingObjectIds_) {
     auto& groupIds = objectPartition_->getObjectGroups(objectId);
-    // Below is a pointer to the dimension scope item ID for the the object for
+    // Below is a pointer to the dimension scope item ID for the object for
     // the current assignment. This is needed when the util scope != dimension
     // scope.
     const auto dimensionScopeItemPtr =
