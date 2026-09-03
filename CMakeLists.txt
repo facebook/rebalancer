@@ -595,8 +595,10 @@ if(REBALANCER_BUILD_EXPLORER)
     install(TARGETS rebalancer_explorer_proxy.exe RUNTIME DESTINATION bin)
 endif()
 
-if(EXAMPLES)
-    # Helper lib (maybeSaveBundle, --bundle_out) linked into every example.
+# Helper lib (maybeSaveBundle, the Sudoku problem builder). Every example links
+# it, and so do ExamplesBenchmark.exe and rebalancer_tests.exe, hence the gate
+# is wider than EXAMPLES.
+if(EXAMPLES OR TESTS OR BENCHMARKS)
     add_library(rebalancer_examples_common STATIC
         ${rebalancer_examples_common_files})
     target_link_libraries(rebalancer_examples_common
@@ -607,6 +609,9 @@ if(EXAMPLES)
             ${CMAKE_CURRENT_BINARY_DIR}
             ${THRIFT_OUTPUT_DIR}
     )
+endif()
+
+if(EXAMPLES)
     create_executables(rebalancer_exes "${rebalancer_exe_files}"
         rebalancer rebalancer_examples_common Folly::folly)
     create_executables(rebalancer_examples "${rebalancer_example_files}"
@@ -675,7 +680,8 @@ if(BENCHMARKS)
     endif()
 
     set(benchmark_link_libs
-        rebalancer Folly::follybenchmark GTest::gtest Boost::thread)
+        rebalancer rebalancer_examples_common Folly::follybenchmark
+        GTest::gtest Boost::thread)
     if(rebalancer_benchmark_lib_files)
         list(APPEND benchmark_link_libs rebalancer_benchmark_support)
     endif()
@@ -695,6 +701,7 @@ if(TESTS)
     target_link_libraries(rebalancer_tests.exe
         PUBLIC
             rebalancer
+            rebalancer_examples_common
             Folly::follybenchmark
             FBThrift::thriftprotocol
             test_main
