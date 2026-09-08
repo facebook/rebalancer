@@ -482,12 +482,12 @@ static Table applyOrder(
     }
     std::sort(begin, end, compareRows);
   };
-  if (orderTableColumn->isNumeric()) {
+  if (orderTableColumn.isNumeric()) {
     sortRows(
-        [&](const RowId rowId) { return orderTableColumn->getDouble(rowId); });
+        [&](const RowId rowId) { return orderTableColumn.getDouble(rowId); });
   } else {
     sortRows(
-        [&](const RowId rowId) { return orderTableColumn->getStrView(rowId); });
+        [&](const RowId rowId) { return orderTableColumn.getStrView(rowId); });
   }
   table.updateRowIds(std::move(rowIds));
   return table;
@@ -1054,10 +1054,10 @@ ModelServer::getMetricDistribution(
   const auto& table = co_await tableStore_.get(entity);
   const auto& seriesColumn =
       Utils::fetchColumn(table.getColumnData(), *request.metric());
-  seriesColumn->requireNumeric("Metric distribution");
+  seriesColumn.requireNumeric("Metric distribution");
   std::vector<double> seriesValues;
   for (auto rowId : table.getRowIds()) {
-    seriesValues.push_back(seriesColumn->getDouble(rowId));
+    seriesValues.push_back(seriesColumn.getDouble(rowId));
   }
   std::sort(seriesValues.begin(), seriesValues.end(), std::greater<>());
 

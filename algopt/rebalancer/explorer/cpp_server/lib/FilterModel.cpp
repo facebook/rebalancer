@@ -39,14 +39,14 @@ static void applyFilterRuleRegex(
     const FilterRuleRegex& rule,
     std::vector<RowId>& rowIds) {
   const auto& column = Utils::fetchColumn(columns, *rule.column());
-  column->requireString("Regex filter");
+  column.requireString("Regex filter");
   rowIds.erase(
       std::remove_if(
           rowIds.begin(),
           rowIds.end(),
           [&column, &rule](auto rowId) {
             return !re2::RE2::PartialMatch(
-                column->getStrView(rowId), *rule.regex());
+                column.getStrView(rowId), *rule.regex());
           }),
       rowIds.end());
 }
@@ -56,7 +56,7 @@ static void applyFilterRuleNumeric(
     const FilterRuleNumeric& rule,
     std::vector<RowId>& rowIds) {
   const auto& column = Utils::fetchColumn(columns, *rule.column());
-  column->requireNumeric("Numeric filter");
+  column.requireNumeric("Numeric filter");
   rowIds.erase(
       std::remove_if(
           rowIds.begin(),
@@ -64,7 +64,7 @@ static void applyFilterRuleNumeric(
           [&column, &rule](auto rowId) {
             const auto targetValue = *rule.doubleValue();
             return !satisfiesNumericCondition(
-                *rule.comparator(), column->getDouble(rowId), targetValue);
+                *rule.comparator(), column.getDouble(rowId), targetValue);
           }),
       rowIds.end());
 }
@@ -74,13 +74,13 @@ static void applyFilterStringAny(
     const FilterRuleStringAny& rule,
     std::vector<RowId>& rowIds) {
   const auto& column = Utils::fetchColumn(columns, *rule.column());
-  column->requireString("Any filter");
+  column.requireString("Any filter");
   rowIds.erase(
       std::remove_if(
           rowIds.begin(),
           rowIds.end(),
           [&column, &rule](auto rowId) {
-            const auto value = column->getStrView(rowId);
+            const auto value = column.getStrView(rowId);
             return std::find(
                        rule.values()->begin(), rule.values()->end(), value) ==
                 rule.values()->end();
@@ -93,13 +93,13 @@ static void applyFilterStringNe(
     const FilterRuleStringNe& rule,
     std::vector<RowId>& rowIds) {
   const auto& column = Utils::fetchColumn(columns, *rule.column());
-  column->requireString("Not-equal filter");
+  column.requireString("Not-equal filter");
   rowIds.erase(
       std::remove_if(
           rowIds.begin(),
           rowIds.end(),
           [&column, &rule](auto rowId) {
-            return column->getStrView(rowId) == *rule.value();
+            return column.getStrView(rowId) == *rule.value();
           }),
       rowIds.end());
 }

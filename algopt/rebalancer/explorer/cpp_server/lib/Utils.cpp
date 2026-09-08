@@ -249,20 +249,18 @@ void Table::updateRowIds(std::vector<RowId> newRowIds) {
   rowIds_ = std::move(newRowIds);
 }
 
-std::shared_ptr<const Column> Utils::fetchColumn(
+const Column& Utils::fetchColumn(
     const std::vector<std::shared_ptr<const Column>>& columns,
     const std::string& columnName) {
-  auto columnIterator = std::find_if(
-      columns.begin(),
-      columns.end(),
-      [&columnName](std::shared_ptr<const Column> column) {
+  const auto columnIterator = std::find_if(
+      columns.begin(), columns.end(), [&columnName](const auto& column) {
         return column->getColumnName() == columnName;
       });
 
   if (columnIterator == columns.end()) {
     throw std::runtime_error(fmt::format("Column {} not found", columnName));
   }
-  return *columnIterator;
+  return **columnIterator;
 }
 
 bool Utils::existsRow(

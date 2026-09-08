@@ -7,6 +7,7 @@
 
 #include <folly/Conv.h>
 
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -16,7 +17,9 @@ namespace explorer {
 
 namespace {
 const static std::string kRowCount = "Row_Count";
-}
+
+using ColumnRef = std::reference_wrapper<const Column>;
+} // namespace
 
 using namespace facebook::rebalancer::entities;
 
@@ -36,7 +39,7 @@ static RowId getGroupRowId(
 }
 
 static std::pair<std::vector<RowId>, Map<RowId, RowId>> createNewRowIds(
-    const std::vector<std::shared_ptr<const Column>>& groupByTableColumns,
+    const std::vector<ColumnRef>& groupByTableColumns,
     const std::vector<RowId>& filteredRowIds) {
   // Assign one dense row ID per distinct group and map each input row to it.
   Map<GroupValueCellStruct, RowId> groupToRowId;
@@ -46,8 +49,8 @@ static std::pair<std::vector<RowId>, Map<RowId, RowId>> createNewRowIds(
   for (const auto filteredRowId : filteredRowIds) {
     std::vector<std::string> groupValue;
     groupValue.reserve(groupByTableColumns.size());
-    for (const auto& col : groupByTableColumns) {
-      groupValue.emplace_back(col->getStrView(filteredRowId));
+    for (const auto column : groupByTableColumns) {
+      groupValue.emplace_back(column.get().getStrView(filteredRowId));
     }
     GroupValueCellStruct value{.groupCellValue = std::move(groupValue)};
     const auto groupRowId =
@@ -58,20 +61,16 @@ static std::pair<std::vector<RowId>, Map<RowId, RowId>> createNewRowIds(
   return std::pair(std::move(newRowIds), std::move(rowIdToGroupRowId));
 }
 
-static std::vector<std::shared_ptr<const Column>> extractGroupByColumns(
+static std::vector<ColumnRef> extractGroupByColumns(
     const std::vector<std::string>& groupByColumns,
     const std::vector<std::shared_ptr<const Column>>& columns) {
-  /* Return table columns that needs to be grouped. */
-  std::vector<std::shared_ptr<const Column>> groupByTableColumns;
-  std::transform(
-      groupByColumns.begin(),
-      groupByColumns.end(),
-      std::back_inserter(groupByTableColumns),
-      [&columns](const auto& columnName) {
-        auto column = Utils::fetchColumn(columns, columnName);
-        column->requireString("Group by");
-        return column;
-      });
+  std::vector<ColumnRef> groupByTableColumns;
+  groupByTableColumns.reserve(groupByColumns.size());
+  for (const auto& columnName : groupByColumns) {
+    const auto& column = Utils::fetchColumn(columns, columnName);
+    column.requireString("Group by");
+    groupByTableColumns.push_back(std::cref(column));
+  }
   return groupByTableColumns;
 }
 
@@ -86,18 +85,20 @@ Table GroupModel::applyGroup(const Group& group, Table table) {
   const auto groupCount = folly::to<EntityIdType>(newRowIds.size());
 
   TableBuilder<RowId> builder(newRowIds);
-  for (const auto& column : groupByTableColumns) {
+  for (const auto column : groupByTableColumns) {
+    const auto& groupByColumn = column.get();
     Map<RowId, std::string> groupRowIdToValue;
     groupRowIdToValue.reserve(groupCount);
     for (const auto rowId : filteredRowIds) {
       const auto groupRowId = rowIdToGroupRowId.at(rowId);
       // Every row in a group has the same value for a group-by column.
-      groupRowIdToValue.try_emplace(groupRowId, column->getStrView(rowId));
+      groupRowIdToValue.try_emplace(
+          groupRowId, groupByColumn.getStrView(rowId));
     }
     builder.add(
         {
-            .name = column->getColumnName(),
-            .type = column->getColumnType(),
+            .name = groupByColumn.getColumnName(),
+            .type = groupByColumn.getColumnType(),
             .isPrimaryKey = true,
         },
         [&groupRowIdToValue](const RowId rowId) -> std::string {

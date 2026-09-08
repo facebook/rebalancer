@@ -287,7 +287,7 @@ class Utils {
   explicit Utils();
 
  public:
-  static std::shared_ptr<const Column> fetchColumn(
+  static const Column& fetchColumn(
       const std::vector<std::shared_ptr<const Column>>& columns,
       const std::string& columnName);
 

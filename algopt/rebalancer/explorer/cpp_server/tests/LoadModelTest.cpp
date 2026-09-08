@@ -304,21 +304,21 @@ TEST(LoadModelTest, DynamicObjectDimensionUsesFinalAssignment) {
 
   auto explorerModel = LoadModel::buildData(std::move(bundle));
   const auto& table = buildTable(explorerModel.tableStore, "host");
-  const auto column =
+  const auto& column =
       Utils::fetchColumn(table.getColumnData(), "dst.dynamicLoad");
-  EXPECT_DOUBLE_EQ(10.0, column->getDouble(getRowId(table, "host0")));
+  EXPECT_DOUBLE_EQ(10.0, column.getDouble(getRowId(table, "host0")));
 }
 
 TEST(LoadModelTest, OverlappingPartitionJoinsGroups) {
   auto bundle = TestUtils::buildBundle({.includeOverlappedPartition = true});
   auto explorerModel = LoadModel::buildData(std::move(bundle));
   const auto& table = buildTable(explorerModel.tableStore, "host");
-  const auto partitionColumn =
+  const auto& partitionColumn =
       Utils::fetchColumn(table.getColumnData(), "overlapped");
   EXPECT_EQ(
-      "group1, group2", partitionColumn->getStrView(getRowId(table, "host0")));
-  EXPECT_EQ("group1", partitionColumn->getStrView(getRowId(table, "host3")));
-  EXPECT_EQ("", partitionColumn->getStrView(getRowId(table, "host4")));
+      "group1, group2", partitionColumn.getStrView(getRowId(table, "host0")));
+  EXPECT_EQ("group1", partitionColumn.getStrView(getRowId(table, "host3")));
+  EXPECT_EQ("", partitionColumn.getStrView(getRowId(table, "host4")));
 }
 
 TEST(LoadModelTest, DynamicDimensionTableStoresObjectRows) {
@@ -329,14 +329,14 @@ TEST(LoadModelTest, DynamicDimensionTableStoresObjectRows) {
   const RowId objectRow(1);
   EXPECT_EQ(
       "host0",
-      Utils::fetchColumn(table.getColumnData(), "host")->getStrView(objectRow));
+      Utils::fetchColumn(table.getColumnData(), "host").getStrView(objectRow));
   EXPECT_EQ(
       "msb0",
-      Utils::fetchColumn(table.getColumnData(), "msb")->getStrView(objectRow));
+      Utils::fetchColumn(table.getColumnData(), "msb").getStrView(objectRow));
   EXPECT_DOUBLE_EQ(
       10.0,
       Utils::fetchColumn(table.getColumnData(), "dynamicLoad")
-          ->getDouble(objectRow));
+          .getDouble(objectRow));
 }
 
 TEST(LoadModelTest, DynamicDimensionTableUsesGroupRowsForCompactStorage) {
@@ -379,21 +379,23 @@ TEST(LoadModelTest, DynamicDimensionTableUsesGroupRowsForCompactStorage) {
   EXPECT_EQ(nullptr, compactDimension.values(zone0Id).asMapOrNull());
 
   const auto& table = buildTable(explorerModel.tableStore, "load");
-  const auto objectNames = Utils::fetchColumn(table.getColumnData(), "service");
-  const auto scopeItemNames = Utils::fetchColumn(table.getColumnData(), "zone");
-  const auto dimensionValues =
+  const auto& objectNames =
+      Utils::fetchColumn(table.getColumnData(), "service");
+  const auto& scopeItemNames =
+      Utils::fetchColumn(table.getColumnData(), "zone");
+  const auto& dimensionValues =
       Utils::fetchColumn(table.getColumnData(), "load");
 
   EXPECT_EQ(3, table.getColumnData().size());
   ASSERT_EQ(2, table.getRowIds().size());
   const RowId defaultRow(0);
   const RowId groupRow(1);
-  EXPECT_EQ("default", objectNames->getStrView(defaultRow));
-  EXPECT_EQ("default", scopeItemNames->getStrView(defaultRow));
-  EXPECT_DOUBLE_EQ(1.0, dimensionValues->getDouble(defaultRow));
-  EXPECT_EQ("web", objectNames->getStrView(groupRow));
-  EXPECT_EQ("zone0", scopeItemNames->getStrView(groupRow));
-  EXPECT_DOUBLE_EQ(7.0, dimensionValues->getDouble(groupRow));
+  EXPECT_EQ("default", objectNames.getStrView(defaultRow));
+  EXPECT_EQ("default", scopeItemNames.getStrView(defaultRow));
+  EXPECT_DOUBLE_EQ(1.0, dimensionValues.getDouble(defaultRow));
+  EXPECT_EQ("web", objectNames.getStrView(groupRow));
+  EXPECT_EQ("zone0", scopeItemNames.getStrView(groupRow));
+  EXPECT_DOUBLE_EQ(7.0, dimensionValues.getDouble(groupRow));
 }
 
 TEST(LoadModelTest, MultiComponentDynamicDimensionsHaveUniqueNames) {
