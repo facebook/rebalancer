@@ -456,6 +456,12 @@ std::vector<ObjectBundle> FixedSrcDstMoveCandidateGenerator<MoveTypeSpecT>::
   std::vector<ObjectBundle> moveCandidates;
   int invalidEquivSets = 0;
   int numForbiddenServers = 0;
+  const AllowedScopeItemsPerGroup* allowedScopeItemsPerGroup =
+      (dstContainerShape && srcContainer == specialContainerId)
+      ? &problem.getEntityAttributeStore()
+             .getAttributes<AllowedScopeItemsPerGroup>(
+                 kAllowedScopeItemsPerGroupAttrName.str())
+      : nullptr;
   for (auto& [equivSetId, partsPerServer] : currentSrcContainerEquivSets) {
     if (formBundlesAtEquivSetGranularity) {
       assert(multiObjSelectionConfig.has_value());
@@ -484,11 +490,9 @@ std::vector<ObjectBundle> FixedSrcDstMoveCandidateGenerator<MoveTypeSpecT>::
       // 2. Check resource limits and calculate maxCount if needed
       std::optional<size_t> maxCount = std::nullopt;
 
-      if (dstContainerShape && srcContainer == specialContainerId) {
-        auto& attr = problem.getEntityAttributeStore()
-                         .getAttributes<AllowedScopeItemsPerGroup>(
-                             kAllowedScopeItemsPerGroupAttrName.str());
-        auto allowedCount = attr.getAllowedCount(serverId, *dstContainerShape);
+      if (allowedScopeItemsPerGroup) {
+        auto allowedCount = allowedScopeItemsPerGroup->getAllowedCount(
+            serverId, *dstContainerShape);
 
         if (!allowedCount.has_value()) {
           // Server exhausted - mark as fixed and skip
