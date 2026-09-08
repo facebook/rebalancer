@@ -510,7 +510,7 @@ Result ModelServer::processQueryOnTable(
   }
 
   if (query.group()) {
-    table = GroupModel::applyGroup(*query.group(), std::move(table));
+    table = GroupModel::applyGroup(*query.group(), table);
   }
 
   std::optional<PageRange> pageRange;

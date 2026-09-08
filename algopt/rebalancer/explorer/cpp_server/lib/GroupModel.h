@@ -33,8 +33,7 @@ class GroupModel {
   explicit GroupModel();
 
  public:
-  // group model
-  static Table applyGroup(const Group& group, Table table);
+  static Table applyGroup(const Group& group, const Table& table);
 };
 
 } // namespace explorer
