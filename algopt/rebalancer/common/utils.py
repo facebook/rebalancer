@@ -37,7 +37,6 @@ from typing import (
     Protocol as TypingProtocol,
     Sequence,
     TypeVar,
-    Union,
 )
 
 from libfb.py.log import get_log_level, setup_cpp_glog
@@ -194,17 +193,6 @@ def toSetIfNotOrNone(val: _T | set[_T] | None) -> Optional[set[_T]]:
 
 def lambdaList(data_list: list[_T]) -> Callable[[Any], list[_T]]:
     return lambda _: data_list
-
-
-# OBSOLETE: Use lambdaList()
-def toListOfStringsExpressionString(data: Union[str, Iterable[str]]) -> str:
-    return "[" + ",".join("'" + str(val) + "'" for val in toListWrapIfOne(data)) + "]"
-
-
-def toSetOfStringsExpressionString(data: Union[str, Iterable[str]]) -> str:
-    return (
-        "set([" + ",".join("'" + str(val) + "'" for val in toListWrapIfOne(data)) + "])"
-    )
 
 
 def toMapOfStringsExpressionString(data: dict[_T, _U]) -> str:

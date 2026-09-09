@@ -130,12 +130,6 @@ class TestUtils(testutil.BaseFacebookTestCase):
         func = utils.lambdaList(["foo", "bar"])
         self.assertEqual(func("baz"), ["foo", "bar"])
 
-    def test_toListOfStringsExpressionString(self) -> None:
-        self.assertEqual(utils.toListOfStringsExpressionString("foo"), "['foo']")
-
-    def test_toSetOfStringsExpressionString(self) -> None:
-        self.assertEqual(utils.toSetOfStringsExpressionString("foo"), "set(['foo'])")
-
     def test_toMapOfStringsExpressionString(self) -> None:
         self.assertEqual(
             utils.toMapOfStringsExpressionString({"foo": 7}), "{'foo': '7'}"
