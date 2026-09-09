@@ -15,6 +15,7 @@
 #pragma once
 
 #include "algopt/rebalancer/entities/thrift/gen-cpp2/Entities_types.h"
+#include "algopt/rebalancer/interface/thrift/gen-cpp2/AssignmentProblem_types.h"
 #include "algopt/rebalancer/interface/thrift/gen-cpp2/ProblemSolver_types.h"
 
 namespace entities = facebook::rebalancer::entities;
@@ -22,10 +23,10 @@ namespace interface = facebook::rebalancer::interface;
 
 class BackwardCompatabilityUtils {
  public:
-  static void possiblyModify(entities::thrift::Universe& universe);
-  static void densifyEntityIds(entities::thrift::Universe& universe);
+  static void possiblyModify(interface::AssignmentProblem& problem);
 
  private:
+  static void possiblyModify(entities::thrift::Universe& universe);
   static void possiblyModify(entities::thrift::Goals& goals);
   static void possiblyModify(entities::thrift::Constraints& constraints);
   static void possiblyModify(interface::GoalSpecs& goalSpec);

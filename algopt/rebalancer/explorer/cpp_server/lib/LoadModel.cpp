@@ -173,8 +173,7 @@ static std::shared_ptr<Universe> buildUniverse(
     interface::AssignmentProblem& problem) {
   /* Build the universe and return the object for further processing. */
   if (problem.universe()) {
-    auto& universeThrift = *problem.universe();
-    BackwardCompatabilityUtils::possiblyModify(universeThrift);
+    BackwardCompatabilityUtils::possiblyModify(problem);
     return std::make_shared<Universe>(*problem.universe());
   }
   throw std::runtime_error("Universe missing in problem");

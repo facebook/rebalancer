@@ -68,6 +68,13 @@ class BackwardCompatabilityUtilsTest : public ::testing::Test {
     return universeThrift.constraints()->constraints()->size();
   }
 
+  void possiblyModify() {
+    AssignmentProblem problem;
+    problem.universe() = std::move(universeThrift);
+    BackwardCompatabilityUtils::possiblyModify(problem);
+    universeThrift = std::move(*problem.universe());
+  }
+
   entities::thrift::Universe universeThrift;
 };
 
@@ -91,7 +98,7 @@ TEST_F(RoutingLatencySpecTest, RoutingLatencySpecMax) {
   addConstraint(spec, /*constraintId=*/0);
 
   // modify universeThrift
-  BackwardCompatabilityUtils::possiblyModify(universeThrift);
+  possiblyModify();
 
   // check that the new configuration is correct
   EXPECT_EQ(1, getGoalCount());
@@ -112,7 +119,7 @@ TEST_F(RoutingLatencySpecTest, RoutingLatencySpecP99) {
   addConstraint(spec, /*constraintId=*/0);
 
   // modify universeThrift
-  BackwardCompatabilityUtils::possiblyModify(universeThrift);
+  possiblyModify();
 
   // check that the new configuration is correct
   EXPECT_EQ(1, getGoalCount());
@@ -148,7 +155,7 @@ TEST_F(BackwardCompatabilityUtilsTest, ExclusiveScopeItemsSpec) {
   addConstraint(spec, /*constraintId=*/0);
 
   // modify universeThrift
-  BackwardCompatabilityUtils::possiblyModify(universeThrift);
+  possiblyModify();
 
   // check that the new configuration is correct
   EXPECT_EQ(1, getGoalCount());
@@ -174,7 +181,7 @@ TEST_F(BackwardCompatabilityUtilsTest, MinimizeContainersSpecMaxFreeLimit) {
 
   addGoal(spec, /*goalId=*/0);
 
-  BackwardCompatabilityUtils::possiblyModify(universeThrift);
+  possiblyModify();
 
   ASSERT_EQ(1, getGoalCount());
   const auto& migratedSpec = getGoalSpec(0).get_minimizeContainersSpec();
@@ -198,7 +205,7 @@ TEST_F(BackwardCompatabilityUtilsTest, MinimizeContainersSpecMaxFreeLimit) {
 // densifyEntityIds tests
 // ---------------------------------------------------------------------------
 
-class DensifyEntityIdsTest : public ::testing::Test {
+class DensifyEntityIdsTest : public BackwardCompatabilityUtilsTest {
  protected:
   entities::thrift::IdStore& idStore() {
     return *universeThrift.idStore();
@@ -220,12 +227,6 @@ class DensifyEntityIdsTest : public ::testing::Test {
     return idStore().names()->empty();
     FOLLY_POP_WARNING
   }
-
-  void densify() {
-    BackwardCompatabilityUtils::densifyEntityIds(universeThrift);
-  }
-
-  entities::thrift::Universe universeThrift;
 };
 
 TEST_F(DensifyEntityIdsTest, NoOpWhenNamesIsEmpty) {
@@ -234,7 +235,7 @@ TEST_F(DensifyEntityIdsTest, NoOpWhenNamesIsEmpty) {
   idStore().objectIds() = {0};
   idStore().objectNames() = {"obj0"};
 
-  densify();
+  possiblyModify();
 
   EXPECT_EQ(std::vector<int32_t>({0}), *idStore().objectIds());
   EXPECT_EQ(std::vector<std::string>({"obj0"}), *idStore().objectNames());
@@ -247,7 +248,7 @@ TEST_F(DensifyEntityIdsTest, FlatIdListsBecomeDenseAndKeepInsertionOrder) {
   idStore().objectIds() = {2, 3};
   idStore().containerIds() = {4};
 
-  densify();
+  possiblyModify();
 
   EXPECT_TRUE(oldNamesCleared());
   // Flat lists preserve insertion order, so old [2, 3] -> new [0, 1].
@@ -269,7 +270,7 @@ TEST_F(DensifyEntityIdsTest, ContainerReferencesGetRemappedConsistently) {
   (*universeThrift.containers()->initialAssignment())[2] = {0};
   (*universeThrift.containers()->initialAssignment())[1] = {};
 
-  densify();
+  possiblyModify();
 
   // Names follow the canonical (containerIds) order: index 0 is old id 2, etc.
   EXPECT_EQ(
@@ -288,7 +289,7 @@ TEST_F(DensifyEntityIdsTest, NestedMapEntityTypesAreDensified) {
   (*idStore().scopeItemIds())[0] = {1, 2}; // scope 0 has items 1, 2
   (*idStore().scopeItemIds())[3] = {4}; // scope 3 has item 4
 
-  densify();
+  possiblyModify();
 
   EXPECT_TRUE(oldNamesCleared());
   // 2 scopes, 3 scope items.
@@ -337,7 +338,7 @@ TEST_F(DensifyEntityIdsTest, DynamicDimensionValuesPopulateScopedValues) {
   dimension.isDynamic() = true;
   (*universeThrift.objects()->dimensions())[6] = std::move(dimension);
 
-  densify();
+  possiblyModify();
 
   const auto& dimensionThrift = universeThrift.objects()->dimensions()->at(0);
   const auto& remappedDyn =

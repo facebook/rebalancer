@@ -96,7 +96,7 @@ AssignmentSolution RebalancerReplayer::replay(
   if (!problem.universe()) {
     throw std::runtime_error("Universe is not set");
   }
-  BackwardCompatabilityUtils::possiblyModify(*problem.universe());
+  BackwardCompatabilityUtils::possiblyModify(problem);
   const auto universe =
       std::make_shared<entities::Universe>(*problem.universe());
   algopt::treeprof::Profiler treeProfiler("Replay::solve");

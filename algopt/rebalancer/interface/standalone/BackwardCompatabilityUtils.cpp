@@ -274,10 +274,7 @@ void remapIds(
   }
 }
 
-} // namespace
-
-void BackwardCompatabilityUtils::densifyEntityIds(
-    entities::thrift::Universe& universe) {
+void densifyEntityIds(entities::thrift::Universe& universe) {
   auto& idStore = *universe.idStore();
   // deprecated 'names' field is non-empty only for old-format bundles. So, if
   // empty, we're done.
@@ -360,6 +357,15 @@ void BackwardCompatabilityUtils::densifyEntityIds(
 }
 
 FOLLY_POP_WARNING
+
+} // namespace
+
+void BackwardCompatabilityUtils::possiblyModify(
+    interface::AssignmentProblem& problem) {
+  if (problem.universe()) {
+    possiblyModify(*problem.universe());
+  }
+}
 
 void BackwardCompatabilityUtils::possiblyModify(
     entities::thrift::Universe& universe) {

@@ -722,8 +722,8 @@ static void runInstance(Bundle&& bundle) {
     throw std::runtime_error("Universe is not set");
   }
 
+  BackwardCompatabilityUtils::possiblyModify(problem);
   auto& universeThrift = *problem.universe();
-  BackwardCompatabilityUtils::possiblyModify(universeThrift);
 
   possiblyModifyPrecisionTolerances(universeThrift);
 
