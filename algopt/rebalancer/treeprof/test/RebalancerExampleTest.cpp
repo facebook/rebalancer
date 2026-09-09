@@ -25,6 +25,7 @@
 #include <folly/logging/xlog.h>
 #include <gtest/gtest.h>
 
+#include <atomic>
 #include <functional>
 #include <memory>
 
@@ -81,7 +82,9 @@ class ManualClock {
 // so it always accesses the calling thread's instance.
 thread_local ManualClock tlsClock;
 
-double totalAllocatedMBs = 0;
+// buildParallelInstance() calls allocateMemory() from several coroutines at
+// once, so this counter must be an atomic read-modify-write.
+std::atomic<double> totalAllocatedMBs{0.0};
 double numSecondsSlept = 0;
 
 // Used by buildParallelInstance() (multi-threaded): each coroutine advances
@@ -92,7 +95,8 @@ void parallelSleepForMs(const double ms) {
 
 void* allocateMemory(uint64_t mbytes) {
   constexpr auto NUM_BYTES_IN_ONE_MB = 1024u * 1024u;
-  totalAllocatedMBs += mbytes;
+  totalAllocatedMBs.fetch_add(
+      static_cast<double>(mbytes), std::memory_order_relaxed);
   void* ptr = malloc(mbytes * NUM_BYTES_IN_ONE_MB);
   folly::doNotOptimizeAway(ptr);
   return ptr;
@@ -163,9 +167,11 @@ struct MockEvent {
       : name(eventName), memoryAllocated(memory), sleepTime(sleepForSeconds) {}
 };
 
-folly::coro::Task<void> addToProfilerWithCoro(
-    const MockEvent& event,
-    std::vector<void*>& ptrs) {
+// Returns its own allocations rather than appending to a shared vector: these
+// run concurrently, and std::vector::push_back is not thread-safe.
+folly::coro::Task<std::vector<void*>> addToProfilerWithCoro(
+    const MockEvent& event) {
+  std::vector<void*> ptrs;
   EventRecorder eventRecord(event.name);
   auto sleepTime = event.sleepTime / 2;
   auto memoryToAllocate = event.memoryAllocated / 2;
@@ -183,23 +189,28 @@ folly::coro::Task<void> addToProfilerWithCoro(
   eventChildRecord.stop();
 
   eventRecord.stop();
-  co_return;
+  co_return ptrs;
 }
 
 folly::coro::Task<void> addToProfileMaybeParallel(
     std::vector<MockEvent>& parallelizableEvents,
     std::vector<void*>& ptrs,
     int numThreads) {
-  std::vector<folly::coro::TaskWithExecutor<void>> tasks;
+  std::vector<folly::coro::TaskWithExecutor<std::vector<void*>>> tasks;
   ExecutorWrapper executor(
       std::make_shared<folly::CPUThreadPoolExecutor>(numThreads));
   tasks.reserve(parallelizableEvents.size());
   for (auto& event : parallelizableEvents) {
     tasks.push_back(co_withExecutor(
-        folly::getKeepAliveToken(executor),
-        addToProfilerWithCoro(event, ptrs)));
+        folly::getKeepAliveToken(executor), addToProfilerWithCoro(event)));
   }
-  co_await folly::coro::collectAllWindowed(std::move(tasks), numThreads);
+  // Runs on the caller's thread once every task has completed, so appending to
+  // the caller's vector here is single-threaded.
+  const auto perTaskPtrs =
+      co_await folly::coro::collectAllWindowed(std::move(tasks), numThreads);
+  for (const auto& taskPtrs : perTaskPtrs) {
+    ptrs.insert(ptrs.end(), taskPtrs.begin(), taskPtrs.end());
+  }
   co_return;
 }
 
@@ -244,7 +255,7 @@ void buildParallelInstance(int numThreads = 1) {
   parallelSleepForMs(1);
 
   // cleanup allocated memory
-  for (auto ptr : ptrs) {
+  for (auto* ptr : ptrs) {
     free(ptr);
   }
 }
@@ -300,7 +311,7 @@ TEST(HierarchicalTimeProfilerTest, coroutines) {
         << "JEMalloc memory counter only works with @mode/opt build. Memory counters will likely be zeroes";
   } else {
     EXPECT_NEAR(
-        totalAllocatedMBs,
+        totalAllocatedMBs.load(),
         rootEvent->getMemoryPeak() / static_cast<double>(NUM_BYTES_IN_ONE_MB),
         1);
   }
