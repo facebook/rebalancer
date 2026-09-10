@@ -230,7 +230,7 @@ folly::coro::Task<void> Materializer::materializeConstraintCoro(
 
   // TODO: The loop below is quite expensive when there are many expressions in
   // components (since they take significant time to initialize, etc.).
-  // Parellelize it after making Context thread-safe.
+  // Parallelize it after making Context thread-safe.
   for (auto& constraintInfo : constraints) {
     userConstraint += max(0, constraintInfo.constraintExpr);
 
