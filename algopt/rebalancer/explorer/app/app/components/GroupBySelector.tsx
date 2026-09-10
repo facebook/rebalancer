@@ -5,7 +5,7 @@ import {useMemo} from 'react';
 import {Autocomplete, Chip, TextField} from '@mui/material';
 
 import {renderColumnTypeGroup} from '@/app/components/columnTypeGroup';
-import {AUTOCOMPLETE_WORD_BREAK_PROPS} from '@/lib/format';
+import {AUTOCOMPLETE_WORD_BREAK_PROPS, CHIP_WORD_BREAK_SX} from '@/lib/format';
 import type {ColumnDescription} from '@/lib/rebalancer-explorer-types';
 import {ColumnType} from '@/lib/rebalancer-explorer-types';
 
@@ -84,7 +84,13 @@ export default function GroupBySelector({
         value.map((option, index) => {
           const {key, ...chipProps} = getTagProps({index});
           return (
-            <Chip key={key} label={option.name} size="small" {...chipProps} />
+            <Chip
+              key={key}
+              label={option.name}
+              size="small"
+              sx={CHIP_WORD_BREAK_SX}
+              {...chipProps}
+            />
           );
         })
       }

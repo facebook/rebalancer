@@ -52,6 +52,7 @@ import {useProblemMetadata} from '@/lib/contexts/ProblemMetadataContext';
 import {useRebalancerHandle} from '@/lib/contexts/RebalancerHandleContext';
 import {
   AUTOCOMPLETE_WORD_BREAK_PROPS,
+  CHIP_WORD_BREAK_SX,
   getBadgeColor,
   isHighlightColumn,
   isNumericColumn,
@@ -86,6 +87,7 @@ const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
 // ---------------------------------------------------------------------------
 
 type RowData = Record<string, CellData | undefined>;
+type ColumnMeta = {numeric?: boolean; colName?: string};
 
 export interface MoveSetsViewState {
   partition: string | null;
@@ -498,7 +500,7 @@ export default function MoveSetsTable({
         },
       }),
     );
-  }, [resultColumns]);
+  }, [columnLabels, resultColumns]);
 
   // ---- Row data ----
   const data = useMemo<RowData[]>(() => {
@@ -794,7 +796,13 @@ export default function MoveSetsTable({
                   value.map((option, index) => {
                     const {key, ...rest} = getTagProps({index});
                     return (
-                      <Chip key={key} label={option} size="small" {...rest} />
+                      <Chip
+                        key={key}
+                        label={option}
+                        size="small"
+                        sx={CHIP_WORD_BREAK_SX}
+                        {...rest}
+                      />
                     );
                   })
                 }
@@ -938,8 +946,8 @@ export default function MoveSetsTable({
                         </Box>
                       )}
                       {headerGroup.headers.map(header => {
-                        const meta = header.column.columnDef.meta as
-                          {numeric?: boolean; colName?: string} | undefined;
+                        const columnDef = header.column.columnDef;
+                        const meta = columnDef.meta as ColumnMeta | undefined;
                         const isSorted = orderColumn === meta?.colName;
                         const isAsc =
                           isSorted &&
@@ -1041,8 +1049,8 @@ export default function MoveSetsTable({
                           </Box>
                         )}
                         {row.getVisibleCells().map(cell => {
-                          const meta = cell.column.columnDef.meta as
-                            {numeric?: boolean} | undefined;
+                          const columnDef = cell.column.columnDef;
+                          const meta = columnDef.meta as ColumnMeta | undefined;
                           return (
                             <Box
                               component="td"

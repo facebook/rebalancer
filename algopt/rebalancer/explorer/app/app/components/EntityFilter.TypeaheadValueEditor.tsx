@@ -5,7 +5,7 @@ import {useEffect, useMemo, useRef, useState} from 'react';
 import {Autocomplete, Chip, TextField} from '@mui/material';
 import type {ValueEditorProps} from 'react-querybuilder';
 
-import {AUTOCOMPLETE_WORD_BREAK_PROPS} from '@/lib/format';
+import {AUTOCOMPLETE_WORD_BREAK_PROPS, CHIP_WORD_BREAK_SX} from '@/lib/format';
 import {fetchTypeahead} from '@/lib/rebalancer-explorer-api';
 
 import {OPERATOR_TO_COMPARATOR} from './EntityFilter.transform';
@@ -116,7 +116,15 @@ export function TypeaheadValueEditor(props: ValueEditorProps) {
         renderTags={(tagValues, getTagProps) =>
           tagValues.map((option, index) => {
             const {key, ...tagProps} = getTagProps({index});
-            return <Chip key={key} label={option} size="small" {...tagProps} />;
+            return (
+              <Chip
+                key={key}
+                label={option}
+                size="small"
+                sx={CHIP_WORD_BREAK_SX}
+                {...tagProps}
+              />
+            );
           })
         }
         slotProps={AUTOCOMPLETE_WORD_BREAK_PROPS}

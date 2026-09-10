@@ -81,6 +81,18 @@ export const AUTOCOMPLETE_WORD_BREAK_PROPS = {
   },
 } as const;
 
+export const CHIP_WORD_BREAK_SX = {
+  height: 'auto',
+  maxWidth: '100%',
+  '& .MuiChip-label': {
+    display: 'block',
+    whiteSpace: 'normal',
+    overflowWrap: 'anywhere',
+    wordBreak: 'break-word',
+    py: '3px',
+  },
+} as const;
+
 /**
  * Convert UPPER_SNAKE_CASE or space-separated names to Title Case.
  * e.g. "TOTAL_UTILIZATION" → "Total Utilization"

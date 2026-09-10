@@ -65,9 +65,13 @@ function DescriptionItem({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex justify-between gap-4 border-b border-border py-2 last:border-b-0">
-      <dt className="text-sm font-medium text-muted-foreground">{label}</dt>
-      <dd className="text-sm text-right">{children}</dd>
+    <div className="flex items-start justify-between gap-4 border-b border-border py-2 last:border-b-0">
+      <dt className="shrink-0 text-sm font-medium text-muted-foreground">
+        {label}
+      </dt>
+      <dd className="min-w-0 text-right text-sm [overflow-wrap:anywhere]">
+        {children}
+      </dd>
     </div>
   );
 }
@@ -113,8 +117,10 @@ export default function SummaryPage() {
         <CardContent>
           <dl>
             <DescriptionItem label="Run ID">
-              <span className="inline-flex items-center">
-                <span className="font-mono text-xs">{metadata.runId}</span>
+              <span className="inline-flex max-w-full min-w-0 items-start">
+                <span className="min-w-0 font-mono text-xs break-all">
+                  {metadata.runId}
+                </span>
                 <CopyButton value={metadata.runId} />
               </span>
             </DescriptionItem>

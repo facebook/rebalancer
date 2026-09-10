@@ -6,6 +6,7 @@ import {Box, Chip, IconButton, TextField, Tooltip} from '@mui/material';
 import {Plus} from 'lucide-react';
 
 import {useProblemMetadata} from '@/lib/contexts/ProblemMetadataContext';
+import {CHIP_WORD_BREAK_SX} from '@/lib/format';
 
 import EntityTypeahead from './EntityTypeahead';
 
@@ -73,8 +74,13 @@ export default function MoveList({moves, onChange}: MoveListProps) {
                 // Chips default to user-select:none; re-enable so the move
                 // text can be selected and copied (e.g. to share or reuse).
                 sx={{
+                  ...CHIP_WORD_BREAK_SX,
                   userSelect: 'text',
-                  '& .MuiChip-label': {userSelect: 'text', cursor: 'text'},
+                  '& .MuiChip-label': {
+                    ...CHIP_WORD_BREAK_SX['& .MuiChip-label'],
+                    userSelect: 'text',
+                    cursor: 'text',
+                  },
                 }}
                 onDelete={() => {
                   onChange(moves.filter((_, i) => i !== index));

@@ -41,7 +41,9 @@ export function SidebarMenuItem(props: MenuItemProps) {
   const inner = (
     <>
       <Icon className="size-4 shrink-0" />
-      {!isCollapsed && <span>{title}</span>}
+      {!isCollapsed && (
+        <span className="min-w-0 [overflow-wrap:anywhere]">{title}</span>
+      )}
     </>
   );
 
