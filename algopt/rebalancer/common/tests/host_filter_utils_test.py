@@ -249,10 +249,8 @@ class TestHostFilterUtils(BaseFacebookTestCase):
     @async_test
     async def test_query_serf_for_asset_ids_exception(
         self,
-        # pyre-fixme[2]: Parameter must be annotated.
-        mock_serf_client,
-        # pyre-fixme[2]: Parameter must be annotated.
-        mock_logging_exception,
+        mock_serf_client: MagicMock,
+        mock_logging_exception: MagicMock,
     ) -> None:
         client = AsyncMock()
         client.getDevices.side_effect = Exception("Test")
