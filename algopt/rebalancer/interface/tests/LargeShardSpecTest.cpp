@@ -74,6 +74,7 @@ class LargeShardSpecTest : public ::testing::TestWithParam<int> {
         ->set_moveToScopeItems() = moveToScopeItemsSpec;
     singleRandomStratifiedMoveTypeSpec.stratifiedSampleSize()
         ->defaultSampleSize() = 10;
+    singleRandomStratifiedMoveTypeSpec.minObjectsToExplore() = 10;
 
     LocalSearchSolverSpec spec;
     spec.moveTypeList()->push_back(

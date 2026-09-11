@@ -15,6 +15,7 @@ search space when there are very many containers.
 |-----------|------|----------|---------|-------------|
 | `stratifiedSampleSize` | SampleSize | Yes | - | Number of destination containers to sample, distributed evenly across the similarity classes |
 | `destinationsToExplore` | DestinationsToExploreOptions | No | all scope items | How destination containers are grouped/sampled (e.g. per scope item) |
+| `minObjectsToExplore` | int | No | 1 | Minimum number of objects to fully explore before returning the best improving move found so far |
 
 ## Behavior
 
@@ -22,6 +23,12 @@ Given an object to move, the move type samples destination containers from each
 similarity class (scope item) and evaluates moving the object to the sampled
 containers, keeping the best move. Sampling a fixed number per class keeps the number
 of evaluated moves small even when there are tens of thousands of containers.
+
+Once `minObjectsToExplore` objects have been explored and an improving move has been
+found, that move is returned; otherwise more objects are explored until one improves
+the objective or the source container is exhausted. Raising it improves move quality
+at the cost of roughly `minObjectsToExplore * stratifiedSampleSize` evaluations per
+move.
 
 ## Example
 

@@ -144,15 +144,14 @@ CO_TEST_F(SingleRandomStratifiedMoveTypeTest, VerifyMoveSetBasic2) {
   EXPECT_EQ(2 * 3, getTotalMovesEvaluated());
 }
 
-CO_TEST_F(
-    SingleRandomStratifiedMoveTypeTest,
-    VerifyMoveEvalsWithExploreInRegion) {
+static interface::SingleRandomStratifiedMoveTypeSpec makeInRegionSpec() {
   interface::MoveToCurrentScopeItemSpec moveToCurrentScopeItemSpec;
   moveToCurrentScopeItemSpec.scopeNameForExploringMovesToCurrentScopeItem() =
       "region";
   interface::DestinationsToExploreOptions destinationsToExplore;
   destinationsToExplore.set_moveToCurrentScopeItem() =
       moveToCurrentScopeItemSpec;
+
   interface::SingleRandomStratifiedMoveTypeSpec singleRandomSpec;
   singleRandomSpec.destinationsToExplore() = destinationsToExplore;
 
@@ -160,8 +159,14 @@ CO_TEST_F(
   sampleSize.defaultSampleSize() = 3;
   singleRandomSpec.stratifiedSampleSize() = std::move(sampleSize);
 
+  return singleRandomSpec;
+}
+
+CO_TEST_F(
+    SingleRandomStratifiedMoveTypeTest,
+    VerifyMoveEvalsWithExploreInRegion) {
   auto singleRandomMoveType = MockSingleRandomStratifiedMoveType(
-      interface::LocalSearchSolverSpec{}, singleRandomSpec);
+      interface::LocalSearchSolverSpec{}, makeInRegionSpec());
 
   const auto universe = co_await setUpUniverse();
 
@@ -188,6 +193,68 @@ CO_TEST_F(
   const std::vector<Move> expectedMoveSet = {
       {Move{object(8), container(4), container(2)}}};
   REBALANCER_EXPECT_EQ_MOVESETS(expectedMoveSet, bestResult.getMoveSet());
+}
+
+CO_TEST_F(
+    SingleRandomStratifiedMoveTypeTest,
+    VerifyDefaultMinObjectsToExplore) {
+  auto singleRandomMoveType = MockSingleRandomStratifiedMoveType(
+      interface::LocalSearchSolverSpec{}, makeInRegionSpec());
+
+  const auto universe = co_await setUpUniverse();
+
+  auto containers = std::make_shared<PackerSet<entities::ContainerId>>(
+      PackerSet<entities::ContainerId>{container(3)});
+  createProblem(
+      /*objectiveTuple=*/{object_lookup(
+          makeAllUnequalObjectVector(9),
+          containers,
+          Assignment(universe->getContainers().getInitialAssignment()))},
+      /*constraint=*/const_expr(0, *universe));
+
+  singleRandomMoveType.findBestMove(
+      getMovesEvaluator(),
+      container(3) /*hotContainer*/,
+      getMoveStatsAggregator(),
+      getEmptySearchHints(),
+      std::numeric_limits<double>::max() /*timelimit*/);
+
+  // container(3) holds four objects and shares "region1" with container(1)
+  // only, so exploring one object costs exactly one move evaluation. Moving any
+  // object out of container(3) improves the objective, so with the default of 1
+  // the search stops after the first object.
+  EXPECT_EQ(1, getTotalMovesEvaluated());
+}
+
+CO_TEST_F(SingleRandomStratifiedMoveTypeTest, VerifyBiggerMinObjectsToExplore) {
+  auto singleRandomSpec = makeInRegionSpec();
+  singleRandomSpec.minObjectsToExplore() = 3;
+
+  auto singleRandomMoveType = MockSingleRandomStratifiedMoveType(
+      interface::LocalSearchSolverSpec{}, singleRandomSpec);
+
+  const auto universe = co_await setUpUniverse();
+
+  auto containers = std::make_shared<PackerSet<entities::ContainerId>>(
+      PackerSet<entities::ContainerId>{container(3)});
+  createProblem(
+      /*objectiveTuple=*/{object_lookup(
+          makeAllUnequalObjectVector(9),
+          containers,
+          Assignment(universe->getContainers().getInitialAssignment()))},
+      /*constraint=*/const_expr(0, *universe));
+
+  singleRandomMoveType.findBestMove(
+      getMovesEvaluator(),
+      container(3) /*hotContainer*/,
+      getMoveStatsAggregator(),
+      getEmptySearchHints(),
+      std::numeric_limits<double>::max() /*timelimit*/);
+
+  // Same problem as VerifyDefaultMinObjectsToExplore, but the spec now asks for
+  // three objects to be fully explored before an improving move is accepted, so
+  // the search does not stop at the first one.
+  EXPECT_EQ(3, getTotalMovesEvaluated());
 }
 
 CO_TEST_F(

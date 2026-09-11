@@ -40,6 +40,7 @@
 #include "algopt/rebalancer/solver/moves/TripleLoopMoveType.h"
 
 #include <gtest/gtest.h>
+#include <thrift/lib/cpp2/protocol/Serializer.h>
 
 using namespace facebook::rebalancer;
 using namespace facebook::rebalancer::interface;
@@ -136,6 +137,91 @@ TEST_F(MoveTypeFactoryTest, createLSSSAndSetMoveTypeListWithMixedTypes) {
   // creation should happen
   auto moves = MoveTypeFactory::createMoveTypes(spec, getProblem());
   EXPECT_EQ(moves.size(), 2);
+}
+
+// Round-trips through the serializer so the spec carries the presence bits a
+// saved bundle would have, which is what the backfill keys off.
+static SingleRandomStratifiedMoveTypeSpec savedStratifiedSpec() {
+  return apache::thrift::CompactSerializer::deserialize<
+      SingleRandomStratifiedMoveTypeSpec>(
+      apache::thrift::CompactSerializer::serialize<std::string>(
+          SingleRandomStratifiedMoveTypeSpec()));
+}
+
+// A bundle predating minObjectsToExplore: T_STOP encodes the empty struct.
+static SingleRandomStratifiedMoveTypeSpec preFieldStratifiedSpec() {
+  return apache::thrift::CompactSerializer::deserialize<
+      SingleRandomStratifiedMoveTypeSpec>(std::string(1, '\0'));
+}
+
+TEST_F(MoveTypeFactoryTest, replayBackfillsMinObjectsToExploreOnlyWhenMissing) {
+  {
+    // Typed specs from old bundles inherit the saved solver-wide value.
+    LocalSearchSolverSpec spec;
+    spec.minHotObjects() = 7;
+    spec.moveTypeList()->push_back(
+        ProblemSolver::makeMoveTypeSpec(preFieldStratifiedSpec()));
+
+    MoveTypeFactory::transformMoveTypesForReplayingSavedInstances(spec);
+
+    EXPECT_EQ(
+        7,
+        *spec.moveTypeList()
+             ->at(0)
+             .get_singleRandomStratifiedMoveTypeSpec()
+             .minObjectsToExplore());
+  }
+
+  {
+    // Name-based configs kept their stratified spec at the solver level.
+    LocalSearchSolverSpec spec;
+    spec.minHotObjects() = 7;
+    spec.singleRandomStratifiedMoveTypeSpec() = preFieldStratifiedSpec();
+    spec.moveTypeList()->push_back(
+        ProblemSolver::makeMoveTypeSpec("SINGLE_RANDOM_STRATIFIED"));
+
+    MoveTypeFactory::transformMoveTypesForReplayingSavedInstances(spec);
+
+    EXPECT_EQ(
+        7, *spec.singleRandomStratifiedMoveTypeSpec()->minObjectsToExplore());
+  }
+
+  {
+    // Bundles saved since the field landed always carry it, so a deliberate
+    // per-move-type 1 must survive a different solver-wide value.
+    LocalSearchSolverSpec spec;
+    spec.minHotObjects() = 7;
+    spec.moveTypeList()->push_back(
+        ProblemSolver::makeMoveTypeSpec(savedStratifiedSpec()));
+
+    MoveTypeFactory::transformMoveTypesForReplayingSavedInstances(spec);
+
+    EXPECT_EQ(
+        1,
+        *spec.moveTypeList()
+             ->at(0)
+             .get_singleRandomStratifiedMoveTypeSpec()
+             .minObjectsToExplore());
+  }
+
+  {
+    // An explicit non-default value is left alone.
+    auto stratifiedSpec = preFieldStratifiedSpec();
+    stratifiedSpec.minObjectsToExplore() = 3;
+    LocalSearchSolverSpec spec;
+    spec.minHotObjects() = 7;
+    spec.moveTypeList()->push_back(
+        ProblemSolver::makeMoveTypeSpec(std::move(stratifiedSpec)));
+
+    MoveTypeFactory::transformMoveTypesForReplayingSavedInstances(spec);
+
+    EXPECT_EQ(
+        3,
+        *spec.moveTypeList()
+             ->at(0)
+             .get_singleRandomStratifiedMoveTypeSpec()
+             .minObjectsToExplore());
+  }
 }
 
 static void checkSingleMoveType(std::shared_ptr<MoveType> move) {

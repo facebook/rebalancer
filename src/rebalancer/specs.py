@@ -1052,6 +1052,7 @@ class FixedDestSwapMultiMoveTypeSpec(TypedDict, total=False):
 class SingleRandomStratifiedMoveTypeSpec(TypedDict, total=False):
     destinationsToExplore: DestinationsToExploreOptions
     stratifiedSampleSize: SampleSize
+    minObjectsToExplore: int  # default 1
 
 
 class SingleFixedSourceMoveTypeSpec(TypedDict, total=False):

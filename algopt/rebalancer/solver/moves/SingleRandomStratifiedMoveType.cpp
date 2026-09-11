@@ -48,6 +48,9 @@ MoveResult SingleRandomStratifiedMoveType::findBestMove(
   const ObjectDeduper dedupedObjs(
       &problem.getEquivalenceSets(), evaluator.getDynamicObjects(hotContainer));
 
+  const auto minObjectsToExplore =
+      spec_ ? *spec_->minObjectsToExplore() : minHotObjects();
+
   int objectCount = 0;
   auto bestResult = MoveResult::makeEmpty();
   for (auto hotObject : dedupedObjs) {
@@ -70,9 +73,10 @@ MoveResult SingleRandomStratifiedMoveType::findBestMove(
         getParallelExecutionConfig());
     bestResult.aggregate(std::move(result));
 
-    // return early only if we have already explored at least min_hot_objects
-    // and found an improvement
-    if (++objectCount >= minHotObjects() && bestResult.isBetter(precision)) {
+    // return early only if we have already explored at least
+    // minObjectsToExplore and found an improvement
+    if (++objectCount >= minObjectsToExplore &&
+        bestResult.isBetter(precision)) {
       return bestResult;
     }
   }

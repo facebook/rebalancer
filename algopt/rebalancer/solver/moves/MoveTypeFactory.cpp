@@ -45,6 +45,41 @@
 
 namespace facebook::rebalancer {
 
+namespace {
+
+// A bundle saved before minObjectsToExplore existed relied on the solver-wide
+// minHotObjects, which SingleRandomStratifiedMoveType no longer reads when it
+// has a spec. The field is unqualified, so anything serialized since it landed
+// carries it explicitly; an unset presence bit therefore means the bundle
+// predates it and the solver-wide value is what the original run used.
+void inheritSolverWideMinHotObjects(
+    interface::SingleRandomStratifiedMoveTypeSpec& moveTypeSpec,
+    int32_t solverMinHotObjects) {
+  if (!apache::thrift::is_non_optional_field_set_manually_or_by_serializer(
+          moveTypeSpec.minObjectsToExplore())) {
+    moveTypeSpec.minObjectsToExplore() = solverMinHotObjects;
+  }
+}
+
+void backfillStratifiedMinObjectsToExplore(
+    interface::LocalSearchSolverSpec& spec) {
+  const auto solverMinHotObjects = *spec.minHotObjects();
+  if (spec.singleRandomStratifiedMoveTypeSpec()) {
+    inheritSolverWideMinHotObjects(
+        *spec.singleRandomStratifiedMoveTypeSpec(), solverMinHotObjects);
+  }
+  for (auto& moveTypeSpec : *spec.moveTypeList()) {
+    if (moveTypeSpec.getType() ==
+        interface::MoveTypeSpec::Type::singleRandomStratifiedMoveTypeSpec) {
+      inheritSolverWideMinHotObjects(
+          moveTypeSpec.mutable_singleRandomStratifiedMoveTypeSpec(),
+          solverMinHotObjects);
+    }
+  }
+}
+
+} // namespace
+
 std::unique_ptr<MoveType> MoveTypeFactory::createMoveType(
     const std::string& name,
     const interface::LocalSearchSolverSpec& configs) {
@@ -319,6 +354,7 @@ void MoveTypeFactory::transformMoveTypesForReplayingSavedInstances(
     interface::LocalSearchSolverSpec& spec) {
   convertMoveTypesToMoveTypeSpecs(spec);
   transformMoveTypeSpecs(spec);
+  backfillStratifiedMinObjectsToExplore(spec);
 }
 
 } // namespace facebook::rebalancer

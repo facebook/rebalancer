@@ -5,6 +5,7 @@ Evaluates moving an object to a set of sampled containers.
 ## **Parameters**
 * **DestinationsToExploreOptions:** Sampling will happen on a per scope item basis. This will help reduce checking invalid containers.
 * **SampleSize:** Sets the sample size of the sampling algorithm. This will be evenly distributed by scope items.
+* **minObjectsToExplore:** the minimum number of objects to fully explore before returning the best move found so far. More objects will be evaluated if no move has yet been found that improves the objective. (Default: 1)
 
 ## **Behavior**
 Given an object and an objective, rebalancer will select a random sample of containers and try to place that object to those containers to see if the objective is satisfied. By sampling containers with similar properties, we can reduce the number of containers.

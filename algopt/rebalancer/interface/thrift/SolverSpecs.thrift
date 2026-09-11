@@ -663,6 +663,8 @@ struct FixedDestSwapMultiMoveTypeSpec {
 struct SingleRandomStratifiedMoveTypeSpec {
   1: DestinationsToExploreOptions destinationsToExplore;
   2: SampleSize stratifiedSampleSize;
+  // Minimum number of objects in the hot container to fully explore per move
+  4: i32 minObjectsToExplore = 1;
 }
 
 struct ObjectBundleFormationHints {
