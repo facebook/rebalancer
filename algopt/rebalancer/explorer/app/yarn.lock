@@ -1561,7 +1561,7 @@
     react-dom "^19.2.4"
 
 "@nest/eps@file:../../libs/eps":
-  version "2.1.7"
+  version "1.5.0"
   dependencies:
     "@atlaskit/pragmatic-drag-and-drop" "^1.7.7"
     "@atlaskit/pragmatic-drag-and-drop-flourish" "^2.0.12"
@@ -1687,7 +1687,7 @@
     server-only "^0.0.1"
 
 "@nest/interngraph@file:../../libs/interngraph":
-  version "0.3.15"
+  version "0.3.17"
   dependencies:
     "@nest/bladerunner" ">=0.0.4"
     "@nest/dgw-client" "^0.1.2"
@@ -1705,6 +1705,14 @@
   integrity sha512-Nx3LFPYwvJGUur4LpF4jSM8nyXxPH1JO6AEGJpsbrrkUmEEhhirZW/jtxkoVAUgQLlO85mX9vm09YhzSEFFGlw==
   dependencies:
     "@nest/thrift-proxy" "^0.2.0"
+    server-only "^0.0.1"
+
+"@nest/justknobs@^0.2.0":
+  version "0.2.2"
+  resolved "https://registry.facebook.net/@nest/justknobs/-/justknobs-0.2.2.tgz#6beab26df3ca1d4aaccde424336a8624a76f13fe"
+  integrity sha512-9fJnaZRnyaUuq+yDhPZCVaJgKpPGhNvHw8mINUMlBGRxymIQdhK1EFDdDP36aLG7/0R5V8gO4gjp8mOCdZo/jw==
+  dependencies:
+    "@nest/thrift-proxy" "^1.0.0"
     server-only "^0.0.1"
 
 "@nest/justknobs@dev":
@@ -1741,6 +1749,19 @@
     "@opentelemetry/sdk-logs" "^0.208.0"
     "@opentelemetry/semantic-conventions" "^1.30.0"
 
+"@nest/memory-profiler@^0.2.0":
+  version "0.2.1"
+  resolved "https://registry.facebook.net/@nest/memory-profiler/-/memory-profiler-0.2.1.tgz#8c98522ea59bcb2be908c9288f1c69a88d0522eb"
+  integrity sha512-yicesamxLW6FKwH+p68q3MxxBsaLmMwnJXI/JCito44fpdtieF6ESs+gNaxTIZ6F8E9HVdK9qZp3RRabBAOj9w==
+  dependencies:
+    "@nest/justknobs" "^0.2.0"
+    "@opentelemetry/api" "^1.9.0"
+    "@opentelemetry/api-logs" "^0.208.0"
+    "@opentelemetry/exporter-logs-otlp-http" "^0.208.0"
+    "@opentelemetry/resources" "^2.2.0"
+    "@opentelemetry/sdk-logs" "^0.208.0"
+    "@opentelemetry/semantic-conventions" "^1.30.0"
+
 "@nest/meta-brand-icons@dev":
   version "0.0.1-dev.650"
   resolved "https://registry.facebook.net/@nest/meta-brand-icons/-/meta-brand-icons-0.0.1-dev.650.tgz#cd780771d2febc61e245f1863e1aba10b8ae8004"
@@ -1752,7 +1773,7 @@
   integrity sha512-GLvIBBZZHSB1Bfj39Bp3aXyf5hrzyPALsS9vdHDMrqjxy4I2DTfdGBb/upnncIsgbvUzN6qFF68Q9WFelkkGUQ==
 
 "@nest/nds@file:../../libs/nds":
-  version "0.4.0"
+  version "0.4.2"
   dependencies:
     "@hookform/resolvers" "^5.1.1"
     "@lexical/clipboard" "^0.22.0"
@@ -1835,7 +1856,7 @@
     zod "^3.25.75"
 
 "@nest/next-core@file:../../libs/next-core":
-  version "0.1.10"
+  version "0.2.0"
   dependencies:
     "@next/env" "^16.1.6"
     webpack "5.105.4"
@@ -1876,12 +1897,12 @@
     zone.js "^0.15.0"
 
 "@nest/otel@file:../../libs/otel":
-  version "0.2.3"
+  version "0.4.0"
   dependencies:
     "@jridgewell/trace-mapping" "^0.3.31"
     "@nest/cpu-profiler" "^0.1.1"
-    "@nest/justknobs" "^0.1.1"
-    "@nest/memory-profiler" "^0.1.2"
+    "@nest/justknobs" "^0.2.0"
+    "@nest/memory-profiler" "^0.2.0"
     "@nest/middleware-chain" "^0.1.1"
     "@nest/request-context" "^0.1.1"
     "@nest/web-session" dev
@@ -1927,7 +1948,7 @@
     web-vitals "^4.2.4"
 
 "@nest/relay@file:../../libs/relay":
-  version "0.1.15"
+  version "0.1.16"
   dependencies:
     "@nest/pre" "^0.1.5"
 
@@ -1974,7 +1995,7 @@
     "@nest/thrift" dev
 
 "@nest/thrift-proxy@file:../../libs/thrift-proxy":
-  version "1.0.2"
+  version "1.0.3"
   dependencies:
     "@nest/request-context" dev
     "@nest/thrift" dev
