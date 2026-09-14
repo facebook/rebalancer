@@ -29,6 +29,8 @@ Rebalancer persists solver instances to Manifold as Thrift binary (zstd-compress
 - **DO** use `@thrift.ReserveIds` when deprecating fields — add the removed field ID to the annotation
 - **DO** only append new fields with the next available ID
 - **DON'T** reuse or reassign a Thrift field ID that was previously used, even if the field was removed
+- **DON'T** rebind a retired field's *name* to a new field ID — `@thrift.ReserveIds` reserves the ID only,
+  so pick a new name too (`minHotObjects` → `minObjectsToExplore` in `SingleRandomStratifiedMoveTypeSpec`)
 - **DON'T** change the type of an existing Thrift field — create a new field instead
 - **DON'T** remove a field from a Thrift struct without adding its ID to `@thrift.ReserveIds`
 
