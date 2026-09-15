@@ -73,6 +73,7 @@ class CompressedIdMap {
   struct DenseStorage {
     std::vector<ValueT> values;
     DynamicBitSet nonDefaultBits;
+    std::size_t numNonDefaultValues{0};
 
     DenseStorage(std::size_t totalSize, const ValueT& defaultValue)
         : values(totalSize, defaultValue), nonDefaultBits(totalSize) {}
@@ -170,6 +171,7 @@ class CompressedIdMap {
     if (isDense_) {
       if (dense_.nonDefaultBits.set(index)) {
         dense_.values[index] = std::move(value);
+        ++dense_.numNonDefaultValues;
       }
       return;
     }
@@ -204,7 +206,7 @@ class CompressedIdMap {
   }
 
   [[nodiscard]] std::size_t nonDefaultSize() const noexcept {
-    return isDense_ ? dense_.nonDefaultBits.numSetBits() : sparse_.size();
+    return isDense_ ? dense_.numNonDefaultValues : sparse_.size();
   }
 
   template <typename F>

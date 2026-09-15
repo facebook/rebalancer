@@ -17,8 +17,10 @@
 #include "algopt/rebalancer/algopt_common/DynamicBitSet.h"
 #include "algopt/rebalancer/entities/Identifiers.h"
 
+#include <folly/synchronization/DelayedInit.h>
+
 #include <algorithm>
-#include <optional>
+#include <atomic>
 #include <vector>
 
 namespace facebook::rebalancer {
@@ -26,32 +28,59 @@ namespace facebook::rebalancer {
 class InvalidMoveFilter {
  public:
   InvalidMoveFilter(size_t numObjects, size_t numContainers);
+  InvalidMoveFilter(const InvalidMoveFilter& other);
+  InvalidMoveFilter(InvalidMoveFilter&& other) noexcept;
+  InvalidMoveFilter& operator=(const InvalidMoveFilter& other) = delete;
+  InvalidMoveFilter& operator=(InvalidMoveFilter&& other) = delete;
+  ~InvalidMoveFilter() = default;
 
+  // Safe to call concurrently. Reads, copies, and merges require caller
+  // synchronization after all markInvalid() calls have finished.
   void markInvalid(
       entities::ObjectId objectId,
       entities::ContainerId containerId);
 
   // Union `other` into this filter: afterwards a pair is invalid if it was
   // invalid in either filter. Both must have the same object/container
-  // dimensions.
+  // dimensions. Not thread-safe; call it only once marking has joined.
   void mergeFrom(const InvalidMoveFilter& other);
 
   bool isMarkedInvalid(
       entities::ObjectId objectId,
       entities::ContainerId containerId) const {
-    if (isEmpty_) {
+    if (empty()) {
       return false;
     }
     const auto& row = containerToInvalidObjects_[containerId.asIndex()];
     return row.has_value() && row->isSet(objectId.asIndex());
   }
 
-  bool empty() const;
+  bool anyMarkedInvalid(
+      const std::vector<entities::ObjectId>& objectBundle,
+      entities::ContainerId containerId) const {
+    if (empty()) {
+      return false;
+    }
+    const auto& row = containerToInvalidObjects_[containerId.asIndex()];
+    if (!row.has_value()) {
+      return false;
+    }
+    const auto& invalidObjects = *row;
+    return std::any_of(
+        objectBundle.begin(), objectBundle.end(), [&](auto objectId) {
+          return invalidObjects.isSet(objectId.asIndex());
+        });
+  }
+
+  bool empty() const {
+    return isEmpty_.load(std::memory_order_relaxed);
+  }
 
  private:
-  std::vector<std::optional<algopt::DynamicBitSet>> containerToInvalidObjects_;
+  std::vector<folly::DelayedInit<algopt::DynamicBitSet>>
+      containerToInvalidObjects_;
   size_t numObjects_{0};
-  bool isEmpty_{true};
+  std::atomic<bool> isEmpty_{true};
 };
 
 // Returns true if any object in `objectBundle` is marked invalid for
@@ -60,13 +89,7 @@ inline bool anyMoveInvalid(
     const InvalidMoveFilter* filter,
     const std::vector<entities::ObjectId>& objectBundle,
     entities::ContainerId destContainer) {
-  if (filter == nullptr) {
-    return false;
-  }
-  return std::any_of(
-      objectBundle.begin(), objectBundle.end(), [&](auto objectId) {
-        return filter->isMarkedInvalid(objectId, destContainer);
-      });
+  return filter && filter->anyMarkedInvalid(objectBundle, destContainer);
 }
 
 } // namespace facebook::rebalancer

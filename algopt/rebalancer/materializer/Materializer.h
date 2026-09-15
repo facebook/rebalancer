@@ -26,6 +26,8 @@
 
 #include <folly/SynchronizedPtr.h>
 
+#include <memory>
+
 namespace facebook::rebalancer::materializer {
 
 struct SplitConstraint {
@@ -57,7 +59,8 @@ class Materializer {
 
   folly::coro::Task<void> materializeConstraintCoro(
       ExpressionBuilder& expressionBuilder,
-      entities::ConstraintId constraintId);
+      entities::ConstraintId constraintId,
+      InvalidMoveFilter* invalidMoveFilter);
 
   static SplitConstraint splitConstraintComponent(
       ExpressionBuilder& expressionBuilder,
@@ -96,6 +99,7 @@ class Materializer {
   SpecBuilderFactory specBuilderFactory_;
   std::shared_ptr<LogCollector> logger_;
   folly::SynchronizedPtr<std::shared_ptr<MaterializedProblem>> materialized_;
+  std::unique_ptr<InvalidMoveFilter> invalidMoveFilter_;
   std::shared_ptr<Metrics::Builder> metricsBuilder_;
 };
 

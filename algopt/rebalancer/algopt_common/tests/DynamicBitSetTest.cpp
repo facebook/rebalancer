@@ -19,6 +19,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <thread>
 #include <vector>
 
 namespace facebook::algopt::tests {
@@ -61,19 +62,6 @@ TEST(DynamicBitSetTest, SetReturnsTrueOnFirstSetFalseOnRepeat) {
   EXPECT_FALSE(bs.set(7));
   EXPECT_FALSE(bs.set(7));
   EXPECT_TRUE(bs.set(8));
-}
-
-TEST(DynamicBitSetTest, NumSetBitsTracksDistinctSets) {
-  DynamicBitSet bs(256);
-  EXPECT_EQ(bs.numSetBits(), 0u);
-  bs.set(0);
-  bs.set(63);
-  bs.set(64);
-  bs.set(255);
-  EXPECT_EQ(bs.numSetBits(), 4u);
-  bs.set(0); // already set; should not double-count.
-  bs.set(63);
-  EXPECT_EQ(bs.numSetBits(), 4u);
 }
 
 TEST(DynamicBitSetTest, SetIsIdempotent) {
@@ -141,6 +129,66 @@ TEST(DynamicBitSetTest, MoveTransfersState) {
   EXPECT_EQ(moved.size(), 128u);
   EXPECT_TRUE(moved.isSet(5));
   EXPECT_TRUE(moved.isSet(70));
+}
+
+TEST(DynamicBitSetTest, MergeFromIsUnion) {
+  DynamicBitSet a(200);
+  a.set(1);
+  a.set(64);
+  a.set(199);
+
+  DynamicBitSet b(200);
+  b.set(64); // overlaps a
+  b.set(65); // same block as 64, new bit
+  b.set(150); // new block
+
+  a.mergeFrom(b);
+
+  for (const auto i : {1u, 64u, 65u, 150u, 199u}) {
+    EXPECT_TRUE(a.isSet(i)) << "i=" << i;
+  }
+  EXPECT_FALSE(a.isSet(0));
+  EXPECT_FALSE(a.isSet(63));
+  EXPECT_FALSE(b.isSet(1));
+  EXPECT_TRUE(b.isSet(64));
+  EXPECT_TRUE(b.isSet(65));
+  EXPECT_TRUE(b.isSet(150));
+  EXPECT_FALSE(b.isSet(199));
+}
+
+TEST(DynamicBitSetTest, MergeFromEmptyIsNoOp) {
+  DynamicBitSet a(64);
+  a.set(3);
+  const DynamicBitSet empty(64);
+
+  a.mergeFrom(empty);
+
+  EXPECT_TRUE(a.isSet(3));
+}
+
+TEST(DynamicBitSetTest, AtomicSetFromManyThreadsSetsEveryBit) {
+  constexpr std::size_t kNumBits = 4096;
+  constexpr std::size_t kNumThreads = 8;
+
+  DynamicBitSet bitSet(kNumBits);
+
+  // Interleave the strides so threads contend on the same 64-bit blocks.
+  std::vector<std::thread> threads;
+  threads.reserve(kNumThreads);
+  for (const auto t : folly::irange(kNumThreads)) {
+    threads.emplace_back([&bitSet, t] {
+      for (std::size_t i = t; i < kNumBits; i += kNumThreads) {
+        bitSet.atomicSet(i);
+      }
+    });
+  }
+  for (auto& thread : threads) {
+    thread.join();
+  }
+
+  for (const auto i : folly::irange(kNumBits)) {
+    ASSERT_TRUE(bitSet.isSet(i)) << "i=" << i;
+  }
 }
 
 } // namespace facebook::algopt::tests

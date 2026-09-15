@@ -80,16 +80,15 @@ Materializer::Materializer(
       specBuilderFactory_(universe_, continuousExpressions, logger),
       logger_(std::move(logger)),
       materialized_(std::make_shared<MaterializedProblem>(*universe_)),
+      invalidMoveFilter_(
+          enableInvalidMoveFilter
+              ? std::make_unique<InvalidMoveFilter>(
+                    universe_->getObjects().getObjectIds().size(),
+                    universe_->getContainers().getContainerIds().size())
+              : nullptr),
       metricsBuilder_(
           shouldCollectMetrics ? std::make_shared<Metrics::Builder>()
-                               : nullptr) {
-  if (enableInvalidMoveFilter) {
-    materialized_.wlock()->invalidMoveFilter =
-        std::make_unique<InvalidMoveFilter>(
-            universe_->getObjects().getObjectIds().size(),
-            universe_->getContainers().getContainerIds().size());
-  }
-}
+                               : nullptr) {}
 
 std::shared_ptr<MaterializedProblem> Materializer::materialize() {
   auto updatesInInitialAssignment = getUpdatesInInitialAssignment();
@@ -128,12 +127,13 @@ std::shared_ptr<MaterializedProblem> Materializer::materialize() {
       "Materialize Constraints & Goals");
   const auto constraintIds = universe_->getConstraints().getConstraintIds();
   const auto goalIds = universe_->getGoals().getGoalIds();
+  auto* invalidMoveFilter = invalidMoveFilter_.get();
 
   std::vector<folly::coro::Task<void>> tasks;
   tasks.reserve(constraintIds.size() + goalIds.size());
   for (auto constraintId : constraintIds) {
-    tasks.emplace_back(
-        materializeConstraintCoro(expressionBuilder, constraintId));
+    tasks.emplace_back(materializeConstraintCoro(
+        expressionBuilder, constraintId, invalidMoveFilter));
   }
   for (auto goalId : goalIds) {
     tasks.emplace_back(materializeGoalCoro(expressionBuilder, goalId));
@@ -144,6 +144,10 @@ std::shared_ptr<MaterializedProblem> Materializer::materialize() {
           tasks.end(),
           [&](auto iter) { return std::move(*iter); },
           executor_));
+
+  if (invalidMoveFilter_ && !invalidMoveFilter_->empty()) {
+    materialized_.wlock()->invalidMoveFilter = std::move(invalidMoveFilter_);
+  }
 
   ctrMaterialization.stop();
 
@@ -160,14 +164,6 @@ std::shared_ptr<MaterializedProblem> Materializer::materialize() {
     materialized_.wlock()->metrics =
         std::make_shared<Metrics>(metricsBuilder_->build(universe_));
   }
-
-  // Reset empty filter to null so hot-loop pointer checks short-circuit.
-  materialized_.withWLock([](auto& wlockedMaterialized) {
-    if (wlockedMaterialized.invalidMoveFilter &&
-        wlockedMaterialized.invalidMoveFilter->empty()) {
-      wlockedMaterialized.invalidMoveFilter.reset();
-    }
-  });
 
   return *materialized_.wlockPointer();
 }
@@ -201,7 +197,8 @@ Map<ObjectId, ContainerId> Materializer::getUpdatesInInitialAssignment() {
 
 folly::coro::Task<void> Materializer::materializeConstraintCoro(
     ExpressionBuilder& expressionBuilder,
-    entities::ConstraintId constraintId) {
+    entities::ConstraintId constraintId,
+    InvalidMoveFilter* invalidMoveFilter) {
   auto& constraint = universe_->getConstraints().getConstraint(constraintId);
   auto specBuilder = specBuilderFactory_.getBuilder(constraint.getSpec());
   auto specType =
@@ -285,12 +282,12 @@ folly::coro::Task<void> Materializer::materializeConstraintCoro(
     wlockedMaterialized.nonAcceptingContainers.insert(
         std::move_iterator(nonAcceptingContainers.begin()),
         std::move_iterator(nonAcceptingContainers.end()));
-    if (wlockedMaterialized.invalidMoveFilter &&
-        constraint.getPolicy() != interface::ConstraintPolicy::SOFT) {
-      specBuilder->populateInvalidMoveFilter(
-          *wlockedMaterialized.invalidMoveFilter);
-    }
   });
+
+  if (invalidMoveFilter &&
+      constraint.getPolicy() != interface::ConstraintPolicy::SOFT) {
+    specBuilder->populateInvalidMoveFilter(*invalidMoveFilter);
+  }
 
   logger_->log(
       SpecUsageInfo{

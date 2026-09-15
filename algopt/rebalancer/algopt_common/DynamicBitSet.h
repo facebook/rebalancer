@@ -16,6 +16,7 @@
 
 #include <folly/lang/SafeAssert.h>
 
+#include <atomic>
 #include <bit>
 #include <cstddef>
 #include <cstdint>
@@ -30,8 +31,13 @@ to be known at compile time. Internally it stores 64-bit blocks
 zero-initialized and turned on with `set(i)`.
 
 Complexity, with `N` total bits, `B = ceil(N / 64)` blocks, and `K` set bits:
-- `set(i)`, `isSet(i)`, numSetBits(): `O(1)`.
+- `set(i)`, `atomicSet(i)`, `isSet(i)`: `O(1)`.
+- `mergeFrom(other)`: `O(B)`.
 - `forEachSetBit(fn)`: `O(B + K)`.
+
+Thread safety: `atomicSet()` calls may run concurrently with one another. No
+other operation may overlap a mutation; callers must synchronize after the
+last `atomicSet()` before reading or using a non-atomic mutation method.
 */
 class DynamicBitSet {
  public:
@@ -58,8 +64,39 @@ class DynamicBitSet {
     }
 
     block |= singleBitMask;
-    ++numSetBits_;
     return true;
+  }
+
+  // Sets bit `i` atomically. Unlike set(), this is safe to call concurrently
+  // with other atomicSet() calls on the same bitset, including on the same
+  // block.
+  void atomicSet(std::size_t i) noexcept {
+    FOLLY_SAFE_CHECK(
+        i < numBits_, "DynamicBitSet::atomicSet: bit index out of range: ", i);
+    const auto blockIndex = i / kBitsPerBlock;
+    const auto bitInBlock = i % kBitsPerBlock;
+    const auto singleBitMask = block_type{1} << bitInBlock;
+    const std::atomic_ref<block_type> block(blocks_[blockIndex]);
+    // Reading first is cheaper when the bit has already been set. If multiple
+    // threads see it unset, fetch_or() still sets it atomically.
+    if ((block.load(std::memory_order_relaxed) & singleBitMask) != 0) {
+      return;
+    }
+    block.fetch_or(singleBitMask, std::memory_order_relaxed);
+  }
+
+  // Sets every bit that is set in `other`, which must have the same size.
+  // O(numBlocks) regardless of density.
+  void mergeFrom(const DynamicBitSet& other) noexcept {
+    FOLLY_SAFE_CHECK(
+        numBits_ == other.numBits_,
+        "DynamicBitSet::mergeFrom: size mismatch: ",
+        numBits_,
+        " vs ",
+        other.numBits_);
+    for (std::size_t b = 0; b < blocks_.size(); ++b) {
+      blocks_[b] |= other.blocks_[b];
+    }
   }
 
   [[nodiscard]] bool isSet(std::size_t i) const noexcept {
@@ -73,10 +110,6 @@ class DynamicBitSet {
 
   [[nodiscard]] std::size_t size() const noexcept {
     return numBits_;
-  }
-
-  [[nodiscard]] std::size_t numSetBits() const noexcept {
-    return numSetBits_;
   }
 
   [[nodiscard]] bool empty() const noexcept {
@@ -115,7 +148,6 @@ class DynamicBitSet {
  private:
   std::vector<block_type> blocks_;
   std::size_t numBits_;
-  std::size_t numSetBits_{0};
 };
 
 } // namespace facebook::algopt

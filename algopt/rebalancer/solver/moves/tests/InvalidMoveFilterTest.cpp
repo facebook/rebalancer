@@ -16,9 +16,14 @@
 
 #include <gtest/gtest.h>
 
+#include <thread>
+#include <utility>
+#include <vector>
+
 namespace facebook::rebalancer::tests {
 
 using entities::ContainerId;
+using entities::EntityIdType;
 using entities::ObjectId;
 
 TEST(InvalidMoveFilterTest, EmptyFilterSkipsNothing) {
@@ -26,6 +31,13 @@ TEST(InvalidMoveFilterTest, EmptyFilterSkipsNothing) {
   EXPECT_TRUE(filter.empty());
   EXPECT_FALSE(filter.isMarkedInvalid(ObjectId(0), ContainerId(0)));
   EXPECT_FALSE(filter.isMarkedInvalid(ObjectId(99), ContainerId(49)));
+}
+
+TEST(InvalidMoveFilterTest, EmptyZeroContainerFilterSkipsWithoutIndexing) {
+  const InvalidMoveFilter filter(/*numObjects=*/1, /*numContainers=*/0);
+
+  EXPECT_FALSE(filter.isMarkedInvalid(ObjectId(0), ContainerId(0)));
+  EXPECT_FALSE(filter.anyMarkedInvalid({ObjectId(0)}, ContainerId(0)));
 }
 
 TEST(InvalidMoveFilterTest, MarkInvalid) {
@@ -51,6 +63,17 @@ TEST(InvalidMoveFilterTest, MultiplePairs) {
   EXPECT_TRUE(filter.isMarkedInvalid(ObjectId(5), ContainerId(2)));
   EXPECT_FALSE(filter.isMarkedInvalid(ObjectId(0), ContainerId(4)));
   EXPECT_FALSE(filter.isMarkedInvalid(ObjectId(9), ContainerId(0)));
+}
+
+TEST(InvalidMoveFilterTest, AnyMarkedInvalidChecksOneDestinationRow) {
+  InvalidMoveFilter filter(/*numObjects=*/5, /*numContainers=*/3);
+  filter.markInvalid(ObjectId(2), ContainerId(1));
+
+  EXPECT_TRUE(filter.anyMarkedInvalid(
+      {ObjectId(0), ObjectId(2), ObjectId(4)}, ContainerId(1)));
+  EXPECT_FALSE(
+      filter.anyMarkedInvalid({ObjectId(0), ObjectId(4)}, ContainerId(1)));
+  EXPECT_FALSE(filter.anyMarkedInvalid({ObjectId(2)}, ContainerId(2)));
 }
 
 TEST(InvalidMoveFilterTest, OneObjectInvalidForAllContainers) {
@@ -118,6 +141,109 @@ TEST(InvalidMoveFilterTest, MergeFromEmptyIsNoOp) {
 
   EXPECT_TRUE(a.isMarkedInvalid(ObjectId(1), ContainerId(1)));
   EXPECT_FALSE(a.isMarkedInvalid(ObjectId(0), ContainerId(0)));
+}
+
+TEST(InvalidMoveFilterTest, MergeFromIntoEmptyFilterPopulatesIt) {
+  InvalidMoveFilter populated(/*numObjects=*/5, /*numContainers=*/5);
+  populated.markInvalid(ObjectId(2), ContainerId(1));
+
+  InvalidMoveFilter dst(/*numObjects=*/5, /*numContainers=*/5);
+  EXPECT_TRUE(dst.empty());
+
+  dst.mergeFrom(populated);
+
+  EXPECT_FALSE(dst.empty());
+  EXPECT_TRUE(dst.isMarkedInvalid(ObjectId(2), ContainerId(1)));
+}
+
+TEST(InvalidMoveFilterTest, ConcurrentMarkingMarksEveryPair) {
+  constexpr EntityIdType kNumObjects = 500;
+  constexpr EntityIdType kNumContainers = 40;
+  constexpr EntityIdType kNumThreads = 8;
+
+  // Each thread owns a stride of objects but marks across every container, so
+  // threads collide on the same rows and on the same 64-bit blocks.
+  const auto pairsFor = [](EntityIdType thread) {
+    std::vector<std::pair<EntityIdType, EntityIdType>> pairs;
+    for (EntityIdType o = thread; o < kNumObjects; o += kNumThreads) {
+      for (EntityIdType c = 0; c < kNumContainers; ++c) {
+        pairs.emplace_back(o, c);
+      }
+    }
+    return pairs;
+  };
+
+  InvalidMoveFilter actual(kNumObjects, kNumContainers);
+  std::vector<std::thread> threads;
+  threads.reserve(kNumThreads);
+  for (EntityIdType t = 0; t < kNumThreads; ++t) {
+    threads.emplace_back([&actual, pairs = pairsFor(t)] {
+      for (const auto& [o, c] : pairs) {
+        actual.markInvalid(ObjectId(o), ContainerId(c));
+      }
+    });
+  }
+  for (auto& thread : threads) {
+    thread.join();
+  }
+
+  EXPECT_FALSE(actual.empty());
+  for (EntityIdType o = 0; o < kNumObjects; ++o) {
+    for (EntityIdType c = 0; c < kNumContainers; ++c) {
+      ASSERT_TRUE(actual.isMarkedInvalid(ObjectId(o), ContainerId(c)))
+          << "object=" << o << " container=" << c;
+    }
+  }
+}
+
+TEST(InvalidMoveFilterTest, ConcurrentFirstTouchOfSameRowLosesNoBits) {
+  // Every thread races to be the one that allocates the single container's row.
+  constexpr EntityIdType kNumObjects = 2000;
+  constexpr EntityIdType kNumThreads = 16;
+
+  InvalidMoveFilter filter(kNumObjects, /*numContainers=*/1);
+  std::vector<std::thread> threads;
+  threads.reserve(kNumThreads);
+  for (EntityIdType t = 0; t < kNumThreads; ++t) {
+    threads.emplace_back([&filter, t] {
+      for (EntityIdType o = t; o < kNumObjects; o += kNumThreads) {
+        filter.markInvalid(ObjectId(o), ContainerId(0));
+      }
+    });
+  }
+  for (auto& thread : threads) {
+    thread.join();
+  }
+
+  for (EntityIdType o = 0; o < kNumObjects; ++o) {
+    ASSERT_TRUE(filter.isMarkedInvalid(ObjectId(o), ContainerId(0)))
+        << "object=" << o;
+  }
+}
+
+TEST(InvalidMoveFilterTest, CopyingPreservesRowsWithoutSharingThem) {
+  InvalidMoveFilter original(/*numObjects=*/8, /*numContainers=*/4);
+  original.markInvalid(ObjectId(1), ContainerId(2));
+
+  InvalidMoveFilter copy = original;
+  copy.markInvalid(ObjectId(3), ContainerId(2));
+  copy.markInvalid(ObjectId(4), ContainerId(0));
+
+  EXPECT_TRUE(copy.isMarkedInvalid(ObjectId(1), ContainerId(2)));
+  EXPECT_TRUE(copy.isMarkedInvalid(ObjectId(3), ContainerId(2)));
+  EXPECT_TRUE(copy.isMarkedInvalid(ObjectId(4), ContainerId(0)));
+  EXPECT_FALSE(original.isMarkedInvalid(ObjectId(3), ContainerId(2)));
+  EXPECT_FALSE(original.isMarkedInvalid(ObjectId(4), ContainerId(0)));
+}
+
+TEST(InvalidMoveFilterTest, MovingPreservesRows) {
+  InvalidMoveFilter original(/*numObjects=*/8, /*numContainers=*/4);
+  original.markInvalid(ObjectId(1), ContainerId(2));
+
+  const InvalidMoveFilter moved = std::move(original);
+
+  EXPECT_FALSE(moved.empty());
+  EXPECT_TRUE(moved.isMarkedInvalid(ObjectId(1), ContainerId(2)));
 }
 
 } // namespace facebook::rebalancer::tests

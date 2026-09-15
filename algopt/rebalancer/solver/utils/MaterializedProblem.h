@@ -85,7 +85,7 @@ struct MaterializedProblem {
   // Filter for skipping invalid (object, container) pairs before
   // full expression-tree evaluation. Built from constraint specs during
   // materialization. May be null if no constraints contribute invalid pairs.
-  std::unique_ptr<InvalidMoveFilter> invalidMoveFilter;
+  std::unique_ptr<const InvalidMoveFilter> invalidMoveFilter;
 };
 
 } // namespace facebook::rebalancer
