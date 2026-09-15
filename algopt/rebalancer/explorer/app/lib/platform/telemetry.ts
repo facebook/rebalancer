@@ -24,6 +24,24 @@
  * .env are already shaped for an OTLP collector).
  */
 
+interface LogAttributes {
+  [key: string]: string | number | boolean | undefined;
+}
+
+interface Logger {
+  error(message: string, error?: Error, attributes?: LogAttributes): void;
+}
+
+const logger: Logger = {
+  error(_message, _error, _attributes): void {
+    return;
+  },
+};
+
+export function createLogger(_name: string): Logger {
+  return logger;
+}
+
 export async function register(): Promise<void> {
   // Intentionally a no-op in the OSS build.
 }

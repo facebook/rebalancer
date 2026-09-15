@@ -16,6 +16,7 @@
 
 import type {
   Assignment,
+  BundleExpirationResponse,
   ConstraintSpecResponse,
   DataResponse,
   EvaluateResponse,
@@ -36,6 +37,73 @@ import type {
   TreeNodeResponse,
   TypeaheadResponse,
 } from './rebalancer-explorer-types';
+
+export const DEFAULT_EXPIRATION_DAYS = 90;
+export const SECONDS_PER_DAY = 86_400;
+const MAX_MANIFOLD_EXPIRATION_TIMESTAMP_SECONDS = 2_147_483_647;
+const MAX_EXPIRATION_EXTENSION_DAYS = Math.floor(
+  MAX_MANIFOLD_EXPIRATION_TIMESTAMP_SECONDS / SECONDS_PER_DAY,
+);
+
+export function isValidExpirationDays(extensionDays: number): boolean {
+  return (
+    Number.isSafeInteger(extensionDays) &&
+    extensionDays >= 0 &&
+    extensionDays <= MAX_EXPIRATION_EXTENSION_DAYS
+  );
+}
+
+export function expirationDaysToSeconds(extensionDays: number): number {
+  return extensionDays * SECONDS_PER_DAY;
+}
+
+export function getExpirationExtensionSecondsFromNow(
+  currentExpiration: number,
+  extensionDays: number,
+  nowMs: number = Date.now(),
+): number | null {
+  if (
+    !Number.isSafeInteger(currentExpiration) ||
+    currentExpiration < 0 ||
+    !isValidExpirationDays(extensionDays)
+  ) {
+    return null;
+  }
+  if (currentExpiration === 0 || extensionDays === 0) {
+    return 0;
+  }
+
+  const extendedExpiration =
+    currentExpiration + expirationDaysToSeconds(extensionDays);
+  const secondsFromNow = extendedExpiration - Math.floor(nowMs / 1000);
+  if (
+    !Number.isSafeInteger(extendedExpiration) ||
+    extendedExpiration > MAX_MANIFOLD_EXPIRATION_TIMESTAMP_SECONDS ||
+    secondsFromNow <= 0
+  ) {
+    return null;
+  }
+  return secondsFromNow;
+}
+
+async function parseBundleExpirationResponse(
+  response: Response,
+): Promise<BundleExpirationResponse> {
+  const body: unknown = await response.json();
+  if (
+    typeof body !== 'object' ||
+    body == null ||
+    !('expiresAt' in body) ||
+    typeof body.expiresAt !== 'number' ||
+    !Number.isFinite(body.expiresAt) ||
+    !Number.isInteger(body.expiresAt) ||
+    body.expiresAt < 0
+  ) {
+    throw new Error('Invalid expiration response');
+  }
+
+  return {expiresAt: body.expiresAt};
+}
 
 export async function fetchHandle(manifoldId: string): Promise<HandleResponse> {
   const response = await fetch('/api/rebalancer/handle', {
@@ -84,6 +152,50 @@ export async function fetchProblemMetadata(
   }
 
   return response.json();
+}
+
+export async function extendBundleExpiration(
+  handle: Handle,
+  extensionDays: number,
+): Promise<BundleExpirationResponse> {
+  const response = await fetch('/api/rebalancer/bundle-expiration', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Requested-With': 'fetch',
+    },
+    credentials: 'include',
+    body: JSON.stringify({handle, extensionDays}),
+  });
+
+  if (!response.ok) {
+    const body = await response.json();
+    throw new Error(body.error ?? 'Failed to extend expiration');
+  }
+
+  return parseBundleExpirationResponse(response);
+}
+
+export async function fetchBundleExpiration(
+  handle: Handle,
+): Promise<BundleExpirationResponse> {
+  const params = new URLSearchParams({
+    manifoldId: handle.manifoldId,
+    host: handle.host,
+    port: handle.port.toString(),
+    taskId: handle.taskId.toString(),
+  });
+  const response = await fetch(`/api/rebalancer/bundle-expiration?${params}`, {
+    credentials: 'include',
+    cache: 'no-store',
+  });
+
+  if (!response.ok) {
+    const body = await response.json();
+    throw new Error(body.error ?? 'Failed to fetch expiration');
+  }
+
+  return parseBundleExpirationResponse(response);
 }
 
 export async function fetchEvaluation(

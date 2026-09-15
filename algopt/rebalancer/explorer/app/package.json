@@ -41,7 +41,8 @@
     "react-relay": "main",
     "recharts": "^2.15.3",
     "relay-runtime": "main",
-    "zone.js": "^0.15.0"
+    "zone.js": "^0.15.0",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.5",

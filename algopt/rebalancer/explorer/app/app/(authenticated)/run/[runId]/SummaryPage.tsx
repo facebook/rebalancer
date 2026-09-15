@@ -15,6 +15,7 @@ import {Check, Copy} from 'lucide-react';
 import {useProblemMetadata} from '@/lib/contexts/ProblemMetadataContext';
 import {useRebalancerHandle} from '@/lib/contexts/RebalancerHandleContext';
 import {tupperwareTaskLink} from '@platform/internal-links';
+import BundleExpirationButton from '@/app/components/BundleExpirationButton';
 
 function formatDuration(totalSeconds: number): string {
   if (totalSeconds <= 0) {
@@ -124,6 +125,11 @@ export default function SummaryPage() {
                 <CopyButton value={metadata.runId} />
               </span>
             </DescriptionItem>
+            {handle != null && (
+              <DescriptionItem label="Manifold Expiration">
+                <BundleExpirationButton handle={handle} />
+              </DescriptionItem>
+            )}
             <DescriptionItem label="Service Name">
               {metadata.serviceName}
             </DescriptionItem>

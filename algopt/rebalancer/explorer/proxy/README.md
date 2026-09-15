@@ -18,11 +18,13 @@ JSON encoding of the corresponding Thrift struct. The response body is the JSON
 encoding of the Thrift return value (HTTP `200`), or `{"error": "..."}` on
 failure.
 
-All 16 service methods are proxied:
+All 18 service methods are proxied:
 
 | `POST /v2/...`                   | Request body fields                                           |
 | -------------------------------- | ------------------------------------------------------------ |
 | `getHandle`                      | `request`                                                    |
+| `getBundleExpiration`            | `handle`                                                     |
+| `extendBundleExpiration`         | `handle`, `secondsFromNow`                                   |
 | `getSandboxStatus`               | `handle`                                                     |
 | `getProblemMetadataV2`           | `handle`                                                     |
 | `getDataV2`                      | `handle`, `request`                                          |

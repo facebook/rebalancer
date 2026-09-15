@@ -548,6 +548,16 @@ service RebalancerExplorerService {
   ////
   HandleResponse getHandle(1: HandleRequest request);
 
+  // Return the run's Manifold expiration timestamp in seconds since epoch, or
+  // zero when the run never expires.
+  i64 getBundleExpiration(1: Handle handle);
+
+  // Extend a run's Manifold expiration. `secondsFromNow` must be non-negative;
+  // zero means the run never expires. Existing longer or permanent retention
+  // is never shortened. Returns the final expiration timestamp in seconds
+  // since epoch, or zero when permanent.
+  i64 extendBundleExpiration(1: Handle handle, 2: i64 secondsFromNow);
+
   SandboxStatusResponse getSandboxStatus(1: Handle handle);
 
   // Server-level status: sandbox counts and memory usage. Used for server

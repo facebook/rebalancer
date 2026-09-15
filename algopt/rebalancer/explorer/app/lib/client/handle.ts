@@ -23,6 +23,7 @@
  */
 
 import type {
+  BundleExpirationResponse,
   Handle,
   HandleResponse,
   ProblemMetadataResponse,
@@ -45,6 +46,42 @@ export async function getHandle(
     return response as HandleResponse;
   } catch (error) {
     throw new RebalancerExplorerBackendError('getHandle', error);
+  }
+}
+
+export async function extendBundleExpiration(
+  handle: Handle,
+  secondsFromNow: number,
+  catToken?: string,
+): Promise<BundleExpirationResponse> {
+  try {
+    const rpcClient = await getRpcClient(catToken, {
+      ip_addr: handle.host,
+      port: handle.port,
+    });
+    const expiresAt = (await rpcClient.extendBundleExpiration({
+      handle,
+      secondsFromNow,
+    })) as number;
+    return {expiresAt};
+  } catch (error) {
+    throw new RebalancerExplorerBackendError('extendBundleExpiration', error);
+  }
+}
+
+export async function getBundleExpiration(
+  handle: Handle,
+  catToken?: string,
+): Promise<BundleExpirationResponse> {
+  try {
+    const rpcClient = await getRpcClient(catToken, {
+      ip_addr: handle.host,
+      port: handle.port,
+    });
+    const expiresAt = (await rpcClient.getBundleExpiration({handle})) as number;
+    return {expiresAt};
+  } catch (error) {
+    throw new RebalancerExplorerBackendError('getBundleExpiration', error);
   }
 }
 

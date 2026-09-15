@@ -153,6 +153,24 @@ mGetHandle(ExplorerClient& c, const folly::dynamic& b, RpcOptions& o) {
   co_return toJson(co_await c.co_getHandle(o, request));
 }
 
+folly::coro::Task<std::string> mGetBundleExpiration(
+    ExplorerClient& c,
+    const folly::dynamic& b,
+    RpcOptions& o) {
+  auto handle = parseArg<Handle>(b, "handle");
+  co_return toJson(co_await c.co_getBundleExpiration(o, handle));
+}
+
+folly::coro::Task<std::string> mExtendBundleExpiration(
+    ExplorerClient& c,
+    const folly::dynamic& b,
+    RpcOptions& o) {
+  auto handle = parseArg<Handle>(b, "handle");
+  const auto secondsFromNow = parseArg<int64_t>(b, "secondsFromNow");
+  co_return toJson(
+      co_await c.co_extendBundleExpiration(o, handle, secondsFromNow));
+}
+
 folly::coro::Task<std::string>
 mGetSandboxStatus(ExplorerClient& c, const folly::dynamic& b, RpcOptions& o) {
   auto handle = parseArg<Handle>(b, "handle");
@@ -275,6 +293,8 @@ mExportTable(ExplorerClient& c, const folly::dynamic& b, RpcOptions& o) {
 const std::unordered_map<std::string, MethodFn>& methodTable() {
   static const auto* table = new std::unordered_map<std::string, MethodFn>{
       {"getHandle", &mGetHandle},
+      {"getBundleExpiration", &mGetBundleExpiration},
+      {"extendBundleExpiration", &mExtendBundleExpiration},
       {"getSandboxStatus", &mGetSandboxStatus},
       {"getProblemMetadataV2", &mGetProblemMetadataV2},
       {"getDataV2", &mGetDataV2},

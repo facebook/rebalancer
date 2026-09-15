@@ -41,6 +41,10 @@ export interface HandleResponse {
   handle: Handle;
 }
 
+export interface BundleExpirationResponse {
+  expiresAt: number;
+}
+
 export enum SandboxStatus {
   NOT_LOADED = 1,
   LOADING = 2,
