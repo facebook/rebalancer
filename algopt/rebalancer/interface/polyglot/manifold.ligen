@@ -7,4 +7,8 @@ namespace "facebook::rebalancer::interface";
 class Manifold {
   @py_release_gil_requires_threadsafe_cpp_library
   static AssignmentProblem.Bundle download(string runId) throws;
+
+  @output_name(py="deleteObj")
+  @py_release_gil_requires_threadsafe_cpp_library
+  static void deleteObj(string runId) throws;
 }

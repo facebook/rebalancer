@@ -16,17 +16,14 @@
 
 # pyre-strict
 
-import io
 from collections import Counter
 
-import zstandard as zstd
+from algopt.rebalancer.interface.polyglot.py_bindings.manifold import Manifold
 from algopt.rebalancer.interface.py_client.ProblemSolver import (
     AsyncManifoldUploadHandle,
     ProblemSolver,
 )
 from libfb.py.testutil import BaseFacebookTestCase
-from manifold.clients.python.manifold_client import ManifoldClient
-from rebalancer.interface.thrift.AssignmentProblem.thrift_types import Bundle
 from rebalancer.interface.thrift.Types.thrift_types import AssignmentSolution
 from rebalancer.interface.thrift.v2.ProblemSolver.thrift_types import (
     ManifoldBackupParams,
@@ -38,27 +35,10 @@ from rebalancer.interface.thrift.v2.SolverSpecs.thrift_types import (
     MoveTypeSpec,
     SingleMoveTypeSpec,
 )
-from thrift.python.serializer import deserialize, Protocol
-
-_MANIFOLD_BUCKET = "rebalancer"
 
 
 class TestAsyncManifoldUploadHandle(BaseFacebookTestCase):
     """Tests for AsyncManifoldUploadHandle Python bindings."""
-
-    @staticmethod
-    def _manifold_path(run_id: str) -> str:
-        return f"flat/solver_run_{run_id}"
-
-    @staticmethod
-    def _download_bundle(client: ManifoldClient, run_id: str) -> Bundle:
-        """Download and deserialize a Bundle from Manifold (zstd-compressed thrift binary)."""
-        buf = io.BytesIO()
-        client.sync_get(TestAsyncManifoldUploadHandle._manifold_path(run_id), buf)
-        compressed = buf.getvalue()
-        decompressor = zstd.ZstdDecompressor()
-        decompressed = decompressor.decompress(compressed)
-        return deserialize(Bundle, decompressed, protocol=Protocol.BINARY)
 
     @staticmethod
     def _setup_problem(solver: ProblemSolver) -> None:
@@ -112,15 +92,14 @@ class TestAsyncManifoldUploadHandle(BaseFacebookTestCase):
 
     def _verify_and_cleanup_uploads(self, run_ids: list[str]) -> None:
         """Download bundles from manifold, verify runIds, then delete."""
-        with ManifoldClient.get_client(_MANIFOLD_BUCKET) as client:
-            for run_id in run_ids:
-                bundle = self._download_bundle(client, run_id)
-                self.assertEqual(run_id, bundle.problem.runId)
-                self.assertIsNotNone(bundle.solution)
-                self.assertEqual(run_id, bundle.solution.runId)
+        for run_id in run_ids:
+            bundle = Manifold.download(run_id)
+            self.assertEqual(run_id, bundle.problem.runId)
+            self.assertIsNotNone(bundle.solution)
+            self.assertEqual(run_id, bundle.solution.runId)
 
-            for run_id in run_ids:
-                client.sync_rm(self._manifold_path(run_id))
+        for run_id in run_ids:
+            Manifold.deleteObj(run_id)
 
     def test_persist_with_none_handle(self) -> None:
         """Test that persistToManifold and setManifoldBackupParams work with None handle."""
