@@ -146,6 +146,7 @@ export default function MetricsTable({
                 value={value}
                 highlight={true}
                 positiveIsBad={true}
+                fixedDecimals={Number.isInteger(value) ? 0 : 4}
               />
             );
           }
