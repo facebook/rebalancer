@@ -1,0 +1,10 @@
+// (c) Meta Platforms, Inc. and affiliates. Confidential and proprietary.
+
+cpp_include "algopt/rebalancer/interface/fb/Manifold.h";
+thrift_include "algopt/rebalancer/interface/thrift/AssignmentProblem.thrift";
+namespace "facebook::rebalancer::interface";
+
+class Manifold {
+  @py_release_gil_requires_threadsafe_cpp_library
+  static AssignmentProblem.Bundle download(string runId) throws;
+}
