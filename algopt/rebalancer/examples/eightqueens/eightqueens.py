@@ -17,6 +17,7 @@
 # pyre-strict
 
 import sys
+from collections.abc import Callable, Collection
 
 from algopt.rebalancer.interface.py_client.ProblemSolver import ProblemSolver
 from rebalancer.interface.thrift.v2.ProblemSolver.thrift_types import (
@@ -42,8 +43,10 @@ from rebalancer.interface.thrift.v2.SolverSpecs.thrift_types import (
 # https://www.internalfb.com/intern/wiki/ReBalancer/API/Tutorial/
 
 
-# pyre-fixme[2]: Parameter must be annotated.
-def print_board(squares, pos_func) -> None:
+def print_board(
+    squares: Collection[tuple[int, int] | str],
+    pos_func: Callable[[int, int], tuple[int, int] | str],
+) -> None:
     board_size = len(squares)
     for i in range(board_size):
         print(
