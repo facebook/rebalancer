@@ -19,6 +19,7 @@
 #include "algopt/rebalancer/solver/if/gen-cpp2/packer_types.h"
 
 #include <fmt/core.h>
+#include <folly/json/dynamic.h>
 
 #include <map>
 #include <set>
@@ -112,10 +113,9 @@ struct BenchmarkInfo {
   double totalTime;
 };
 
-/* Used to log generic info where the value is double */
 struct GenericInfo {
   std::string key;
-  double value;
+  folly::dynamic value;
   std::string additionalInfo{};
 };
 

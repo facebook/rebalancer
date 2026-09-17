@@ -35,6 +35,7 @@
 
 #include <folly/debugging/exception_tracer/SmartExceptionTracer.h>
 #include <folly/logging/xlog.h>
+#include <thrift/lib/cpp2/folly_dynamic/folly_dynamic.h>
 
 #include <memory>
 #include <sstream>
@@ -222,6 +223,12 @@ AssignmentSolution CoreSolver::solve(
   }
   XLOG(INFO) << "Problem run_uuid: " << *problemSpec.runId();
   if (logger) {
+    logger->log(
+        GenericInfo{
+            .key = "rollout_config",
+            .value = ::facebook::thrift::to_dynamic(
+                *problemSpec.rolloutConfig(),
+                ::facebook::thrift::dynamic_format::JSON_1)});
     logger->log(
         GenericInfo{
             .key = "using_parallelized_new_materializer",

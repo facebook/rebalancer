@@ -39,6 +39,7 @@
 #ifndef REBALANCER_OSS_BUILD
 #include "algopt/rebalancer/common/log/fb/ScubaLog.h"
 #include "algopt/rebalancer/interface/fb/Manifold.h"
+#include "algopt/rebalancer/interface/fb/RolloutConfigResolver.h"
 #else
 #include "algopt/rebalancer/common/log/StreamLog.h"
 #endif
@@ -218,6 +219,10 @@ ProblemSolver::ProblemSolver(
       scope(std::move(serviceScope)),
       prepareProblemOnly(prepareProblemOnly) {
   this->runId = UuidGenerator::genString();
+#ifndef REBALANCER_OSS_BUILD
+  RolloutConfigResolver::resolveProblemSolverConfigs(
+      rolloutConfig_, service, scope);
+#endif
 }
 
 ProblemSolver::~ProblemSolver() = default;
@@ -620,6 +625,9 @@ StrategyBuilder& ProblemSolver::getStrategyBuilder() {
 
 AssignmentSolution ProblemSolver::solve() {
   algopt::treeprof::Profiler treeProfiler("ProblemSolver::Solve");
+#ifndef REBALANCER_OSS_BUILD
+  RolloutConfigResolver::resolveSolveConfigs(rolloutConfig_, service, scope);
+#endif
   problem.emplace();
   problem->strategy() = strategyBuilder.build();
   problem->solutionSummaryEnabled() = getSolutionSummary;
@@ -637,6 +645,7 @@ AssignmentSolution ProblemSolver::solve() {
   problem->useDynamicObjectOrdering() = useDynamicObjectOrdering_;
   problem->enableInvalidMoveFilter() = enableInvalidMoveFilter_;
   problem->validateAppliedMoves() = validateAppliedMoves_;
+  problem->rolloutConfig() = rolloutConfig_;
   if (decompositionScopeName_) {
     problem->decompositionScopeName() = *decompositionScopeName_;
   }

@@ -14,12 +14,16 @@
 
 #include "algopt/rebalancer/interface/standalone/BackwardCompatabilityUtils.h"
 
+#ifndef REBALANCER_OSS_BUILD
+#include "algopt/rebalancer/interface/fb/RolloutConfigDefaults.h"
+#endif
 #include "algopt/rebalancer/interface/thrift/ThriftUtils.h"
 
 #include <fmt/core.h>
 #include <folly/container/F14Map.h>
 #include <folly/Conv.h>
 #include <folly/Portability.h>
+#include <thrift/lib/cpp2/FieldRef.h>
 
 #include <algorithm>
 #include <ranges>
@@ -27,6 +31,24 @@
 namespace thriftUtils = facebook::rebalancer::interface::thriftUtils;
 
 namespace {
+
+#ifndef REBALANCER_OSS_BUILD
+template <typename T>
+void fillMissingValue(
+    apache::thrift::field_ref<T&> field,
+    const T& internalDefault) {
+  // If a saved RolloutConfig does not contain a field, use that field's
+  // current internal default.
+  if (!apache::thrift::is_non_optional_field_set_manually_or_by_serializer(
+          field)) {
+    field = internalDefault;
+  }
+}
+
+void fillMissingRolloutConfigValues(interface::RolloutConfig& config) {
+  fillMissingValue(config.testOnlyConfig(), interface::kTestOnlyRolloutDefault);
+}
+#endif
 
 using OldToNewId = folly::F14FastMap<int, int>;
 
@@ -362,6 +384,9 @@ FOLLY_POP_WARNING
 
 void BackwardCompatabilityUtils::possiblyModify(
     interface::AssignmentProblem& problem) {
+#ifndef REBALANCER_OSS_BUILD
+  fillMissingRolloutConfigValues(*problem.rolloutConfig());
+#endif
   if (problem.universe()) {
     possiblyModify(*problem.universe());
   }

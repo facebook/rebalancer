@@ -29,6 +29,15 @@ namespace cpp2 facebook.rebalancer.interface
 namespace py rebalancer.interface.thrift.Types
 namespace py3 rebalancer.interface.thrift
 
+// Each field's Thrift default encodes existing behavior. This, for instance,
+// allows OSS builds to use the old behavior until the internal rollout is
+// complete. Internal rollout defaults are defined in RolloutConfigDefaults.h.
+struct RolloutConfig {
+  // Temporary setting used to test saving, replaying, and logging a MetaConfig
+  // value.
+  32767: bool testOnlyConfig = false;
+}
+
 enum ConstraintPolicy {
   /*
   If a constraint is broken initially, make “fixing it” a goal,

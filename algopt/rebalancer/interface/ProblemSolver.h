@@ -590,6 +590,7 @@ class ProblemSolver {
 
   std::optional<AssignmentProblem> problem;
   std::optional<AssignmentSolution> solution;
+  RolloutConfig rolloutConfig_;
   std::shared_ptr<const entities::Universe> universe_ = nullptr;
   std::shared_ptr<RebalancerLog> logger_ = nullptr;
 
