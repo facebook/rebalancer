@@ -3,7 +3,6 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "preinstall": "../../scripts/setup-eden-redirect.sh",
     "dev": "nest-dev",
     "build": "next build",
     "start": "next start",
