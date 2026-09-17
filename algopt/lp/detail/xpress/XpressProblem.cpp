@@ -44,7 +44,7 @@ namespace {
 #if XPVERSION == 47
 
 // Parameters from
-// third-party/xpress/9.9.0/x86_64/include/xprs.h
+// third-party/xpress/9.9.1/x86_64/include/xprs.h
 const std::map<std::string_view, int> kIntParamCodes = {
     REBALANCER_XPRS_PARAM(XPRS_EXTRAROWS),
     REBALANCER_XPRS_PARAM(XPRS_EXTRACOLS),
@@ -313,7 +313,7 @@ const std::map<std::string_view, int> kIntParamCodes = {
 };
 
 // Parameters from
-// third-party/xpress/9.9.0/x86_64/include/xprs.h
+// third-party/xpress/9.9.1/x86_64/include/xprs.h
 const std::map<std::string_view, int> kDoubleParamCodes = {
     REBALANCER_XPRS_PARAM(XPRS_MAXCUTTIME),
     REBALANCER_XPRS_PARAM(XPRS_MAXSTALLTIME),
