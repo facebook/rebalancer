@@ -296,13 +296,7 @@ ExprPtr CapacityWithGroupPresenceSpecBuilder::getConstraintExpr(
     entities::ScopeItemId mainScopeItemId,
     std::optional<entities::GroupId> mainGroupIdOpt,
     const ExprPtr& util) const {
-  const auto& scopeDimension = mainScope_.getDimension(dimensionId_);
-  auto limit = mainGroupIdOpt
-      ? capacityLimits_.getLimit(mainScopeItemId, *mainGroupIdOpt)
-      : capacityLimits_.getLimit(mainScopeItemId);
-  if (capacityLimits_.getType() == interface::LimitType::RELATIVE) {
-    limit *= scopeDimension.getValue(mainScopeItemId);
-  }
+  const auto limit = getEffectiveCapacityLimit(mainScopeItemId, mainGroupIdOpt);
   switch (*spec_.bound()) {
     case interface::CapacityWithGroupPresenceBound::MAX:
       return (util - limit);
@@ -310,6 +304,18 @@ ExprPtr CapacityWithGroupPresenceSpecBuilder::getConstraintExpr(
       return (limit - util);
   }
   throw std::runtime_error("Unknown bound type");
+}
+
+double CapacityWithGroupPresenceSpecBuilder::getEffectiveCapacityLimit(
+    entities::ScopeItemId mainScopeItemId,
+    std::optional<entities::GroupId> mainGroupIdOpt) const {
+  auto limit = mainGroupIdOpt
+      ? capacityLimits_.getLimit(mainScopeItemId, *mainGroupIdOpt)
+      : capacityLimits_.getLimit(mainScopeItemId);
+  if (capacityLimits_.getType() == interface::LimitType::RELATIVE) {
+    limit *= mainScope_.getDimension(dimensionId_).getValue(mainScopeItemId);
+  }
+  return limit;
 }
 
 ExprPtr CapacityWithGroupPresenceSpecBuilder::getAdditionalPenaltyExpr(
@@ -371,9 +377,27 @@ CapacityWithGroupPresenceSpecBuilder::groupAndScopeItemConstraints(
   const auto totalPairs = scopeItemIds.size() * numGroups;
   const auto optimized = shouldUseOptimizedPath(metric);
 
-  std::vector<ConstraintInfo> constraints(totalPairs, ConstraintInfo{nullptr});
+  std::vector<size_t> nonZeroPairs;
+  const auto isMinBound =
+      *spec_.bound() == interface::CapacityWithGroupPresenceBound::MIN;
+  if (isMinBound) {
+    for (size_t pairIdx = 0; pairIdx < totalPairs; ++pairIdx) {
+      const auto mainScopeItemId = scopeItemIds[pairIdx / numGroups];
+      const auto mainGroupId = mainGroupIds[pairIdx % numGroups];
+      if (getEffectiveCapacityLimit(mainScopeItemId, mainGroupId) > 0.0) {
+        nonZeroPairs.push_back(pairIdx);
+      }
+    }
+  }
+
+  std::vector<ConstraintInfo> constraints(
+      isMinBound ? nonZeroPairs.size() : totalPairs, ConstraintInfo{nullptr});
   co_await CoroUtils::runEachTaskBatched<size_t>(
-      0, totalPairs, [&](size_t pairIdx) -> folly::coro::Task<void> {
+      0,
+      constraints.size(),
+      [&](size_t constraintIdx) -> folly::coro::Task<void> {
+        const auto pairIdx =
+            isMinBound ? nonZeroPairs[constraintIdx] : constraintIdx;
         const auto mainScopeItemId = scopeItemIds[pairIdx / numGroups];
         const auto mainGroupId = mainGroupIds[pairIdx % numGroups];
 
@@ -393,7 +417,7 @@ CapacityWithGroupPresenceSpecBuilder::groupAndScopeItemConstraints(
             mainScopeItemId, mainGroupId, groupScopeItemUtil.util);
         auto additionalPenaltyExpr = getAdditionalPenaltyExpr(
             mainGroupId, groupScopeItemUtil.penaltyUtil);
-        constraints[pairIdx] = ConstraintInfo{
+        constraints[constraintIdx] = ConstraintInfo{
             std::move(constraintExpr), std::move(additionalPenaltyExpr)};
       });
 

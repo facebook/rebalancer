@@ -740,6 +740,128 @@ CO_TEST_P(
       initialExpected, spec, universe, builder, initial);
 }
 
+CO_TEST_P(
+    CapacityWithGroupPresenceSpecBuilderTest,
+    MinBoundSkipsPairsWithZeroEffectiveLimit) {
+  if (GetParam() !=
+      interface::CapacityWithGroupPresenceUsageIntent::
+          PER_GROUP_AND_SCOPE_ITEM) {
+    co_return;
+  }
+
+  interface::CapacityWithGroupPresenceSpec spec;
+  spec.dimension() = "replicaCount";
+  spec.partition() = "tenantTrafficObjects";
+  spec.scope() = "region";
+  spec.roundUpGroupUtilOnScopeItem() = false;
+  spec.bound() = interface::CapacityWithGroupPresenceBound::MIN;
+  spec.intent() = GetParam();
+  auto& limits = *spec.scopeItemToLimit();
+  limits.type() = interface::LimitType::ABSOLUTE;
+  limits.globalLimit() = 0.0;
+  limits.scopeItemLimits() = {{"region1", 4.0}};
+  limits.groupLimits() = {{"tenant2-trafficObjects", 3.0}};
+  limits.scopeItemToGroupLimits() = {
+      {"region1", {{"tenant2-trafficObjects", 0.0}}}};
+  spec.groupToPresenceWeight()->globalLimit() = 0.0;
+
+  const auto universe = buildUniverse();
+  auto& builder = expressionBuilder();
+
+  ExpectedInfo expected;
+  expected.constraintAndPenaltyValues = {
+      {.constraintValue = 4.0 - 3.18,
+       .penaltyValue = (4.98 - 3.18) * kNormTenant1NoRoundUp},
+      {.constraintValue = 3.0 - 1.995,
+       .penaltyValue = (2.995 - 1.995) * kNormTenant2NoRoundUp},
+  };
+  expected.goalValue = (4.0 - 3.18) + (4.98 - 3.18) * kNormTenant1NoRoundUp +
+      (3.0 - 1.995) + (2.995 - 1.995) * kNormTenant2NoRoundUp;
+
+  VERIFY_CONSTRAINT_COMPONENTS_AND_GOAL_VALUES(
+      expected, spec, universe, builder, deltaFromInitial({}));
+}
+
+CO_TEST_P(
+    CapacityWithGroupPresenceSpecBuilderTest,
+    MinBoundKeepsPositiveLimitWithinPrecisionTolerance) {
+  if (GetParam() !=
+      interface::CapacityWithGroupPresenceUsageIntent::
+          PER_GROUP_AND_SCOPE_ITEM) {
+    co_return;
+  }
+
+  constexpr double kTinyPositiveLimit = 1e-12;
+  interface::CapacityWithGroupPresenceSpec spec;
+  spec.dimension() = "replicaCount";
+  spec.partition() = "tenantTrafficObjects";
+  spec.scope() = "region";
+  spec.roundUpGroupUtilOnScopeItem() = false;
+  spec.bound() = interface::CapacityWithGroupPresenceBound::MIN;
+  spec.intent() = GetParam();
+  spec.scopeItemToLimit()->type() = interface::LimitType::ABSOLUTE;
+  spec.scopeItemToLimit()->globalLimit() = 0.0;
+  spec.scopeItemToLimit()->scopeItemToGroupLimits() = {
+      {"region1", {{"tenant2-trafficObjects", kTinyPositiveLimit}}}};
+  spec.groupToPresenceWeight()->globalLimit() = 0.0;
+
+  const auto universe = buildUniverse();
+  auto& builder = expressionBuilder();
+
+  ExpectedInfo expected;
+  expected.constraintAndPenaltyValues = {
+      {.constraintValue = kTinyPositiveLimit - 1.0,
+       .penaltyValue = (1.995 - 1.0) * kNormTenant2NoRoundUp},
+  };
+  expected.goalValue = 0.0;
+
+  VERIFY_CONSTRAINT_COMPONENTS_AND_GOAL_VALUES(
+      expected, spec, universe, builder, deltaFromInitial({}));
+}
+
+CO_TEST_P(
+    CapacityWithGroupPresenceSpecBuilderTest,
+    MinBoundSkipsRelativeLimitWithZeroEffectiveValue) {
+  if (GetParam() !=
+      interface::CapacityWithGroupPresenceUsageIntent::
+          PER_GROUP_AND_SCOPE_ITEM) {
+    co_return;
+  }
+
+  co_await addScopeDimension(
+      "replicaCount",
+      scopeId("region"),
+      {{"region1", 0.0}, {"region2", 5.0}},
+      1.0);
+
+  interface::CapacityWithGroupPresenceSpec spec;
+  spec.dimension() = "replicaCount";
+  spec.partition() = "tenantTrafficObjects";
+  spec.scope() = "region";
+  spec.roundUpGroupUtilOnScopeItem() = false;
+  spec.bound() = interface::CapacityWithGroupPresenceBound::MIN;
+  spec.intent() = GetParam();
+  spec.scopeItemToLimit()->type() = interface::LimitType::RELATIVE;
+  spec.scopeItemToLimit()->globalLimit() = 1.0;
+  spec.groupToPresenceWeight()->globalLimit() = 0.0;
+
+  const auto universe = buildUniverse();
+  auto& builder = expressionBuilder();
+
+  ExpectedInfo expected;
+  expected.constraintAndPenaltyValues = {
+      {.constraintValue = 5.0 - 1.5,
+       .penaltyValue = (4.98 - 1.5) * kNormTenant1NoRoundUp},
+      {.constraintValue = 5.0 - 1.995,
+       .penaltyValue = (2.995 - 1.995) * kNormTenant2NoRoundUp},
+  };
+  expected.goalValue = (5.0 - 1.5) + (4.98 - 1.5) * kNormTenant1NoRoundUp +
+      (5.0 - 1.995) + (2.995 - 1.995) * kNormTenant2NoRoundUp;
+
+  VERIFY_CONSTRAINT_COMPONENTS_AND_GOAL_VALUES(
+      expected, spec, universe, builder, deltaFromInitial({}));
+}
+
 // DURING definition: verifies exact constraint/penalty/goal values. DURING
 // counts each scope item's initial objects wherever they move, so (a) at the
 // initial assignment DURING == AFTER for the constraint but the continuous

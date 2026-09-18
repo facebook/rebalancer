@@ -81,6 +81,10 @@ class CapacityWithGroupPresenceSpecBuilder : public SpecBuilder {
       std::optional<entities::GroupId> mainGroupIdOpt,
       const ExprPtr& util) const;
 
+  double getEffectiveCapacityLimit(
+      entities::ScopeItemId mainScopeItemId,
+      std::optional<entities::GroupId> mainGroupIdOpt) const;
+
   ExprPtr getAdditionalPenaltyExpr(
       std::optional<entities::GroupId> mainGroupIdOpt,
       const ExprPtr& penaltyUtil) const;
