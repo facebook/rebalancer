@@ -157,7 +157,7 @@ export default function MetricDistributionGraph({
             }
           />
           <Tooltip
-            formatter={(value: number | string) => Number(value).toFixed(4)}
+            formatter={(value: number | string) => Number(value).toFixed(2)}
             labelFormatter={(label: number) => `Index: ${label}`}
           />
           <Legend />

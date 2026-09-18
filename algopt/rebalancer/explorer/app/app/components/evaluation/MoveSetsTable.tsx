@@ -464,7 +464,11 @@ export default function MoveSetsTable({
                 size="small"
                 color="error"
                 variant="filled"
-                sx={{fontVariantNumeric: 'tabular-nums', fontSize: '0.8125rem'}}
+                sx={{
+                  ...CHIP_WORD_BREAK_SX,
+                  fontVariantNumeric: 'tabular-nums',
+                  fontSize: '0.8125rem',
+                }}
               />
             );
           }
@@ -478,7 +482,11 @@ export default function MoveSetsTable({
                 size="small"
                 color={color}
                 variant={color === 'default' ? 'outlined' : 'filled'}
-                sx={{fontVariantNumeric: 'tabular-nums', fontSize: '0.8125rem'}}
+                sx={{
+                  ...CHIP_WORD_BREAK_SX,
+                  fontVariantNumeric: 'tabular-nums',
+                  fontSize: '0.8125rem',
+                }}
               />
             );
           }
