@@ -16,7 +16,9 @@
 
 #include "algopt/rebalancer/common/replayer/RebalancerReplayer.h"
 
+#include <fmt/core.h>
 #include <folly/Benchmark.h>
+#include <folly/container/Enumerate.h>
 
 #include <string>
 
@@ -25,14 +27,28 @@ namespace rebalancer {
 namespace interface {
 namespace benchmarks {
 
-void replay(const std::string& runId, std::optional<std::string> loggingLabel) {
+void replay(
+    const std::string& runId,
+    folly::UserCounters* counters,
+    std::optional<std::string> loggingLabel) {
   interface::AssignmentProblem problem;
 
   BENCHMARK_SUSPEND {
     problem = RebalancerReplayer::downloadFromManifold(runId);
   }
 
-  RebalancerReplayer::replay(std::move(problem), std::move(loggingLabel));
+  const auto solution =
+      RebalancerReplayer::replay(std::move(problem), std::move(loggingLabel));
+
+  if (counters != nullptr) {
+    BENCHMARK_SUSPEND {
+      const auto& objectives = *solution.finalGlobalObjective()->goals();
+      for (const auto [position, objective] : folly::enumerate(objectives)) {
+        (*counters)[fmt::format("objective_{}", position)] = folly::UserMetric(
+            *objective.value(), folly::UserMetric::Type::METRIC);
+      }
+    }
+  }
 }
 
 } // namespace benchmarks

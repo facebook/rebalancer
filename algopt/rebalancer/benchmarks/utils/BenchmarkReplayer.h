@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <folly/Benchmark.h>
+
 #include <optional>
 #include <string>
 
@@ -29,6 +31,7 @@ namespace benchmarks {
 // 3. Add the corresponding entry under benchmark_params in the TARGETS file.
 void replay(
     const std::string& runId,
+    folly::UserCounters* counters = nullptr,
     std::optional<std::string> loggingLabel = std::nullopt);
 
 } // namespace benchmarks
