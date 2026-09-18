@@ -60,6 +60,16 @@ TEST(FastProblemImplTest, MakeBoolVar) {
   EXPECT_EQ(inner.ub, 1);
 }
 
+TEST(FastProblemImplTest, StoresStartValue) {
+  FastProblemImpl problem;
+  auto var = problem.makeBoolVar("b");
+
+  problem.addStartValue(var, 1.0);
+
+  ASSERT_TRUE(problem.getVariable(0).initialValue.has_value());
+  EXPECT_EQ(*problem.getVariable(0).initialValue, 1.0);
+}
+
 TEST(FastProblemImplTest, MakeSemiContVar) {
   FastProblemImpl problem;
   auto var = problem.makeSemiContVar("sc", 5.0);
@@ -200,7 +210,6 @@ TEST(FastProblemImplTest, NoOpMethods) {
   problem.setCallback([](const ProblemCallbackData&) {
     return ProblemCallbackAction::CONTINUE;
   });
-  problem.addStartValue(nullptr, 0);
 }
 
 TEST(FastProblemImplTest, SaveToFileThrows) {

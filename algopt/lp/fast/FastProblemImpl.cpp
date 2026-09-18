@@ -46,6 +46,7 @@ std::shared_ptr<VariableImpl> FastProblemImpl::makeVarInternal(
       .lb = lb,
       .ub = ub,
       .threshold = threshold,
+      .initialValue = std::nullopt,
       .value = std::nullopt,
   });
   auto* ptr = inner.get();
@@ -191,8 +192,17 @@ void FastProblemImpl::setCallback(
     std::function<ProblemCallbackAction(ProblemCallbackData)> /*callback*/) {}
 
 void FastProblemImpl::addStartValue(
-    std::shared_ptr<const VariableImpl> /*variable*/,
-    double /*value*/) {}
+    std::shared_ptr<const VariableImpl> variable,
+    double value) {
+  const auto* fastVariable =
+      dynamic_cast<const FastVariableImpl*>(variable.get());
+  if (fastVariable == nullptr) {
+    throw std::invalid_argument(
+        "FastProblemImpl::addStartValue requires a FastVariableImpl");
+  }
+  const std::lock_guard<std::mutex> lock(varMutex_);
+  variables_.at(fastVariable->getVariableId())->initialValue = value;
+}
 
 std::optional<IIS> FastProblemImpl::getIIS() {
   return std::nullopt;

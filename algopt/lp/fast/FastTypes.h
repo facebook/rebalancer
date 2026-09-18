@@ -35,6 +35,7 @@ struct InnerVariable {
   double lb;
   double ub;
   std::optional<double> threshold;
+  std::optional<double> initialValue;
   mutable std::optional<double> value;
 };
 

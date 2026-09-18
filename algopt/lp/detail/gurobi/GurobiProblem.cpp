@@ -1836,12 +1836,18 @@ void GurobiProblem::loadFromFastProblem(const FastProblemImpl& fast) {
   std::vector<double> ubs(numVars);
   std::vector<char> varTypes(numVars);
   std::vector<std::string> varNames(numVars);
+  std::vector<double> initialValues(numVars, GRB_UNDEFINED);
+  bool hasInitialValues = false;
   for (const auto grbVarId : folly::irange(numVars)) {
     const auto& var = fast.getVariable(sortedVarIds[grbVarId]);
     lbs[grbVarId] = var.lb;
     ubs[grbVarId] = var.ub;
     varTypes[grbVarId] = mapVarType(var.type);
     varNames[grbVarId] = var.name;
+    if (var.initialValue.has_value()) {
+      initialValues[grbVarId] = *var.initialValue;
+      hasInitialValues = true;
+    }
   }
   const std::unique_ptr<GRBVar[]> grbVarArray(model_.addVars(
       lbs.data(),
@@ -1850,6 +1856,22 @@ void GurobiProblem::loadFromFastProblem(const FastProblemImpl& fast) {
       varTypes.data(),
       varNames.data(),
       numVars));
+  if (hasInitialValues) {
+    if (warmStartType_ != GurobiWarmStartType::MIP_START) {
+      model_.set(
+          GRB_DoubleAttr::GRB_DoubleAttr_VarHintVal,
+          grbVarArray.get(),
+          initialValues.data(),
+          numVars);
+    }
+    if (warmStartType_ != GurobiWarmStartType::VARIABLE_HINT) {
+      model_.set(
+          GRB_DoubleAttr::GRB_DoubleAttr_Start,
+          grbVarArray.get(),
+          initialValues.data(),
+          numVars);
+    }
+  }
   model_.update();
   // Keep the load-order names for getSolvedVariableValues (avoids re-fetching
   // them from Gurobi after the solve).
