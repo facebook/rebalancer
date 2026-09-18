@@ -16,10 +16,16 @@
 
 #include "algopt/rebalancer/common/replayer/RebalancerReplayer.h"
 
+#ifndef REBALANCER_OSS_BUILD
+#include "algopt/rebalancer/interface/fb/Manifold.h"
+#endif
+
 #include <fmt/core.h>
 #include <folly/Benchmark.h>
 #include <folly/container/Enumerate.h>
+#include <folly/logging/xlog.h>
 
+#include <chrono>
 #include <string>
 
 namespace facebook {
@@ -27,13 +33,35 @@ namespace rebalancer {
 namespace interface {
 namespace benchmarks {
 
+namespace {
+
+// A TTL of 0 means "never expire". A failed pin must not fail the benchmark.
+void pinBundle(const std::string& runId) {
+#ifndef REBALANCER_OSS_BUILD
+  try {
+    Manifold::extendExpiration(runId, std::chrono::seconds(0));
+  } catch (const std::exception& e) {
+    XLOGF(
+        WARN, "Failed to pin Manifold bundle for run {}: {}", runId, e.what());
+  }
+#else
+  (void)runId;
+#endif
+}
+
+} // namespace
+
 void replay(
     const std::string& runId,
     folly::UserCounters* counters,
-    std::optional<std::string> loggingLabel) {
+    std::optional<std::string> loggingLabel,
+    BundleRetention retention) {
   interface::AssignmentProblem problem;
 
   BENCHMARK_SUSPEND {
+    if (retention == BundleRetention::Pinned) {
+      pinBundle(runId);
+    }
     problem = RebalancerReplayer::downloadFromManifold(runId);
   }
 

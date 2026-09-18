@@ -24,15 +24,18 @@ namespace rebalancer {
 namespace interface {
 namespace benchmarks {
 
+// Uploaded bundles expire after 14 days. Pin the ones a checked-in benchmark
+// depends on; leave ad-hoc replays ephemeral.
+enum class BundleRetention { Pinned, Ephemeral };
+
 // Follow these steps when adding a new use case:
-// 1. Make the manifold upload persistent:
-//     manifold updateExpiration rebalancer/flat/solver_run_{runID} -1
-// 2. Add a new BENCHMARK entry below.
-// 3. Add the corresponding entry under benchmark_params in the TARGETS file.
+// 1. Add a new BENCHMARK entry below.
+// 2. Add the corresponding entry under benchmark_params in the TARGETS file.
 void replay(
     const std::string& runId,
     folly::UserCounters* counters = nullptr,
-    std::optional<std::string> loggingLabel = std::nullopt);
+    std::optional<std::string> loggingLabel = std::nullopt,
+    BundleRetention retention = BundleRetention::Pinned);
 
 } // namespace benchmarks
 } // namespace interface
