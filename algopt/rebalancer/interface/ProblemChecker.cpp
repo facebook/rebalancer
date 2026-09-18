@@ -1215,6 +1215,15 @@ void ProblemChecker::addSpec(const CapacityWithGroupPresenceSpec& spec) {
         ValueRequirement::NON_NEGATIVE);
   }
 
+  for (const auto& multiplier : *spec.groupUtilMultipliers()) {
+    checkLimitForGroups(
+        aggregationScope,
+        aggregationPartition,
+        *multiplier.value(),
+        interface::LimitType::ABSOLUTE,
+        ValueRequirement::NON_NEGATIVE);
+  }
+
   checkLimitForGroups(
       aggregationScope,
       aggregationPartition,

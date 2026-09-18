@@ -2334,6 +2334,31 @@ TEST_P(ProblemSolverChecksTest, CapacityWithGroupPresenceUnexpectedWeights) {
   }
 }
 
+TEST_P(
+    ProblemSolverChecksTest,
+    CapacityWithGroupPresenceNegativeGroupUtilMultiplier) {
+  auto solver = makeInitializedSolver(GetParam());
+  solver->addObjectDimension("cpu", std::map<std::string, double>{});
+  solver->addPartition(
+      "job",
+      std::unordered_map<std::string, std::string>{{"s1", "j1"}, {"s2", "j2"}});
+
+  CapacityWithGroupPresenceSpec spec;
+  spec.scope() = "host";
+  spec.partition() = "job";
+  spec.dimension() = "cpu";
+  GroupUtilMultiplier multiplier;
+  multiplier.target() = GroupUtilMultiplierTarget::COMMON;
+  multiplier.value() = Limit{};
+  multiplier.value()->type() = LimitType::ABSOLUTE;
+  multiplier.value()->globalLimit() = -1.0;
+  spec.groupUtilMultipliers()->push_back(std::move(multiplier));
+
+  REBALANCER_EXPECT_RUNTIME_ERROR(
+      solver->addConstraint(spec),
+      "expected global limit value to be non-negative but got -1");
+}
+
 TEST_P(ProblemSolverChecksTest, CapacityWithGroupPresenceCheckInvalidPenalty) {
   auto solver = makeInitializedSolver(GetParam());
   solver->addObjectDimension("cpu", std::map<std::string, double>{});
