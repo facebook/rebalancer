@@ -260,7 +260,7 @@ you browse a problem's objects, containers, constraints, and goals, and see how 
 solution scores against them. This makes it a handy way to understand and debug
 solver behavior.
 
-<video src="rebalancer-explorer-demo.mp4" controls width="800" aria-label="Rebalancer Explorer demo"></video>
+<img src="explorer.png" alt="Rebalancer Explorer comparing two assignments of the eight-queens example" width="800">
 
 Under the hood, the Explorer backend is a C++ Thrift service that serves run data
 directly from the solver. A small JSON proxy sits in front of it and exposes that
