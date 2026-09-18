@@ -2,6 +2,7 @@
 
 cpp_include "algopt/rebalancer/interface/fb/Manifold.h";
 thrift_include "algopt/rebalancer/interface/thrift/AssignmentProblem.thrift";
+thrift_include "algopt/rebalancer/interface/thrift/Types.thrift";
 namespace "facebook::rebalancer::interface";
 
 class Manifold {
@@ -11,4 +12,8 @@ class Manifold {
   @output_name(py="deleteObj")
   @py_release_gil_requires_threadsafe_cpp_library
   static void deleteObj(string runId) throws;
+
+  @output_name(py="downloadSolution")
+  @py_release_gil_requires_threadsafe_cpp_library
+  static option<Types.AssignmentSolution> downloadSolution(string runId) throws;
 }
