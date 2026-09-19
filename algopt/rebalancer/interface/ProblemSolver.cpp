@@ -658,11 +658,11 @@ AssignmentSolution ProblemSolver::solve() {
   problem->publishEquivalenceSetsInfo() = publishEquivalenceSetInfo_;
 
   // TODO: make object ordering dimension a global setting of the problem.
-  auto objectOderingDimensionName =
+  auto objectOrderingDimensionName =
       CoreSolver::getObjectOrderingDimensionName(*problem->strategy());
-  if (objectOderingDimensionName) {
+  if (objectOrderingDimensionName) {
     universeProblemBuilder_.setObjectOrderingDimension(
-        *objectOderingDimensionName);
+        *objectOrderingDimensionName);
   }
 
   universe_ = universeProblemBuilder_.build();

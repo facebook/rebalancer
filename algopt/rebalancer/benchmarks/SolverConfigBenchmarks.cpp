@@ -227,7 +227,7 @@ BENCHMARK(ResetSkipContainersCorrectly) {
   auto solution = solver->solve();
 }
 
-BENCHMARK(EnableDynamicObjectOderingInLocalSearch) {
+BENCHMARK(EnableDynamicObjectOrderingInLocalSearch) {
   // This benchmark is to track if AccessOrderedFastSet is used and if it is
   // working as expected. If we are using usual sets, then this solve will take
   // several hours to get to ~10K moves (as opposed to ~25s).
