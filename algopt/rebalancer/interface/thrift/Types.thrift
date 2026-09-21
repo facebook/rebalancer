@@ -33,6 +33,7 @@ namespace py3 rebalancer.interface.thrift
 // allows OSS builds to use the old behavior until the internal rollout is
 // complete. Internal rollout defaults are defined in RolloutConfigDefaults.h.
 struct RolloutConfig {
+  1: bool groupBackedDynamicDimensions = false;
   // Temporary setting used to test saving, replaying, and logging a MetaConfig
   // value.
   32767: bool testOnlyConfig = false;

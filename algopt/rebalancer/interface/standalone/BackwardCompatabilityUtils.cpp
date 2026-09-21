@@ -46,6 +46,9 @@ void fillMissingValue(
 }
 
 void fillMissingRolloutConfigValues(interface::RolloutConfig& config) {
+  fillMissingValue(
+      config.groupBackedDynamicDimensions(),
+      interface::kGroupBackedDynamicDimensionsRolloutDefault);
   fillMissingValue(config.testOnlyConfig(), interface::kTestOnlyRolloutDefault);
 }
 #endif

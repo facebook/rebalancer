@@ -223,6 +223,8 @@ ProblemSolver::ProblemSolver(
   RolloutConfigResolver::resolveProblemSolverConfigs(
       rolloutConfig_, service, scope);
 #endif
+  universeProblemBuilder_.setGroupBackedDynamicDimensions(
+      *rolloutConfig_.groupBackedDynamicDimensions());
 }
 
 ProblemSolver::~ProblemSolver() = default;
@@ -235,6 +237,8 @@ ProblemSolver& ProblemSolver::enableRestrictMovingObjectOnlyOnce() {
 
 ProblemSolver& ProblemSolver::setGroupBackedDynamicDimensions(bool enable) {
   REBALANCER_PROBLEM_SETUP_TIMER_SCOPE();
+  // TODO: Delete this setter after removing its callers.
+  rolloutConfig_.groupBackedDynamicDimensions() = enable;
   getProblemBuilder().setGroupBackedDynamicDimensions(enable);
   return *this;
 }

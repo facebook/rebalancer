@@ -101,6 +101,22 @@ static void testDynamicDimension(
   // Generate a solution.
   auto solution = solver->solve();
 
+  if (useCompactFormat) {
+    const auto bundle = solver->getBundle();
+    const auto groupBackedDynamicDimensions =
+        *bundle.problem()->rolloutConfig()->groupBackedDynamicDimensions();
+
+    const facebook::rebalancer::entities::Universe universe(
+        *bundle.problem()->universe());
+    const auto dimensionId = universe.getDimensionId("cpu");
+    const auto scopeId = universe.getScopeId("host");
+    const auto scopeItemId = universe.getScopeItemId(scopeId, "host0");
+    const auto& dimension = universe.getObjects().getDimension(dimensionId);
+    const bool usesGroupBackedStorage =
+        dimension.only().values(scopeItemId).asMapOrNull() == nullptr;
+    EXPECT_EQ(groupBackedDynamicDimensions, usesGroupBackedStorage);
+  }
+
   // task0 would prefer being placed in host3, but it doesn't fit there. The
   // second preference is host2.
   const map<string, string> expected = {{"task0", "host2"}};
