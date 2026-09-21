@@ -152,6 +152,11 @@ DEFINE_bool(
     "Validate local search moves after applying them.");
 
 DEFINE_bool(
+    use_separated_local_search_penalty_objective,
+    false,
+    "Use a separate tie-breaking penalty objective for local search.");
+
+DEFINE_bool(
     move_stats_track_containers,
     false,
     "Override MoveStatsSpec.trackContainers, i.e. per-container move stats, "
@@ -465,6 +470,12 @@ static void possiblyModifyProblem(AssignmentProblem& problem) {
   if (!gflags::GetCommandLineFlagInfoOrDie("validate_applied_moves")
            .is_default) {
     problem.validateAppliedMoves() = FLAGS_validate_applied_moves;
+  }
+  if (!gflags::GetCommandLineFlagInfoOrDie(
+           "use_separated_local_search_penalty_objective")
+           .is_default) {
+    problem.rolloutConfig()->useSeparatedLocalSearchPenaltyObjective() =
+        FLAGS_use_separated_local_search_penalty_objective;
   }
   if (!gflags::GetCommandLineFlagInfoOrDie("move_stats_track_containers")
            .is_default) {

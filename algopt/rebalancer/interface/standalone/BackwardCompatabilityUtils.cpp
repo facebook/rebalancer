@@ -50,6 +50,9 @@ void fillMissingRolloutConfigValues(interface::RolloutConfig& config) {
       config.groupBackedDynamicDimensions(),
       interface::kGroupBackedDynamicDimensionsRolloutDefault);
   fillMissingValue(config.testOnlyConfig(), interface::kTestOnlyRolloutDefault);
+  fillMissingValue(
+      config.useSeparatedLocalSearchPenaltyObjective(),
+      interface::kUseSeparatedLocalSearchPenaltyObjectiveRolloutDefault);
 }
 #endif
 

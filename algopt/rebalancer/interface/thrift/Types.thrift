@@ -34,6 +34,11 @@ namespace py3 rebalancer.interface.thrift
 // complete. Internal rollout defaults are defined in RolloutConfigDefaults.h.
 struct RolloutConfig {
   1: bool groupBackedDynamicDimensions = false;
+
+  // Keep continuous local-search penalties separate from user-visible goals,
+  // and use them only after all Global values in the active stage tie.
+  2: bool useSeparatedLocalSearchPenaltyObjective = false;
+
   // Temporary setting used to test saving, replaying, and logging a MetaConfig
   // value.
   32767: bool testOnlyConfig = false;
