@@ -43,7 +43,7 @@ ServiceLab benchmarks auto-trigger when diffs touch production code directories 
 - Exceeding the variation threshold **blocks landing**
 - **DON'T** assume benchmark failures are flakes — investigate first
 - **DO** check ServiceLab benchmark results on your diff before requesting review
-- **DO** set TTL to `-1` (permanent) for benchmark replay instances on Manifold via `manifold updateExpiration rebalancer/flat/solver_run_{runID} -1`
+- **DO** use `BundleRetention::Pinned` for checked-in benchmarks and `BundleRetention::Ephemeral` for ad-hoc replays
 
 ### OSS Export Boundary
 
