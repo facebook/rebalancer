@@ -207,7 +207,6 @@ struct BalanceSpec {
   1: string name;
   2: string scope;
   3: string dimension;
-  4: double upperBound = 1;
   5: optional double softUpperBound;
   6: BalanceSpecBoundType boundType = BalanceSpecBoundType.RELATIVE;
   7: BalanceSpecFormula formula = BalanceSpecFormula.LINEAR;
@@ -250,6 +249,16 @@ struct BalanceSpec {
   // this dimension instead, so you can exclude objects by giving them value 0
   // or weight objects differently.
   15: optional string capacityPerItemCountDimension;
+
+  // Per-scope-item upper bounds are supported by RELATIVE_UTIL_VARIANCE.
+  // Values are interpreted according to boundType. The global limit is used
+  // when a scope item has no override.
+  16: optional Limit upperBounds;
+
+  // DEPRECATED: use upperBounds instead. Retained so persisted instances can
+  // be migrated by BackwardCompatabilityUtils on replay.
+  @thrift.Deprecated{message = "Use upperBounds (Limit) instead."}
+  4: double upperBound = 1;
 }
 
 // Do not use BalanceV2, use Balance instead.

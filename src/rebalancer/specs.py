@@ -300,7 +300,7 @@ class BalanceSpec(TypedDict, total=False):
     name: str
     scope: str
     dimension: str
-    upperBound: float  # default 1
+    upperBound: float  # deprecated; use upperBounds
     softUpperBound: float
     boundType: BalanceSpecBoundType  # default "RELATIVE"
     formula: BalanceSpecFormula  # default "LINEAR"
@@ -310,6 +310,7 @@ class BalanceSpec(TypedDict, total=False):
     includeInInitialAverage: list[str]
     useLegacyAverage: bool  # default False
     ignoreUpperBoundForIdealWithAbsOrRelBoundTypes: bool  # default True
+    upperBounds: Limit  # default globalLimit 1
 
 
 class BalanceV2Spec(TypedDict, total=False):

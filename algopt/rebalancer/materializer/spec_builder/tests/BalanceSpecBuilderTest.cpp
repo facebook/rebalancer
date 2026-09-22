@@ -30,6 +30,12 @@ namespace facebook::rebalancer::materializer::tests {
 
 class BalanceSpecBuilderTest : public SpecBuilderTestBase<> {
  protected:
+  static interface::Limit& upperBounds(interface::BalanceSpec& spec) {
+    auto& limits = spec.upperBounds().ensure();
+    limits.type() = interface::LimitType::ABSOLUTE;
+    return limits;
+  }
+
   folly::coro::Task<void> setUpDefaultUniverse() {
     setUpUniverse({
         {"host0", {"task0", "task2"}},
@@ -503,7 +509,7 @@ CO_TEST_F(BalanceSpecBuilderTest, ZeroInitialUtilizationTest) {
   balanceSpec.scope() = "host";
   balanceSpec.dimension() = "cpu";
   balanceSpec.formula() = interface::BalanceSpecFormula::LEGACY;
-  balanceSpec.upperBound() = 1.5; // Set a specific upper bound
+  upperBounds(balanceSpec).globalLimit() = 1.5;
 
   const BalanceSpecBuilder specBuilder(buildUniverse(), balanceSpec, true);
   auto goal = co_await specBuilder.goalCoro(expressionBuilder());
@@ -586,7 +592,7 @@ CO_TEST_F(BalanceSpecBuilderTest, RelativeUtilVarianceFormula) {
     pureSpec.dimension() = "cpu";
     pureSpec.formula() = interface::BalanceSpecFormula::RELATIVE_UTIL_VARIANCE;
     pureSpec.boundType() = interface::BalanceSpecBoundType::RELATIVE_UTIL;
-    pureSpec.upperBound() = 0.0;
+    upperBounds(pureSpec).globalLimit() = 0.0;
     const BalanceSpecBuilder pureBuilder(universe, pureSpec, true);
     auto pureGoal = co_await pureBuilder.goalCoro(expressionBuilder());
     EXPECT_NEAR(0.005, evaluate(pureGoal, updates), 1e-8);
@@ -605,7 +611,7 @@ CO_TEST_F(
   balanceSpec.dimension() = "cpu";
   balanceSpec.formula() = interface::BalanceSpecFormula::RELATIVE_UTIL_VARIANCE;
   balanceSpec.boundType() = interface::BalanceSpecBoundType::RELATIVE_UTIL;
-  balanceSpec.upperBound() = 0.15;
+  upperBounds(balanceSpec).globalLimit() = 0.15;
 
   const auto universe = buildUniverse();
   const BalanceSpecBuilder specBuilder(universe, balanceSpec, true);
@@ -627,7 +633,7 @@ CO_TEST_F(
   balanceSpec.dimension() = "cpu";
   balanceSpec.formula() = interface::BalanceSpecFormula::RELATIVE_UTIL_VARIANCE;
   balanceSpec.boundType() = interface::BalanceSpecBoundType::RELATIVE;
-  balanceSpec.upperBound() = 1.5;
+  upperBounds(balanceSpec).globalLimit() = 1.5;
 
   const auto universe = buildUniverse();
   const BalanceSpecBuilder specBuilder(universe, balanceSpec, true);
@@ -651,7 +657,7 @@ CO_TEST_F(
   balanceSpec.dimension() = "cpu";
   balanceSpec.formula() = interface::BalanceSpecFormula::RELATIVE_UTIL_VARIANCE;
   balanceSpec.boundType() = interface::BalanceSpecBoundType::ABSOLUTE;
-  balanceSpec.upperBound() = 0.05;
+  upperBounds(balanceSpec).globalLimit() = 0.05;
 
   const auto universe = buildUniverse();
   const BalanceSpecBuilder specBuilder(universe, balanceSpec, true);
@@ -663,6 +669,28 @@ CO_TEST_F(
   // Clamped relUtils: max(0, r-0.15)+0.15 → 0.2, 0.15, 0.15, 0.15
   // Same as RELATIVE_UTIL=0.15 → penalty = 0.001875
   EXPECT_NEAR(0.001875, evaluate(goal, deltaFromInitial({})), 1e-8);
+}
+
+CO_TEST_F(
+    BalanceSpecBuilderTest,
+    RelativeUtilVarianceUsesScopeItemUpperBounds) {
+  co_await setUpDefaultUniverse();
+
+  interface::BalanceSpec spec;
+  spec.scope() = "host";
+  spec.dimension() = "cpu";
+  spec.formula() = interface::BalanceSpecFormula::RELATIVE_UTIL_VARIANCE;
+  spec.boundType() = interface::BalanceSpecBoundType::RELATIVE_UTIL;
+  auto& limits = upperBounds(spec);
+  limits.globalLimit() = 0;
+  limits.scopeItemLimits() = {{"host0", 0.1}};
+
+  const BalanceSpecBuilder builder(buildUniverse(), spec, true);
+  auto goal = co_await builder.goalCoro(expressionBuilder());
+
+  // Relative utilizations are {0.2, 0.1, 0.1, 0}, so excess above each
+  // scope item's limit is {0.1, 0.1, 0.1, 0}; n * variance is 0.0075.
+  EXPECT_NEAR(0.0075, evaluate(goal, deltaFromInitial({})), 1e-8);
 }
 
 CO_TEST_F(BalanceSpecBuilderTest, CapacityPerItemFormula) {
@@ -799,7 +827,7 @@ CO_TEST_F(BalanceSpecBuilderTest, CapacityPerItemSquaresFormula) {
   balanceSpec.balanceMetric() = interface::BalanceSpecMetric::CAPACITY_PER_ITEM;
   balanceSpec.formula() = interface::BalanceSpecFormula::SQUARES;
   balanceSpec.boundType() = interface::BalanceSpecBoundType::RELATIVE;
-  balanceSpec.upperBound() = 1.0;
+  upperBounds(balanceSpec).globalLimit() = 1.0;
 
   const BalanceSpecBuilder specBuilder(buildUniverse(), balanceSpec, true);
   auto goal = co_await specBuilder.goalCoro(expressionBuilder());
@@ -891,7 +919,7 @@ CO_TEST_F(BalanceSpecBuilderTest, CapacityPerItemVarianceFormula) {
   balanceSpec.balanceMetric() = interface::BalanceSpecMetric::CAPACITY_PER_ITEM;
   balanceSpec.formula() = interface::BalanceSpecFormula::RELATIVE_UTIL_VARIANCE;
   balanceSpec.boundType() = interface::BalanceSpecBoundType::RELATIVE_UTIL;
-  balanceSpec.upperBound() = 0.0;
+  upperBounds(balanceSpec).globalLimit() = 0.0;
 
   const BalanceSpecBuilder specBuilder(buildUniverse(), balanceSpec, true);
   auto goal = co_await specBuilder.goalCoro(expressionBuilder());

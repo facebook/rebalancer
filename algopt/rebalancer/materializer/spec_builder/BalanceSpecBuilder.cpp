@@ -16,7 +16,9 @@
 
 #include "algopt/rebalancer/entities/Set.h"
 #include "algopt/rebalancer/entities/Universe.h"
+#include "algopt/rebalancer/interface/standalone/BackwardCompatabilityUtils.h"
 #include "algopt/rebalancer/materializer/utils/FilterWrapper.h"
+#include "algopt/rebalancer/materializer/utils/LimitWrapper.h"
 #include "algopt/rebalancer/solver/expressions/Operators.h"
 
 #include <folly/container/Foreach.h>
@@ -30,14 +32,24 @@ using namespace facebook::rebalancer::interface;
 
 namespace facebook::rebalancer::materializer {
 
+namespace {
+
+interface::BalanceSpec migrateDeprecatedFields(interface::BalanceSpec spec) {
+  BackwardCompatabilityUtils::possiblyModify(spec);
+  return spec;
+}
+
+} // namespace
+
 BalanceSpecBuilder::BalanceSpecBuilder(
     std::shared_ptr<const Universe> universe,
     interface::BalanceSpec spec,
     bool continuousExpressions)
     : SpecBuilder(std::move(universe)),
-      spec_(std::move(spec)),
+      spec_(migrateDeprecatedFields(std::move(spec))),
       dimensionId_(universe_->getDimensionId(*spec_.dimension())),
       scopeId_(universe_->getScopeId(*spec_.scope())),
+      upperBoundLimits_(*universe_, *spec_.upperBounds(), scopeId_),
       continuousExpressions_(continuousExpressions) {
   if (*spec_.balanceMetric() == BalanceSpecMetric::CAPACITY_PER_ITEM &&
       !continuousExpressions_) {
@@ -138,43 +150,48 @@ BalanceSpecBuilder::getTotalAbsoluteOrRelativeUtil(
 }
 
 ExprPtr BalanceSpecBuilder::computeMaxPenalty(
-    const std::vector<ExprPtr>& allUtils,
+    const std::vector<ScopeItemUtil>& scopeItemUtils,
     const ExprPtr& thresholdExpr) const {
-  auto excess = max(allUtils, *universe_) - thresholdExpr;
+  std::vector<ExprPtr> utils;
+  utils.reserve(scopeItemUtils.size());
+  for (const auto& scopeItemUtil : scopeItemUtils) {
+    utils.push_back(scopeItemUtil.util);
+  }
+  auto excess = max(utils, *universe_) - thresholdExpr;
   return max({std::move(excess), const_expr(0, *universe_)}, *universe_);
 }
 
 ExprPtr BalanceSpecBuilder::computeLinearOrSquaresPenalty(
-    const std::vector<ExprPtr>& allUtils,
+    const std::vector<ScopeItemUtil>& scopeItemUtils,
     const ExprPtr& thresholdExpr,
     BalanceSpecFormula formula) {
-  const auto n = allUtils.size();
+  const auto n = scopeItemUtils.size();
   const auto transform = [&formula](const ExprPtr& expr) {
     return formula == BalanceSpecFormula::SQUARES ? power(expr, 1.1) : expr;
   };
 
   std::vector<ExprPtr> transformedUtils;
   transformedUtils.reserve(n);
-  for (const auto& util : allUtils) {
-    transformedUtils.push_back(transform(util));
+  for (const auto& scopeItemUtil : scopeItemUtils) {
+    transformedUtils.push_back(transform(scopeItemUtil.util));
   }
   return sum_over_threshold(transform(thresholdExpr), transformedUtils, false) /
       n;
 }
 
 ExprPtr BalanceSpecBuilder::computeIdealPenalty(
-    const std::vector<ExprPtr>& allUtils,
+    const std::vector<ScopeItemUtil>& scopeItemUtils,
     const std::vector<double>& adjustments,
     const std::function<ExprPtr(double)>& boundExpr,
     double upperBound,
     bool applyBound) const {
-  const auto n = allUtils.size();
+  const auto n = scopeItemUtils.size();
   auto result = const_expr(0, *universe_);
   for (const auto i : folly::irange(n)) {
     // We want to model: penalty = (absUtil ^ 2) / (capacity * avgCapacity)
     // = power(absUtil/capacity, 2) * (capacity/avgCapacity)
     // = power(relUtil, 2) * adjustment
-    auto penalty = power(allUtils[i], 2) * adjustments[i];
+    auto penalty = power(scopeItemUtils[i].util, 2) * adjustments[i];
     if (applyBound) {
       const auto adjustedBoundSquared =
           power(boundExpr(upperBound), 2) * adjustments[i];
@@ -186,14 +203,24 @@ ExprPtr BalanceSpecBuilder::computeIdealPenalty(
 }
 
 ExprPtr BalanceSpecBuilder::computeVariancePenalty(
-    const std::vector<ExprPtr>& allUtils,
-    const std::function<ExprPtr(double)>& boundExpr,
-    double upperBound) {
-  const auto n = allUtils.size();
+    const std::vector<ScopeItemUtil>& scopeItemUtils,
+    const std::function<ExprPtr(double)>& boundExpr) const {
+  const auto n = scopeItemUtils.size();
+  const bool onlyHasGlobalLimit = upperBoundLimits_.onlyHasGlobalLimit();
+  const ExprPtr globalThresholdExpr = onlyHasGlobalLimit
+      ? boundExpr(upperBoundLimits_.getGlobalLimit())
+      : nullptr;
   ExprPtr sumVal;
   ExprPtr sumValSquared;
-  for (const auto i : folly::irange(n)) {
-    const auto val = max(0, allUtils[i] - boundExpr(upperBound));
+  for (const auto& scopeItemUtil : scopeItemUtils) {
+    ExprPtr thresholdExpr;
+    if (onlyHasGlobalLimit) {
+      thresholdExpr = globalThresholdExpr;
+    } else {
+      thresholdExpr =
+          boundExpr(upperBoundLimits_.getLimit(scopeItemUtil.scopeItemId));
+    }
+    const auto val = max(0, scopeItemUtil.util - thresholdExpr);
     sumVal += val;
     sumValSquared += square(val);
   }
@@ -201,17 +228,17 @@ ExprPtr BalanceSpecBuilder::computeVariancePenalty(
 }
 
 ExprPtr BalanceSpecBuilder::computeLegacyPenalty(
-    const std::vector<ExprPtr>& allUtils,
+    const std::vector<ScopeItemUtil>& scopeItemUtils,
     double initialUtil,
     double sumCapacity,
     double upperBound) const {
-  const auto n = allUtils.size();
+  const auto n = scopeItemUtils.size();
   auto result = const_expr(0, *universe_);
   auto maxImbalance = const_expr(0, *universe_);
   const double coefficient = 0.001 / n;
   const double balancedUtil = initialUtil / sumCapacity;
   for (const auto i : folly::irange(n)) {
-    const auto imbalance = allUtils[i] / balancedUtil - upperBound;
+    const auto imbalance = scopeItemUtils[i].util / balancedUtil - upperBound;
     inplace_max(maxImbalance, imbalance);
     const auto positiveImbalance = max(0, imbalance);
     result += coefficient *
@@ -254,7 +281,7 @@ folly::coro::Task<ExprPtr> BalanceSpecBuilder::goalCoro(
   auto definition = *spec_.definition();
   auto metric = parseMetric(definition);
   const auto balanceMetric = *spec_.balanceMetric();
-  const double upperBound = *spec_.upperBound();
+  const double upperBound = upperBoundLimits_.getGlobalLimit();
   const ScopeItemFilterWrapper filter(*universe_, *spec_.filter(), scopeId_);
 
   auto& scope = universe_->getScope(scopeId_);
@@ -285,9 +312,9 @@ folly::coro::Task<ExprPtr> BalanceSpecBuilder::goalCoro(
   }
 
   const auto n = scopeItemIds.size();
-
   // Compute per-scope-item values based on the metric.
-  std::vector<ExprPtr> allUtils;
+  std::vector<ScopeItemUtil> scopeItemUtils;
+  scopeItemUtils.reserve(n);
   double sumCapacity = 0;
   const auto objectCountDimensionId =
       spec_.capacityPerItemCountDimension().has_value()
@@ -303,15 +330,16 @@ folly::coro::Task<ExprPtr> BalanceSpecBuilder::goalCoro(
         auto numObjects = co_await expressionBuilder.getAbsoluteUtil(
             metric, objectCountDimensionId, scopeId_, scopeItemId);
         auto capPerItem = quotient(absUtil, max(1, numObjects));
-        allUtils.push_back(std::move(capPerItem));
+        scopeItemUtils.push_back({scopeItemId, std::move(capPerItem)});
         sumCapacity += scopeDimension.getValue(scopeItemId);
       }
       break;
     case BalanceSpecMetric::RELATIVE_UTIL:
       for (auto scopeItemId : scopeItemIds) {
-        allUtils.push_back(
-            co_await expressionBuilder.getRelativeUtil(
-                metric, dimensionId_, scopeId_, scopeItemId));
+        scopeItemUtils.push_back(
+            {scopeItemId,
+             co_await expressionBuilder.getRelativeUtil(
+                 metric, dimensionId_, scopeId_, scopeItemId)});
         sumCapacity += scopeDimension.getValue(scopeItemId);
       }
       break;
@@ -326,8 +354,8 @@ folly::coro::Task<ExprPtr> BalanceSpecBuilder::goalCoro(
       // CAPACITY_PER_ITEM the threshold is sum(capPerItem)/n which changes as
       // objects move. Consider supporting fixAverageToInitial here if needed.
       ExprPtr sumUtil;
-      for (const auto& u : allUtils) {
-        sumUtil += u;
+      for (const auto& scopeItemUtil : scopeItemUtils) {
+        sumUtil += scopeItemUtil.util;
       }
       avgUtil = sumUtil / n;
       break;
@@ -352,7 +380,7 @@ folly::coro::Task<ExprPtr> BalanceSpecBuilder::goalCoro(
       break;
   }
 
-  auto boundExpr = [avgUtil, boundType, this](double bound) {
+  const auto boundExpr = [avgUtil, boundType, this](const double bound) {
     switch (boundType) {
       case (BalanceSpecBoundType::ABSOLUTE):
         return avgUtil + bound;
@@ -371,7 +399,7 @@ folly::coro::Task<ExprPtr> BalanceSpecBuilder::goalCoro(
       : boundExpr(upperBound);
 
   if (formula == BalanceSpecFormula::MAX) {
-    result = computeMaxPenalty(allUtils, thresholdExpr);
+    result = computeMaxPenalty(scopeItemUtils, thresholdExpr);
   } else if (formula == BalanceSpecFormula::IDEAL) {
     const bool applyBound = boundType == BalanceSpecBoundType::RELATIVE_UTIL ||
         !*spec_.ignoreUpperBoundForIdealWithAbsOrRelBoundTypes();
@@ -379,9 +407,9 @@ folly::coro::Task<ExprPtr> BalanceSpecBuilder::goalCoro(
     auto adjustments = getIdealAdjustments(
         balanceMetric, scopeItemIds, sumCapacity, scopeDimension);
     result = computeIdealPenalty(
-        allUtils, adjustments, boundExpr, upperBound, applyBound);
+        scopeItemUtils, adjustments, boundExpr, upperBound, applyBound);
   } else if (formula == BalanceSpecFormula::RELATIVE_UTIL_VARIANCE) {
-    result = computeVariancePenalty(allUtils, boundExpr, upperBound);
+    result = computeVariancePenalty(scopeItemUtils, boundExpr);
   } else if (formula == BalanceSpecFormula::LEGACY) {
     switch (balanceMetric) {
       case BalanceSpecMetric::CAPACITY_PER_ITEM:
@@ -396,10 +424,11 @@ folly::coro::Task<ExprPtr> BalanceSpecBuilder::goalCoro(
     if (universe_->getPrecision().compare(initialUtil, 0.0) == 0) {
       co_return const_expr(-upperBound, *universe_);
     }
-    result =
-        computeLegacyPenalty(allUtils, initialUtil, sumCapacity, upperBound);
+    result = computeLegacyPenalty(
+        scopeItemUtils, initialUtil, sumCapacity, upperBound);
   } else {
-    result = computeLinearOrSquaresPenalty(allUtils, thresholdExpr, formula);
+    result =
+        computeLinearOrSquaresPenalty(scopeItemUtils, thresholdExpr, formula);
   }
   co_return result;
 }
@@ -411,7 +440,7 @@ std::string BalanceSpecBuilder::description() const {
       *spec_.name(),
       apache::thrift::util::enumNameSafe(*spec_.definition()),
       apache::thrift::util::enumNameSafe(*spec_.boundType()),
-      *spec_.upperBound(),
+      upperBoundLimits_.getGlobalLimit(),
       apache::thrift::util::enumNameSafe(*spec_.formula()),
       apache::thrift::util::enumNameSafe(*spec_.balanceMetric()));
 }

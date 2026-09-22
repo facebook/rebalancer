@@ -14,15 +14,16 @@ the others.
 | `scope` | string | Yes | - | Scope whose scope items are being balanced (e.g. `"host"`, `"rack"`) |
 | `dimension` | string | Yes | - | Dimension whose utilization is balanced |
 | `formula` | BalanceSpecFormula | No | `LINEAR` | How imbalance is penalized (see [Formula](#formula)) |
-| `upperBound` | double | No | 1 | Threshold above which utilization is penalized (see [Upper bound](#upper-bound-and-bound-type)) |
-| `boundType` | BalanceSpecBoundType | No | `RELATIVE` | How `upperBound` is interpreted (see [Upper bound](#upper-bound-and-bound-type)) |
+| `upperBounds` | [Limit](../common/limit) | No | global limit 1 | Threshold above which utilization is penalized, with optional per-scope-item overrides (see [Upper bound](#upper-bound-and-bound-type)) |
+| `boundType` | BalanceSpecBoundType | No | `RELATIVE` | How each upper-bound limit is interpreted (see [Upper bound](#upper-bound-and-bound-type)) |
 | `definition` | BalanceSpecDefinition | No | `AFTER` | Which objects count toward a scope item's utilization (see [Definition](#definition)) |
 | `filter` | [Filter](../common/filter) | No | all scope items | Which scope items the spec applies to (see [Filter](#filter)) |
 
-Unlike [CapacitySpec](capacity), BalanceSpec does **not** take a
-[`Limit`](../common/limit): the threshold is expressed with the scalar
-`upperBound` plus a `boundType`, since balance is about evening out utilization
-rather than capping it.
+`upperBounds.globalLimit` supplies the default threshold. The
+`RELATIVE_UTIL_VARIANCE` formula also supports `scopeItemLimits` overrides for
+individual scope items. Other formulas only support the global limit. `boundType`
+determines how each resolved limit is interpreted. The deprecated scalar
+`upperBound` is retained only for compatibility with persisted specs.
 
 ## Example
 
@@ -74,22 +75,25 @@ across scope items as defined by the chosen [formula](#formula).
 
 Balance only penalizes utilization **above a threshold**; utilization at or below
 the threshold is considered balanced enough and incurs no penalty. The threshold
-is set by `upperBound`, and `boundType` controls how that number is interpreted:
+is set by `upperBounds`, and `boundType` controls how each resolved value is
+interpreted:
 
-| Bound type | Meaning | Example (`upperBound = 1.2`) |
+| Bound type | Meaning | Example (`upperBounds.globalLimit = 1.2`) |
 |------------|---------|------------------------------|
 | `RELATIVE` (default) | A multiplier of the average utilization | threshold = `1.2 * average` |
 | `ABSOLUTE` | An offset added on top of the average relative utilization | threshold = `average + 0.2` |
 | `RELATIVE_UTIL` | A fixed relative-utilization threshold, independent of the average | threshold = `1.2` |
 
-With the default `upperBound` of `1` and `RELATIVE` bound type, the threshold is
+With the default global limit of `1` and `RELATIVE` bound type, the threshold is
 exactly the average, so any utilization above the average is penalized---driving
-all scope items toward the mean.
+all scope items toward the mean. For `RELATIVE_UTIL_VARIANCE`, a value in
+`scopeItemLimits` replaces that global limit for the named scope item.
 
 :::note Balance everything equally
 To balance purely on relative utilization without regard for differing
 capacities, use the `RELATIVE_UTIL_VARIANCE` [formula](#formula) with an
-`upperBound` of `0` and a `RELATIVE` or `RELATIVE_UTIL` bound type.
+`upperBounds.globalLimit` of `0` and a `RELATIVE` or `RELATIVE_UTIL` bound
+type.
 :::
 
 ## Formula

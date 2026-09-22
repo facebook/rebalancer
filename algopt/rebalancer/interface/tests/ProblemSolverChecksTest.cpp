@@ -20,6 +20,7 @@
 
 #include <fmt/format.h>
 #include <folly/container/irange.h>
+#include <folly/Portability.h>
 #include <gtest/gtest.h>
 
 #include <string>
@@ -288,6 +289,78 @@ TEST_P(ProblemSolverChecksTest, BalanceSpecUnknownBlacklistedItem) {
 
   REBALANCER_EXPECT_RUNTIME_ERROR(
       solver->addGoal(balanceSpec), "unknown item h3 in scope host");
+}
+
+TEST_P(ProblemSolverChecksTest, BalanceSpecUnboundedUpperLimit) {
+  auto solver = makeInitializedSolver(GetParam());
+  solver->addContainerDimension("cpu", std::map<std::string, double>{});
+
+  facebook::rebalancer::interface::BalanceSpec spec;
+  spec.scope() = "host";
+  spec.dimension() = "cpu";
+  auto& upperBounds = spec.upperBounds().ensure();
+  upperBounds.type() = facebook::rebalancer::interface::LimitType::ABSOLUTE;
+  upperBounds.isDefaultLimitUnbounded() = true;
+
+  REBALANCER_EXPECT_RUNTIME_ERROR(
+      solver->addGoal(spec),
+      "BalanceSpec upperBounds cannot set isDefaultLimitUnbounded to true");
+}
+
+TEST_P(
+    ProblemSolverChecksTest,
+    BalanceSpecScopeItemUpperLimitsRequireRelativeUtilVariance) {
+  auto solver = makeInitializedSolver(GetParam());
+  solver->addContainerDimension("cpu", std::map<std::string, double>{});
+
+  facebook::rebalancer::interface::BalanceSpec spec;
+  spec.scope() = "host";
+  spec.dimension() = "cpu";
+  auto& upperBounds = spec.upperBounds().ensure();
+  upperBounds.type() = facebook::rebalancer::interface::LimitType::ABSOLUTE;
+  upperBounds.scopeItemLimits() = {{"h1", 1.5}};
+
+  REBALANCER_EXPECT_RUNTIME_ERROR(
+      solver->addGoal(spec),
+      "BalanceSpec upperBounds scopeItemLimits are only supported with RELATIVE_UTIL_VARIANCE formula, got LINEAR");
+}
+
+TEST_P(ProblemSolverChecksTest, BalanceSpecRejectsBothUpperBoundFields) {
+  auto solver = makeInitializedSolver(GetParam());
+  solver->addContainerDimension("cpu", std::map<std::string, double>{});
+
+  facebook::rebalancer::interface::BalanceSpec spec;
+  spec.scope() = "host";
+  spec.dimension() = "cpu";
+  auto& upperBounds = spec.upperBounds().ensure();
+  upperBounds.type() = facebook::rebalancer::interface::LimitType::ABSOLUTE;
+  upperBounds.globalLimit() = 1;
+  FOLLY_PUSH_WARNING
+  FOLLY_GNU_DISABLE_WARNING("-Wdeprecated-declarations")
+  // NOLINTNEXTLINE(facebook-hte-Deprecated)
+  spec.upperBound() = 0.5;
+  FOLLY_POP_WARNING
+
+  REBALANCER_EXPECT_RUNTIME_ERROR(
+      solver->addGoal(spec),
+      "BalanceSpec cannot set both deprecated upperBound and upperBounds");
+}
+
+TEST_P(ProblemSolverChecksTest, BalanceSpecAcceptsSerializedUpperBoundDefault) {
+  auto solver = makeInitializedSolver(GetParam());
+  solver->addContainerDimension("cpu", std::map<std::string, double>{});
+
+  facebook::rebalancer::interface::BalanceSpec spec;
+  spec.scope() = "host";
+  spec.dimension() = "cpu";
+  FOLLY_PUSH_WARNING
+  FOLLY_GNU_DISABLE_WARNING("-Wdeprecated-declarations")
+  // Python serialization populates the deprecated field with its IDL default.
+  // NOLINTNEXTLINE(facebook-hte-Deprecated)
+  spec.upperBound() = 1;
+  FOLLY_POP_WARNING
+
+  EXPECT_NO_THROW(solver->addGoal(spec));
 }
 
 TEST_P(ProblemSolverChecksTest, BalanceSpecLegacySoftUpperBound) {

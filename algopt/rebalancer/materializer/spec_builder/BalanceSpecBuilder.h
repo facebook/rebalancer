@@ -16,6 +16,7 @@
 
 #include "algopt/rebalancer/materializer/spec_builder/SpecBuilder.h"
 #include "algopt/rebalancer/materializer/utils/ExpressionBuilder.h"
+#include "algopt/rebalancer/materializer/utils/LimitWrapper.h"
 
 #include <functional>
 #include <vector>
@@ -40,6 +41,11 @@ class BalanceSpecBuilder : public SpecBuilder {
   SpecParameters getSpecInfo() const override;
 
  private:
+  struct ScopeItemUtil {
+    entities::ScopeItemId scopeItemId;
+    ExprPtr util;
+  };
+
   folly::coro::Task<std::pair<ExprPtr, std::size_t>>
   getTotalAbsoluteOrRelativeUtil(
       UtilMetric metric,
@@ -51,28 +57,27 @@ class BalanceSpecBuilder : public SpecBuilder {
       const std::vector<entities::ScopeItemId>& scopeItemIds) const;
 
   ExprPtr computeMaxPenalty(
-      const std::vector<ExprPtr>& allUtils,
+      const std::vector<ScopeItemUtil>& scopeItemUtils,
       const ExprPtr& thresholdExpr) const;
 
   static ExprPtr computeLinearOrSquaresPenalty(
-      const std::vector<ExprPtr>& allUtils,
+      const std::vector<ScopeItemUtil>& scopeItemUtils,
       const ExprPtr& thresholdExpr,
       interface::BalanceSpecFormula formula);
 
   ExprPtr computeIdealPenalty(
-      const std::vector<ExprPtr>& allUtils,
+      const std::vector<ScopeItemUtil>& scopeItemUtils,
       const std::vector<double>& adjustments,
       const std::function<ExprPtr(double)>& boundExpr,
       double upperBound,
       bool applyBound) const;
 
-  static ExprPtr computeVariancePenalty(
-      const std::vector<ExprPtr>& allUtils,
-      const std::function<ExprPtr(double)>& boundExpr,
-      double upperBound);
+  ExprPtr computeVariancePenalty(
+      const std::vector<ScopeItemUtil>& scopeItemUtils,
+      const std::function<ExprPtr(double)>& boundExpr) const;
 
   ExprPtr computeLegacyPenalty(
-      const std::vector<ExprPtr>& allUtils,
+      const std::vector<ScopeItemUtil>& scopeItemUtils,
       double initialUtil,
       double sumCapacity,
       double upperBound) const;
@@ -81,6 +86,7 @@ class BalanceSpecBuilder : public SpecBuilder {
   interface::BalanceSpec spec_;
   entities::DimensionId dimensionId_;
   entities::ScopeId scopeId_;
+  LimitWrapper upperBoundLimits_;
   bool continuousExpressions_;
 };
 

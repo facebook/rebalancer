@@ -201,6 +201,54 @@ TEST_F(BackwardCompatabilityUtilsTest, MinimizeContainersSpecMaxFreeLimit) {
   FOLLY_POP_WARNING
 }
 
+TEST_F(BackwardCompatabilityUtilsTest, BalanceSpecUpperBound) {
+  interface::BalanceSpec spec;
+  spec.name() = "test";
+  spec.scope() = "host";
+  spec.dimension() = "cpu";
+  FOLLY_PUSH_WARNING
+  FOLLY_GNU_DISABLE_WARNING("-Wdeprecated-declarations")
+  // NOLINTNEXTLINE(facebook-hte-Deprecated)
+  spec.upperBound() = 0.5;
+  FOLLY_POP_WARNING
+
+  addGoal(spec, /*goalId=*/0);
+  possiblyModify();
+
+  const auto& migratedSpec = getGoalSpec(0).get_balanceSpec();
+  EXPECT_EQ(0.5, *migratedSpec.upperBounds()->globalLimit());
+  FOLLY_PUSH_WARNING
+  FOLLY_GNU_DISABLE_WARNING("-Wdeprecated-declarations")
+  // NOLINTNEXTLINE(facebook-hte-Deprecated)
+  EXPECT_FALSE(
+      apache::thrift::is_non_optional_field_set_manually_or_by_serializer(
+          migratedSpec.upperBound()));
+  FOLLY_POP_WARNING
+}
+
+TEST_F(
+    BackwardCompatabilityUtilsTest,
+    BalanceSpecUpperBoundTakesPriorityDuringReplay) {
+  interface::BalanceSpec spec;
+  spec.name() = "test";
+  spec.scope() = "host";
+  spec.dimension() = "cpu";
+  auto& upperBounds = spec.upperBounds().ensure();
+  upperBounds.type() = interface::LimitType::ABSOLUTE;
+  upperBounds.globalLimit() = 0.7;
+  FOLLY_PUSH_WARNING
+  FOLLY_GNU_DISABLE_WARNING("-Wdeprecated-declarations")
+  // NOLINTNEXTLINE(facebook-hte-Deprecated)
+  spec.upperBound() = 0.5;
+  FOLLY_POP_WARNING
+
+  addGoal(spec, /*goalId=*/0);
+  possiblyModify();
+
+  EXPECT_EQ(
+      0.5, *getGoalSpec(0).get_balanceSpec().upperBounds()->globalLimit());
+}
+
 // ---------------------------------------------------------------------------
 // densifyEntityIds tests
 // ---------------------------------------------------------------------------

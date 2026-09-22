@@ -551,7 +551,9 @@ ProblemSolver& ProblemSolver::addGoal(
   v1.name() = *spec.name();
   v1.scope() = *spec.scope();
   v1.dimension() = *spec.dimension();
-  v1.upperBound() = *spec.upperBound();
+  auto& upperBounds = v1.upperBounds().ensure();
+  upperBounds.type() = LimitType::ABSOLUTE;
+  upperBounds.globalLimit() = *spec.upperBound();
   if (spec.softUpperBound()) {
     v1.softUpperBound() = *spec.softUpperBound();
   }

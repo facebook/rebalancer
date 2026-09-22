@@ -24,6 +24,7 @@ namespace interface = facebook::rebalancer::interface;
 class BackwardCompatabilityUtils {
  public:
   static void possiblyModify(interface::AssignmentProblem& problem);
+  static void possiblyModify(interface::BalanceSpec& spec);
 
  private:
   static void possiblyModify(entities::thrift::Universe& universe);

@@ -27,6 +27,19 @@
 
 namespace facebook::rebalancer::interface {
 
+namespace {
+
+FOLLY_PUSH_WARNING
+FOLLY_GNU_DISABLE_WARNING("-Wdeprecated-declarations")
+bool hasNonDefaultDeprecatedUpperBound(const BalanceSpec& spec) {
+  return apache::thrift::is_non_optional_field_set_manually_or_by_serializer(
+             spec.upperBound()) && // NOLINT(facebook-hte-Deprecated)
+      *spec.upperBound() != 1; // NOLINT(facebook-hte-Deprecated)
+}
+FOLLY_POP_WARNING
+
+} // namespace
+
 void ProblemChecker::setObjectName(const std::string& name) {
   if (!this->objectName.empty()) {
     throw std::runtime_error(
@@ -290,6 +303,26 @@ void ProblemChecker::addSpec(const BalanceSpec& spec) {
   checkScopeExists(*spec.scope());
   checkDimensionExists(*spec.dimension());
   checkScopeItemFilterSpec(*spec.filter(), *spec.scope());
+  if (hasNonDefaultDeprecatedUpperBound(spec) &&
+      spec.upperBounds().has_value()) {
+    throw std::runtime_error(
+        "BalanceSpec cannot set both deprecated upperBound and upperBounds");
+  }
+  if (spec.upperBounds().has_value()) {
+    checkLimitType(*spec.upperBounds()->type(), LimitType::ABSOLUTE);
+    checkLimitForScopeItems(*spec.scope(), *spec.upperBounds());
+    if (*spec.upperBounds()->isDefaultLimitUnbounded()) {
+      throw std::runtime_error(
+          "BalanceSpec upperBounds cannot set isDefaultLimitUnbounded to true");
+    }
+    if (*spec.formula() != BalanceSpecFormula::RELATIVE_UTIL_VARIANCE &&
+        !spec.upperBounds()->scopeItemLimits()->empty()) {
+      throw std::runtime_error(
+          fmt::format(
+              "BalanceSpec upperBounds scopeItemLimits are only supported with RELATIVE_UTIL_VARIANCE formula, got {}",
+              apache::thrift::util::enumNameSafe(*spec.formula())));
+    }
+  }
   checkBalanceLegacy(spec);
   checkBalanceIgnoreUpperBound(spec);
 

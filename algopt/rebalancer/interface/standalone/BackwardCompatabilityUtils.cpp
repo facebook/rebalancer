@@ -440,7 +440,10 @@ void BackwardCompatabilityUtils::possiblyModify(
 
 void BackwardCompatabilityUtils::possiblyModify(
     interface::GoalSpecs& specUnion) {
-  if (specUnion.getType() == interface::GoalSpecs::Type::routingLatencySpec) {
+  if (specUnion.getType() == interface::GoalSpecs::Type::balanceSpec) {
+    possiblyModify(specUnion.mutable_balanceSpec());
+  } else if (
+      specUnion.getType() == interface::GoalSpecs::Type::routingLatencySpec) {
     possiblyModify(specUnion.mutable_routingLatencySpec());
   } else if (
       specUnion.getType() ==
@@ -475,6 +478,25 @@ void BackwardCompatabilityUtils::possiblyModify(
         interface::RoutingLatencyMetric::PERCENTILE, 100);
   }
 }
+
+FOLLY_PUSH_WARNING
+FOLLY_GNU_DISABLE_WARNING("-Wdeprecated-declarations")
+void BackwardCompatabilityUtils::possiblyModify(interface::BalanceSpec& spec) {
+  auto deprecatedUpperBound =
+      spec.upperBound(); // NOLINT(facebook-hte-Deprecated)
+  const bool hasNonDefaultDeprecatedUpperBound =
+      apache::thrift::is_non_optional_field_set_manually_or_by_serializer(
+          deprecatedUpperBound) &&
+      *deprecatedUpperBound != 1;
+  if (!spec.upperBounds().has_value()) {
+    spec.upperBounds().ensure().type() = interface::LimitType::ABSOLUTE;
+  }
+  if (hasNonDefaultDeprecatedUpperBound) {
+    spec.upperBounds()->globalLimit() = *deprecatedUpperBound;
+  }
+  apache::thrift::unset_unsafe_deprecated(deprecatedUpperBound);
+}
+FOLLY_POP_WARNING
 
 // Migrate the deprecated `maxFreeLimit` field into the `target` union. Reading
 // the deprecated field is the whole point here, so the deprecation warning is
