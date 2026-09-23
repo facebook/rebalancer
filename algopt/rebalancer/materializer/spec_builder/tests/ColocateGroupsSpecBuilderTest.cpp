@@ -226,6 +226,62 @@ CO_TEST_P(ColocateGroupsSpecBuilderTest, DifferentWeight) {
       1e-8);
 }
 
+CO_TEST_P(
+    ColocateGroupsSpecBuilderTest,
+    NegativeGroupWeightKeepsPenaltyDirection) {
+  if (!GetParam()) {
+    co_return;
+  }
+
+  setUpUniverse(
+      {{"host0", {"task0", "task1", "task2", "task3"}}, {"host1", {"task4"}}});
+  co_await addPartition(
+      "job",
+      {{"job1", {"task0", "task1", "task2", "task3"}}, {"job2", {"task4"}}});
+
+  interface::ColocateGroupsSpec spec;
+  spec.name() = "test";
+  spec.scope() = "host";
+  spec.partitionName() = "job";
+  spec.bound() = interface::ColocateGroupsSpecBound::MIN;
+  spec.limits()->globalLimit() = 1;
+  spec.groupToWeight() = {{"job1", -2}};
+
+  const ColocateGroupsSpecBuilder specBuilder(
+      buildUniverse(), spec, /*needContinuousExpressions=*/true);
+  const auto constraints =
+      co_await specBuilder.constraints(expressionBuilder());
+  const auto& job1Constraint = constraints.at(0);
+  const auto mostlyConsolidated = deltaFromInitial({{"task3", "host1"}});
+  const auto evenlySplit =
+      deltaFromInitial({{"task2", "host1"}, {"task3", "host1"}});
+
+  // For normalized utilization x, the penalty term is x - 0.1*x^2, scaled
+  // by |groupWeight|=2. The two-host shares are 3/4+1/4 and 1/2+1/2.
+  const auto penaltyTerm = [](double x) { return x - 0.1 * x * x; };
+  const auto expectedMostlyConsolidatedPenalty =
+      2 * (penaltyTerm(0.75) + penaltyTerm(0.25));
+  const auto expectedEvenlySplitPenalty = 2 * 2 * penaltyTerm(0.5);
+
+  EXPECT_NEAR(
+      2, evaluate(job1Constraint.constraintExpr, mostlyConsolidated), 1e-8);
+  EXPECT_NEAR(2, evaluate(job1Constraint.constraintExpr, evenlySplit), 1e-8);
+  EXPECT_NEAR(
+      expectedMostlyConsolidatedPenalty,
+      evaluate(job1Constraint.additionalPenaltyExpr, mostlyConsolidated),
+      1e-8);
+  EXPECT_NEAR(
+      expectedEvenlySplitPenalty,
+      evaluate(job1Constraint.additionalPenaltyExpr, evenlySplit),
+      1e-8);
+  EXPECT_LT(
+      evaluate(
+          SpecBuilder::getConstraintViolation(job1Constraint),
+          mostlyConsolidated),
+      evaluate(
+          SpecBuilder::getConstraintViolation(job1Constraint), evenlySplit));
+}
+
 CO_TEST_P(ColocateGroupsSpecBuilderTest, Filter) {
   co_await setUpBasicUniverse();
 

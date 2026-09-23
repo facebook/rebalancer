@@ -19,6 +19,8 @@
 #include "algopt/rebalancer/solver/expressions/Operators.h"
 #include <algopt/rebalancer/materializer/utils/FilterWrapper.h>
 
+#include <cmath>
+
 namespace facebook::rebalancer::materializer {
 namespace {
 static constexpr double kScopeItemDefaultWeight = 1.0;
@@ -96,7 +98,7 @@ ColocateGroupsSpecBuilder::constraints(
         getConstraint(groupId, groupWeight, initialAssignment);
     constraintExpr *= groupWeight;
     if (additionalPenaltyExpr) {
-      additionalPenaltyExpr *= groupWeight;
+      additionalPenaltyExpr *= std::abs(groupWeight);
     }
     result.emplace_back(constraintExpr, additionalPenaltyExpr);
   }
