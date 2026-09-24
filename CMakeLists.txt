@@ -146,7 +146,7 @@ endif()
 
 find_package(glog CONFIG REQUIRED)
 
-set(THRIFT1 "${FBTHRIFT_COMPILER}")
+set(THRIFT_COMPILER "${FBTHRIFT_COMPILER}")
 # ThriftLibrary.cmake is installed alongside fbthrift headers
 list(APPEND CMAKE_MODULE_PATH "${FBTHRIFT_INCLUDE_DIR}/thrift")
 include(ThriftLibrary)
@@ -235,14 +235,14 @@ foreach(FILE ${thrift_files})
     file(MAKE_DIRECTORY ${OUTPUT_PATH})
 
     message(STATUS
-        "${THRIFT1} --gen "
+        "${THRIFT_COMPILER} --gen "
         "mstch_cpp2:json,include_prefix=${RELATIVE_FILE_PATH} "
         "-o ${OUTPUT_PATH} -I ${CMAKE_CURRENT_BINARY_DIR} "
         "-I ${FBTHRIFT_INCLUDE_DIR} ${FILE}"
       )
 
     execute_process(
-        COMMAND ${THRIFT1}
+        COMMAND ${THRIFT_COMPILER}
           --gen "mstch_cpp2:json,include_prefix=${RELATIVE_FILE_PATH}"
           -o "${OUTPUT_PATH}"
           -I "${CMAKE_CURRENT_SOURCE_DIR}"
