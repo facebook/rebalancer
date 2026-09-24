@@ -164,7 +164,10 @@ DescendingExpressionContainersTraversal::
         const interface::HottestTraversalConfig& traversalConfig,
         uint64_t randomSeed)
     : skipOptimalExpressions_(skipOptimalExpressions), randomSeed_(randomSeed) {
-  initTraversal(objectiveView, traversalConfig);
+  auto effectiveTraversalConfig = traversalConfig;
+  effectiveTraversalConfig.pruneOptimalSubgraphs() =
+      skipOptimalExpressions && *traversalConfig.pruneOptimalSubgraphs();
+  initTraversal(objectiveView, effectiveTraversalConfig);
 }
 
 void DescendingExpressionContainersTraversal::initTraversal(

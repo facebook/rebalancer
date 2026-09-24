@@ -563,6 +563,26 @@ CO_TEST_F(
     EXPECT_EQ(descendingExpected, descendingActual);
   }
 
+  {
+    // No pruning should happen when skipOptimalExpressions=false. Otherwise
+    // container(6), reached only through the optimal ls2, would be missing.
+    interface::HottestTraversalConfig config;
+    config.pruneOptimalSubgraphs() = true;
+    const DescendingExpressionContainersTraversal descending(
+        objective.getView(), /*skipOptimalExpressions=*/false, config);
+    const std::vector<entities::ContainerId> descendingExpected = {
+        container(2),
+        container(3),
+        container(1),
+        container(5),
+        container(4),
+        container(6),
+    };
+    const std::vector<entities::ContainerId> descendingActual(
+        descending.begin(), descending.end());
+    EXPECT_EQ(descendingExpected, descendingActual);
+  }
+
   verifyIfNodesInSubgraphAffectSameContainers(
       {{op, true}, {lookup1, true}, {lookup2, true}, {ls1, false}});
 }
