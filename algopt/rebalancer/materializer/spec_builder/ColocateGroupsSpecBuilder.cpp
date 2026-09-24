@@ -86,6 +86,19 @@ folly::coro::Task<ExprPtr> ColocateGroupsSpecBuilder::goalCoro(
   co_return aggregatedViolation;
 }
 
+folly::coro::Task<GoalInfo> ColocateGroupsSpecBuilder::goal(
+    ExpressionBuilder& expressionBuilder) const {
+  // ColocateGroupsSpec uses `util-0.1*util^2` as continuous penalty which has
+  // lower bound smaller than 0, so skip value requirement.
+  // TODO(@yangsea): investigate if the formula can be improved to avoid
+  // negative penalty.
+  co_return getSeparatedConstraintViolation(
+      co_await constraints(expressionBuilder),
+      expressionBuilder,
+      *universe_,
+      ValueRequirement::NONE);
+}
+
 folly::coro::Task<std::vector<ConstraintInfo>>
 ColocateGroupsSpecBuilder::constraints(
     ExpressionBuilder& expressionBuilder) const {

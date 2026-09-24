@@ -52,6 +52,9 @@ class CapacityWithGroupPresenceSpecBuilder : public SpecBuilder {
   folly::coro::Task<ExprPtr> goalCoro(
       ExpressionBuilder& expressionBuilder) const override;
 
+  folly::coro::Task<GoalInfo> goal(
+      ExpressionBuilder& expressionBuilder) const override;
+
   folly::coro::Task<std::vector<ConstraintInfo>> constraints(
       ExpressionBuilder& expressionBuilder) const override;
 

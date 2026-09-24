@@ -16,6 +16,8 @@
 
 #include "algopt/rebalancer/solver/expressions/Operators.h"
 
+#include <fmt/core.h>
+
 namespace facebook::rebalancer::materializer {
 
 SpecBuilder::SpecBuilder(std::shared_ptr<const entities::Universe> universe)
@@ -43,6 +45,13 @@ entities::Set<entities::ContainerId> SpecBuilder::nonAcceptingContainers()
 
 void SpecBuilder::populateInvalidMoveFilter(
     InvalidMoveFilter& /*filter*/) const {}
+
+folly::coro::Task<GoalInfo> SpecBuilder::goal(
+    ExpressionBuilder& expressionBuilder) const {
+  co_return GoalInfo{
+      .objectiveExpr = co_await goalCoro(expressionBuilder),
+      .penaltyExpr = nullptr};
+}
 
 /*static*/
 ExprPtr SpecBuilder::getAggregatedConstraintViolation(
@@ -74,6 +83,53 @@ ExprPtr SpecBuilder::getConstraintViolation(const ConstraintInfo& constraint) {
   // converted to its lp form since one of the children is binary
   return max(kZero, constraintExpr) +
       product(step(constraintExpr), additionalPenaltyExpr);
+}
+
+GoalInfo SpecBuilder::getSeparatedConstraintViolation(
+    const std::vector<ConstraintInfo>& constraints,
+    ExpressionBuilder& expressionBuilder,
+    const entities::Universe& universe,
+    ValueRequirement penaltyValueRequirement) {
+  ExprPtr objectiveExpr;
+  ExprPtr penaltyExpr;
+  for (const auto& constraint : constraints) {
+    if (constraint.constraintExpr == nullptr) {
+      throw std::runtime_error("Constraint expression is not set");
+    }
+    const auto violation = max(0, constraint.constraintExpr);
+    inplace_add(objectiveExpr, violation);
+
+    if (constraint.additionalPenaltyExpr != nullptr) {
+      if (penaltyValueRequirement != ValueRequirement::NONE) {
+        const auto penaltyLowerBound =
+            expressionBuilder.getLowerBound(*constraint.additionalPenaltyExpr);
+        if ((penaltyValueRequirement == ValueRequirement::NON_NEGATIVE &&
+             penaltyLowerBound < 0) ||
+            (penaltyValueRequirement == ValueRequirement::POSITIVE &&
+             penaltyLowerBound <= 0)) {
+          throw std::runtime_error(
+              fmt::format(
+                  "Additional penalty expression has invalid lower bound {}",
+                  penaltyLowerBound));
+        }
+      }
+      const auto violationLowerBound = std::max(
+          0.0, expressionBuilder.getLowerBound(*constraint.constraintExpr));
+      // Stop applying the penalty once the violation reaches its best possible
+      // value, including when that value is above zero.
+      inplace_add(
+          penaltyExpr,
+          product(
+              universe.getPrecision().isZero(violationLowerBound)
+                  ? step(violation)
+                  : step(violation - violationLowerBound),
+              constraint.additionalPenaltyExpr));
+    }
+  }
+  return GoalInfo{
+      .objectiveExpr =
+          objectiveExpr ? std::move(objectiveExpr) : const_expr(0, universe),
+      .penaltyExpr = std::move(penaltyExpr)};
 }
 
 } // namespace facebook::rebalancer::materializer

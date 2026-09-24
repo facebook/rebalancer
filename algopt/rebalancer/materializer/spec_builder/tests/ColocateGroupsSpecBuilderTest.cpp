@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "algopt/rebalancer/algopt_common/TestUtils.h"
 #include "algopt/rebalancer/interface/thrift/gen-cpp2/ProblemSpecs_types.h"
 #include "algopt/rebalancer/materializer/spec_builder/ColocateGroupsSpecBuilder.h"
 #include "algopt/rebalancer/materializer/utils/tests/SpecBuilderTestBase.h"
@@ -112,6 +113,7 @@ CO_TEST_P(ColocateGroupsSpecBuilderTest, Goal) {
 
   ColocateGroupsSpecBuilder specBuilder(universe, spec, GetParam());
   auto goal = co_await specBuilder.goalCoro(exprBuilder);
+  auto goalInfo = co_await specBuilder.goal(exprBuilder);
 
   auto assertOptions = packer::tests::LpAssertOptions{
       .lpTolerances =
@@ -126,12 +128,21 @@ CO_TEST_P(ColocateGroupsSpecBuilderTest, Goal) {
   auto continuousPenalty = GetParam();
   const double additionalPenaltyJob1 = continuousPenalty ? 0.95 : 0;
   const double additionalPenaltyJob3 = additionalPenaltyJob1;
+  const auto assignment =
+      deltaFromInitial({{"task1", "host1"}, {"task4", "host1"}});
+  EXPECT_NEAR(
+      2, evaluate(goalInfo.objectiveExpr, assignment, assertOptions), 1e-8);
+  if (continuousPenalty) {
+    EXPECT_NEAR(
+        additionalPenaltyJob1 + additionalPenaltyJob3,
+        evaluate(goalInfo.penaltyExpr, assignment, assertOptions),
+        1e-8);
+  } else {
+    EXPECT_EQ(nullptr, goalInfo.penaltyExpr);
+  }
   EXPECT_NEAR(
       2 + additionalPenaltyJob1 + additionalPenaltyJob3,
-      evaluate(
-          goal,
-          deltaFromInitial({{"task1", "host1"}, {"task4", "host1"}}),
-          assertOptions),
+      evaluate(goal, assignment, assertOptions),
       1e-8);
 
   spec.limits()->globalLimit() = 2;
@@ -144,6 +155,25 @@ CO_TEST_P(ColocateGroupsSpecBuilderTest, Goal) {
       evaluate(
           goal, deltaFromInitial({{"task1", "host1"}, {"task4", "host1"}})),
       1e-8);
+}
+
+CO_TEST_P(ColocateGroupsSpecBuilderTest, GoalAllowsNegativePenaltyLowerBound) {
+  if (!GetParam()) {
+    co_return;
+  }
+  co_await setUpBasicUniverse();
+  interface::ColocateGroupsSpec spec;
+  spec.name() = "test";
+  spec.scope() = "host";
+  spec.partitionName() = "job";
+  spec.limits()->globalLimit() = 1;
+  const ColocateGroupsSpecBuilder specBuilder(
+      buildUniverse(), spec, /*needContinuousExpressions=*/true);
+  auto& exprBuilder = expressionBuilder();
+  const auto goalInfo = co_await specBuilder.goal(exprBuilder);
+
+  CO_ASSERT_NE(nullptr, goalInfo.penaltyExpr);
+  EXPECT_LT(exprBuilder.getLowerBound(*goalInfo.penaltyExpr), 0);
 }
 
 CO_TEST_P(ColocateGroupsSpecBuilderTest, DifferentWeight) {

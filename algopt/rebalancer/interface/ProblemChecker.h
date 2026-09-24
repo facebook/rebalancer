@@ -16,6 +16,7 @@
 
 #include "algopt/rebalancer/algopt_common/alias.h"
 #include "algopt/rebalancer/algopt_common/Concepts.h"
+#include "algopt/rebalancer/common/ValueRequirement.h"
 #include "algopt/rebalancer/interface/thrift/gen-cpp2/ProblemSolver_types.h"
 #include "algopt/rebalancer/interface/thrift/gen-cpp2/Types_types.h"
 #include <algopt/rebalancer/interface/thrift/gen-cpp2/ProblemSpecs_types.h>
@@ -232,8 +233,6 @@ class ProblemChecker {
   };
 
   enum ObjectBundleExpectation { DISALLOWED, REQUIRED };
-
-  enum class ValueRequirement { NONE, NON_NEGATIVE, POSITIVE };
 
   void checkObjectExists(const std::string& object) const;
   void checkObjectNameIsSet() const;

@@ -38,7 +38,6 @@ struct ConstraintAndPenaltyValue {
 
 struct ExpectedInfo {
   std::vector<ConstraintAndPenaltyValue> constraintAndPenaltyValues;
-  double goalValue = 0.0;
 };
 
 // Verifies ONLY the local-search path (needsContinuousExpressions=true). Its
@@ -56,6 +55,7 @@ struct ExpectedInfo {
         universe, spec, /*needsContinuousExpressions=*/true);                                                                  \
     const auto lsComponents = co_await lsSpecBuilder.constraints(builder);                                                     \
     const auto lsGoalExpr = co_await lsSpecBuilder.goalCoro(builder);                                                          \
+    const auto lsGoalInfo = co_await lsSpecBuilder.goal(builder);                                                              \
                                                                                                                                \
     assertConstraintViolationBounds(lsComponents);                                                                             \
     CO_ASSERT_EQ(expectedValues.size(), lsComponents.size());                                                                  \
@@ -66,8 +66,13 @@ struct ExpectedInfo {
         .lpTolerances =                                                                                                        \
             algopt::lp::Tolerances{.constraint = 1e-7, .integer = 1e-6}};                                                      \
                                                                                                                                \
+    double expectedGlobalGoal = 0.0;                                                                                           \
+    double expectedLegacyPenaltyGoal = 0.0;                                                                                    \
+    double expectedSeparatedPenaltyGoal = 0.0;                                                                                 \
+    bool hasPenalty = false;                                                                                                   \
     for (const auto i : folly::irange(lsComponents.size())) {                                                                  \
       const auto expectedConstraintValue = expectedValues[i].constraintValue;                                                  \
+      expectedGlobalGoal += std::max(0.0, expectedConstraintValue);                                                            \
       const auto actualConstraintValue = evaluate(                                                                             \
           lsComponents[i].constraintExpr, assignment, lsLpAssertOptions);                                                      \
       EXPECT_NEAR(expectedConstraintValue, actualConstraintValue, 1e-8)                                                        \
@@ -78,8 +83,23 @@ struct ExpectedInfo {
                  i,                                                                                                            \
                  testIntent);                                                                                                  \
       if (expectedValues[i].penaltyValue.has_value()) {                                                                        \
+        hasPenalty = true;                                                                                                     \
         const auto expectedPenaltyValue =                                                                                      \
             expectedValues[i].penaltyValue.value();                                                                            \
+        if (expectedConstraintValue > 0) {                                                                                     \
+          expectedLegacyPenaltyGoal += expectedPenaltyValue;                                                                   \
+        }                                                                                                                      \
+        const auto expectedViolationValue =                                                                                    \
+            std::max(0.0, expectedConstraintValue);                                                                            \
+        const auto violationLowerBound = std::max(                                                                             \
+            0.0, builder.getLowerBound(*lsComponents[i].constraintExpr));                                                      \
+        const auto expectedGateInput =                                                                                         \
+            universe->getPrecision().isZero(violationLowerBound)                                                               \
+            ? expectedConstraintValue                                                                                          \
+            : expectedViolationValue - violationLowerBound;                                                                    \
+        if (universe->getPrecision().isStrictlyGtZero(expectedGateInput)) {                                                    \
+          expectedSeparatedPenaltyGoal += std::max(0.0, expectedPenaltyValue);                                                 \
+        }                                                                                                                      \
         const auto actualPenaltyValue = evaluate(                                                                              \
             lsComponents[i].additionalPenaltyExpr,                                                                             \
             assignment,                                                                                                        \
@@ -95,9 +115,21 @@ struct ExpectedInfo {
       }                                                                                                                        \
     }                                                                                                                          \
     EXPECT_NEAR(                                                                                                               \
-        (expectedInfo).goalValue,                                                                                              \
+        expectedGlobalGoal + expectedLegacyPenaltyGoal,                                                                        \
         evaluate(lsGoalExpr, assignment, lsLpAssertOptions),                                                                   \
         1e-8);                                                                                                                 \
+    EXPECT_NEAR(                                                                                                               \
+        expectedGlobalGoal,                                                                                                    \
+        evaluate(lsGoalInfo.objectiveExpr, assignment, lsLpAssertOptions),                                                     \
+        1e-8);                                                                                                                 \
+    if (hasPenalty) {                                                                                                          \
+      EXPECT_NEAR(                                                                                                             \
+          expectedSeparatedPenaltyGoal,                                                                                        \
+          evaluate(lsGoalInfo.penaltyExpr, assignment, lsLpAssertOptions),                                                     \
+          1e-8);                                                                                                               \
+    } else {                                                                                                                   \
+      EXPECT_EQ(nullptr, lsGoalInfo.penaltyExpr);                                                                              \
+    }                                                                                                                          \
   } while (0)
 
 // Verifies ONLY the optimal-solver path (needsContinuousExpressions=false). The
@@ -329,11 +361,6 @@ CO_TEST_P(CapacityWithGroupPresenceSpecBuilderTest, WithRoundUpAndMaxBound) {
              .penaltyValue = (1.5 + 1.995) * kNormPerScopeItem},
         };
 
-        // goal value is the sum of max(0, constExpr) + step(constExpr) *
-        // additionalPenaltyExpr per constraint. Only region1 is broken; its
-        // constraint (=4) and scaled penalty ((3.18 + 1.0) * kNormPerScopeItem)
-        // contribute.
-        initialExpectedInfo.goalValue = 4.0 + (3.18 + 1.0) * kNormPerScopeItem;
         break;
       }
       case interface::CapacityWithGroupPresenceUsageIntent::
@@ -352,8 +379,6 @@ CO_TEST_P(CapacityWithGroupPresenceSpecBuilderTest, WithRoundUpAndMaxBound) {
              .penaltyValue = 1.995 * kNormTenant2}, // not broken
         };
 
-        initialExpectedInfo.goalValue =
-            (2 + 3.18 * kNormTenant1) + (2 + 1.5 * kNormTenant1);
         break;
       }
     }
@@ -393,11 +418,6 @@ CO_TEST_P(CapacityWithGroupPresenceSpecBuilderTest, WithRoundUpAndMaxBound) {
              .penaltyValue = (1.63 + 1.995) * kNormPerScopeItem},
         };
 
-        // goal value is the sum of max(0, constExpr) + step(constExpr) *
-        // additionalPenaltyExpr per constraint. Only region1 is broken; its
-        // constraint (=4) and scaled penalty ((3.05 + 1.0) * kNormPerScopeItem)
-        // contribute.
-        delta1ExpectedInfo.goalValue = 4.0 + (3.05 + 1.0) * kNormPerScopeItem;
         break;
       }
       case interface::CapacityWithGroupPresenceUsageIntent::
@@ -413,8 +433,6 @@ CO_TEST_P(CapacityWithGroupPresenceSpecBuilderTest, WithRoundUpAndMaxBound) {
              .penaltyValue = 1.995 * kNormTenant2}, // not broken
         };
 
-        delta1ExpectedInfo.goalValue =
-            (2 + 3.05 * kNormTenant1) + (2 + 1.63 * kNormTenant1);
         break;
       }
     }
@@ -459,11 +477,6 @@ CO_TEST_P(CapacityWithGroupPresenceSpecBuilderTest, WithRoundUpAndMaxBound) {
              .penaltyValue = (4.68 + 0.115) * kNormPerScopeItem},
         };
 
-        // goal value is the sum of max(0, constExpr) + step(constExpr) *
-        // additionalPenaltyExpr per constraint. Only region2 is broken; its
-        // constraint (=2) and scaled penalty ((4.68 + 0.115) *
-        // kNormPerScopeItem) contribute.
-        delta2ExpectedInfo.goalValue = 2.0 + (4.68 + 0.115) * kNormPerScopeItem;
         break;
       }
       case interface::CapacityWithGroupPresenceUsageIntent::
@@ -482,7 +495,6 @@ CO_TEST_P(CapacityWithGroupPresenceSpecBuilderTest, WithRoundUpAndMaxBound) {
              .penaltyValue = 0.115 * kNormTenant2},
         };
 
-        delta2ExpectedInfo.goalValue = 4.0 + 4.68 * kNormTenant1;
         break;
       }
     }
@@ -546,13 +558,11 @@ CO_TEST_P(
            .penaltyValue = std::nullopt}, // tenant2 -> 0
           {.constraintValue = 5.995, .penaltyValue = std::nullopt},
       };
-      expectedWithout.goalValue = 3.18 + 5.995;
       expectedWith.constraintAndPenaltyValues = {
           {.constraintValue = 5.18,
            .penaltyValue = std::nullopt}, // +2.0 minPresence
           {.constraintValue = 5.995, .penaltyValue = std::nullopt},
       };
-      expectedWith.goalValue = 5.18 + 5.995;
       break;
     }
     case interface::CapacityWithGroupPresenceUsageIntent::
@@ -565,7 +575,6 @@ CO_TEST_P(
           {.constraintValue = 3.0, .penaltyValue = std::nullopt},
           {.constraintValue = 2.995, .penaltyValue = std::nullopt},
       };
-      expectedWithout.goalValue = 3.18 + 0.0 + 3.0 + 2.995;
       expectedWith.constraintAndPenaltyValues = {
           {.constraintValue = 3.18, .penaltyValue = std::nullopt},
           {.constraintValue = 2.0,
@@ -573,7 +582,6 @@ CO_TEST_P(
           {.constraintValue = 3.0, .penaltyValue = std::nullopt},
           {.constraintValue = 2.995, .penaltyValue = std::nullopt},
       };
-      expectedWith.goalValue = 3.18 + 2.0 + 3.0 + 2.995;
       break;
     }
   }
@@ -636,8 +644,6 @@ CO_TEST_P(
       {.constraintValue = 1.5, .penaltyValue = 1.5 * kNormTenant1NoRoundUp},
       {.constraintValue = 2.88, .penaltyValue = 2.88 * kNormTenant2NoRoundUp},
   };
-  pinned.goalValue =
-      8.56 + 4.68 * kNormTenant1NoRoundUp + 2.88 * kNormTenant2NoRoundUp;
   VERIFY_CONSTRAINT_COMPONENTS_AND_GOAL_VALUES(
       pinned, spec, universe, builder, atLowerBound);
 
@@ -652,8 +658,6 @@ CO_TEST_P(
       {.constraintValue = 1.5, .penaltyValue = 1.5 * kNormTenant1NoRoundUp},
       {.constraintValue = 1.88, .penaltyValue = 1.88 * kNormTenant2NoRoundUp},
   };
-  above.goalValue =
-      7.675 + 4.68 * kNormTenant1NoRoundUp + 2.995 * kNormTenant2NoRoundUp;
   VERIFY_CONSTRAINT_COMPONENTS_AND_GOAL_VALUES(
       above, spec, universe, builder, aboveLowerBound);
 }
@@ -705,7 +709,6 @@ CO_TEST_P(
       {.constraintValue = 2.0 - 2.0,
        .penaltyValue = (2.995 - 1.995) * kNormTenant2},
   };
-  initialExpected.goalValue = 1.0 + (1.995 - 1.0) * kNormTenant2;
   VERIFY_CONSTRAINT_COMPONENTS_AND_GOAL_VALUES(
       initialExpected, spec, universe, builder, initial);
 
@@ -725,7 +728,6 @@ CO_TEST_P(
       {.constraintValue = 2.0 - 2.0,
        .penaltyValue = (2.995 - 1.88) * kNormTenant2},
   };
-  pinnedExpected.goalValue = 0.0;
   VERIFY_CONSTRAINT_COMPONENTS_AND_GOAL_VALUES(
       pinnedExpected, spec, universe, builder, pinned);
 
@@ -775,9 +777,6 @@ CO_TEST_P(
       {.constraintValue = 3.0 - 1.995,
        .penaltyValue = (2.995 - 1.995) * kNormTenant2NoRoundUp},
   };
-  expected.goalValue = (4.0 - 3.18) + (4.98 - 3.18) * kNormTenant1NoRoundUp +
-      (3.0 - 1.995) + (2.995 - 1.995) * kNormTenant2NoRoundUp;
-
   VERIFY_CONSTRAINT_COMPONENTS_AND_GOAL_VALUES(
       expected, spec, universe, builder, deltaFromInitial({}));
 }
@@ -813,8 +812,6 @@ CO_TEST_P(
       {.constraintValue = kTinyPositiveLimit - 1.0,
        .penaltyValue = (1.995 - 1.0) * kNormTenant2NoRoundUp},
   };
-  expected.goalValue = 0.0;
-
   VERIFY_CONSTRAINT_COMPONENTS_AND_GOAL_VALUES(
       expected, spec, universe, builder, deltaFromInitial({}));
 }
@@ -855,9 +852,6 @@ CO_TEST_P(
       {.constraintValue = 5.0 - 1.995,
        .penaltyValue = (2.995 - 1.995) * kNormTenant2NoRoundUp},
   };
-  expected.goalValue = (5.0 - 1.5) + (4.98 - 1.5) * kNormTenant1NoRoundUp +
-      (5.0 - 1.995) + (2.995 - 1.995) * kNormTenant2NoRoundUp;
-
   VERIFY_CONSTRAINT_COMPONENTS_AND_GOAL_VALUES(
       expected, spec, universe, builder, deltaFromInitial({}));
 }
@@ -900,7 +894,6 @@ CO_TEST_P(CapacityWithGroupPresenceSpecBuilderTest, DuringDefinitionMaxBound) {
           {.constraintValue = 4.0, .penaltyValue = 0.0},
           {.constraintValue = 0.0, .penaltyValue = 0.0},
       };
-      expected.goalValue = 4.0;
       break;
     case interface::CapacityWithGroupPresenceUsageIntent::
         PER_GROUP_AND_SCOPE_ITEM:
@@ -910,7 +903,6 @@ CO_TEST_P(CapacityWithGroupPresenceSpecBuilderTest, DuringDefinitionMaxBound) {
           {.constraintValue = -2.0, .penaltyValue = 0.0}, // (tenant1,region2)
           {.constraintValue = -3.0, .penaltyValue = 0.0}, // (tenant2,region2)
       };
-      expected.goalValue = 2.0;
       break;
   }
 
@@ -969,8 +961,6 @@ CO_TEST_P(CapacityWithGroupPresenceSpecBuilderTest, MinBoundFusedPerScopeItem) {
       {.constraintValue = 6.0 - 3.495,
        .penaltyValue = (3.48 + 1.0) * kNormPerScopeItemNoRoundUp},
   };
-  initialExpected.goalValue =
-      4.325 + (2.795 + 4.48) * kNormPerScopeItemNoRoundUp;
   VERIFY_CONSTRAINT_COMPONENTS_AND_GOAL_VALUES(
       initialExpected, spec, universe, builder, initial);
 
@@ -986,8 +976,6 @@ CO_TEST_P(CapacityWithGroupPresenceSpecBuilderTest, MinBoundFusedPerScopeItem) {
       {.constraintValue = 6.0 - 1.5,
        .penaltyValue = (3.48 + 2.995) * kNormPerScopeItemNoRoundUp},
   };
-  tenant2PinnedExpected.goalValue =
-      5.325 + (1.8 + 6.475) * kNormPerScopeItemNoRoundUp;
   VERIFY_CONSTRAINT_COMPONENTS_AND_GOAL_VALUES(
       tenant2PinnedExpected, spec, universe, builder, tenant2Pinned);
 }
@@ -1039,7 +1027,6 @@ CO_TEST_P(
       {.constraintValue = 6.0 - 2.0,
        .penaltyValue = (3.48 + 2.995) * kNormPerScopeItem},
   };
-  tenant2PinnedExpected.goalValue = 4.0 + (3.48 + 2.995) * kNormPerScopeItem;
   VERIFY_CONSTRAINT_COMPONENTS_AND_GOAL_VALUES(
       tenant2PinnedExpected, spec, universe, builder, tenant2Pinned);
 
@@ -1054,8 +1041,6 @@ CO_TEST_P(
       {.constraintValue = 6.0 - 3.0,
        .penaltyValue = (3.48 + 2.88) * kNormPerScopeItem},
   };
-  tenant2StillPinnedExpected.goalValue =
-      3.0 + (3.48 + 2.88) * kNormPerScopeItem;
   VERIFY_CONSTRAINT_COMPONENTS_AND_GOAL_VALUES(
       tenant2StillPinnedExpected, spec, universe, builder, tenant2StillPinned);
 }
@@ -1105,9 +1090,6 @@ CO_TEST_P(
       {.constraintValue = 6.5 - 2.0,
        .penaltyValue = (2.995 - 1.995) * kNormTenant2},
   };
-  initialExpected.goalValue = 15.0 +
-      ((4.98 - 3.18) + (4.98 - 1.5)) * kNormTenant1 +
-      (2.995 - 1.995) * kNormTenant2;
   VERIFY_CONSTRAINT_COMPONENTS_AND_GOAL_VALUES(
       initialExpected, spec, universe, builder, initial);
 
@@ -1126,8 +1108,6 @@ CO_TEST_P(
       {.constraintValue = 6.5 - 2.0,
        .penaltyValue = (2.995 - 1.995) * kNormTenant2}, // t2r2
   };
-  deltaExpected.goalValue =
-      14.0 + (4.98 - 0.5) * kNormTenant1 + (2.995 - 1.995) * kNormTenant2;
   VERIFY_CONSTRAINT_COMPONENTS_AND_GOAL_VALUES(
       deltaExpected, spec, universe, builder, delta);
 }
@@ -1170,9 +1150,6 @@ CO_TEST_P(
       {.constraintValue = 6.5 - 1.995,
        .penaltyValue = (2.995 - 1.995) * kNormTenant2NoRoundUp},
   };
-  initialExpected.goalValue = 14.485 +
-      ((4.98 - 3.18) + (4.98 - 1.5)) * kNormTenant1NoRoundUp +
-      ((1.995 - 1.0) + (2.995 - 1.995)) * kNormTenant2NoRoundUp;
   VERIFY_CONSTRAINT_COMPONENTS_AND_GOAL_VALUES(
       initialExpected, spec, universe, builder, initial);
 
@@ -1191,9 +1168,6 @@ CO_TEST_P(
       {.constraintValue = 6.5 - 1.995,
        .penaltyValue = (2.995 - 1.995) * kNormTenant2NoRoundUp},
   };
-  deltaExpected.goalValue = 14.185 +
-      ((4.98 - 3.48) + (4.98 - 1.5)) * kNormTenant1NoRoundUp +
-      ((1.995 - 1.0) + (2.995 - 1.995)) * kNormTenant2NoRoundUp;
   VERIFY_CONSTRAINT_COMPONENTS_AND_GOAL_VALUES(
       deltaExpected, spec, universe, builder, delta);
 }
@@ -1248,7 +1222,6 @@ CO_TEST_P(
       {.constraintValue = 7.56,
        .penaltyValue = 7.56 * kNormPerScopeItemNoRoundUp},
   };
-  pinnedInfo.goalValue = 8.56 + 7.56 * kNormPerScopeItemNoRoundUp;
   VERIFY_CONSTRAINT_COMPONENTS_AND_GOAL_VALUES(
       pinnedInfo, spec, universe, builder, pinned);
 
@@ -1267,7 +1240,6 @@ CO_TEST_P(
       {.constraintValue = 6.56,
        .penaltyValue = 6.56 * kNormPerScopeItemNoRoundUp},
   };
-  aboveInfo.goalValue = 7.675 + 7.675 * kNormPerScopeItemNoRoundUp;
   VERIFY_CONSTRAINT_COMPONENTS_AND_GOAL_VALUES(
       aboveInfo, spec, universe, builder, aboveMinPresence);
 }
@@ -1370,13 +1342,6 @@ CO_TEST_P(
                  (1.5 * 1.1 * 4 + 1.995 * 1.1 * 2) * kNormPerScopeItem},
         };
 
-        // goal value is the sum of max(0, constExpr) + step(constExpr) *
-        // additionalPenaltyExpr per constraint. Only region1 is broken; its
-        // constraint (=24) and scaled penalty
-        // ((3.18 * 1.1 * 4 + 1.0 * 1.1 * 8) * kNormPerScopeItem = 22.792 *
-        // kNormPerScopeItem) contribute.
-        initialExpectedInfo.goalValue =
-            24.0 + (3.18 * 1.1 * 4 + 1.0 * 1.1 * 8) * kNormPerScopeItem;
         break;
       }
       case interface::CapacityWithGroupPresenceUsageIntent::
@@ -1397,8 +1362,6 @@ CO_TEST_P(
              .penaltyValue = 1.995 * 1.1 * 2 * kNormTenant2},
         };
 
-        // only (tenant2, region1) broken
-        initialExpectedInfo.goalValue = 4.0 + 1.0 * 1.1 * 8 * kNormTenant2;
         break;
       }
     }
@@ -1518,8 +1481,6 @@ CO_TEST_P(
              .penaltyValue = 31.455 * kNormPerScopeItemNoRoundUp},
         };
 
-        // Both constraints are not broken (negative values)
-        initialExpectedInfo.goalValue = 0.0;
         break;
       }
       case interface::CapacityWithGroupPresenceUsageIntent::
@@ -1540,7 +1501,6 @@ CO_TEST_P(
              .penaltyValue = 1.995 * 2.0 * 3.0 * 1.5 * kNormTenant2NoRoundUp},
         };
 
-        initialExpectedInfo.goalValue = 0.0;
         break;
       }
     }
@@ -1704,15 +1664,6 @@ CO_TEST_P(
                  kNormPerScopeItem},
         };
 
-        // goal value is the sum of max(0, constExpr) + step(constExpr) *
-        // additionalPenaltyExpr per constraint. Both broken; constraints
-        // contribute 24 + 56 = 80, scaled penalties contribute
-        // (22.792 + 11.748) * kNormPerScopeItem.
-        initialExpectedInfo.goalValue = (24.0 + 56.0) +
-            ((3.18 * 1.1 * 4 + 1.0 * 1.1 * 8) +
-             ((0.4 * 1.1 * 4) + (0.6 * 1.1 * 4) + (0.5 * 1.1 * 4) +
-              (0.115 * 1.1 * 8) + 0 + (1.88 * 1.1 * 2))) *
-                kNormPerScopeItem;
         break;
       }
       case interface::CapacityWithGroupPresenceUsageIntent::
@@ -1734,9 +1685,6 @@ CO_TEST_P(
                  ((0.115 * 1.1 * 8) + 0 + (1.88 * 1.1 * 2)) * kNormTenant2},
         };
 
-        initialExpectedInfo.goalValue = (4.0 + 1.0 * 1.1 * 8 * kNormTenant2) +
-            (26.0 + (0.4 + 0.6 + 0.5) * 1.1 * 4 * kNormTenant1) +
-            (8.0 + ((0.115 * 1.1 * 8) + (1.88 * 1.1 * 2)) * kNormTenant2);
         break;
       }
     }
@@ -1792,8 +1740,6 @@ CO_TEST_P(CapacityWithGroupPresenceSpecBuilderTest, WithoutRoundUp) {
              .penaltyValue = (1.5 + 1.995) * kNormPerScopeItemNoRoundUp},
         };
 
-        // goal value = 0 because both constraints are not broken
-        initialExpectedInfo.goalValue = 0.0;
         break;
       }
       case interface::CapacityWithGroupPresenceUsageIntent::
@@ -1814,7 +1760,6 @@ CO_TEST_P(CapacityWithGroupPresenceSpecBuilderTest, WithoutRoundUp) {
              .penaltyValue = 1.995 * kNormTenant2NoRoundUp},
         };
 
-        initialExpectedInfo.goalValue = 0.0;
         break;
       }
     }
@@ -1837,8 +1782,6 @@ CO_TEST_P(CapacityWithGroupPresenceSpecBuilderTest, WithoutRoundUp) {
              .penaltyValue = (1.63 + 1.995) * kNormPerScopeItemNoRoundUp},
         };
 
-        // goal value = 0 because both constraints are not broken
-        deltaExpectedInfo.goalValue = 0.0;
         break;
       }
       case interface::CapacityWithGroupPresenceUsageIntent::
@@ -1859,7 +1802,6 @@ CO_TEST_P(CapacityWithGroupPresenceSpecBuilderTest, WithoutRoundUp) {
              .penaltyValue = 1.995 * kNormTenant2NoRoundUp},
         };
 
-        deltaExpectedInfo.goalValue = 0.0;
         break;
       }
     }
@@ -1888,9 +1830,6 @@ CO_TEST_P(CapacityWithGroupPresenceSpecBuilderTest, WithoutRoundUp) {
              .penaltyValue = (4.68 + 0.115) * kNormPerScopeItemNoRoundUp},
         };
 
-        // only region2 broken
-        deltaExpectedInfo.goalValue =
-            (4.68 + 2.0 - 5.0) + (4.68 + 0.115) * kNormPerScopeItemNoRoundUp;
         break;
       }
       case interface::CapacityWithGroupPresenceUsageIntent::
@@ -1911,7 +1850,6 @@ CO_TEST_P(CapacityWithGroupPresenceSpecBuilderTest, WithoutRoundUp) {
              .penaltyValue = 0.115 * kNormTenant2NoRoundUp},
         };
 
-        deltaExpectedInfo.goalValue = 0.0;
         break;
       }
     }
@@ -2010,16 +1948,6 @@ CO_TEST_P(
                  kNormPerScopeItemNoRoundUp},
         };
 
-        // both broken; goal = constraints + scaled penalties.
-        const double region1Constraint = 3.18 * 1.1 * 4 + 2.0 * 1.1 * 8 - 5.5;
-        const double region1Penalty =
-            (3.18 * 1.1 * 4 + 1.0 * 1.1 * 8) * kNormPerScopeItemNoRoundUp;
-        const double region2Constraint = 3.0 * 2.1 * 4 + 2.0 * 2.1 * 2 - 5.0;
-        const double region2Penalty =
-            (1.5 * 2.1 * 4 + 1.995 * 2.1 * 2) * kNormPerScopeItemNoRoundUp;
-
-        initialExpectedInfo.goalValue = region1Constraint + region1Penalty +
-            region2Constraint + region2Penalty;
         break;
       }
       case interface::CapacityWithGroupPresenceUsageIntent::
@@ -2040,11 +1968,6 @@ CO_TEST_P(
              .penaltyValue = 1.995 * 2.1 * 2 * kNormTenant2NoRoundUp},
         };
 
-        initialExpectedInfo.goalValue =
-            (3.18 * 1.1 * 4 - 5.5 + 3.18 * 1.1 * 4 * kNormTenant1NoRoundUp) +
-            (2.0 * 1.1 * 8 - 5.5 + 1.0 * 1.1 * 8 * kNormTenant2NoRoundUp) +
-            (3.0 * 2.1 * 4 - 5.0 + 1.5 * 2.1 * 4 * kNormTenant1NoRoundUp) +
-            (2.0 * 2.1 * 2 - 5.0 + 1.995 * 2.1 * 2 * kNormTenant2NoRoundUp);
         break;
       }
     }
@@ -2144,14 +2067,6 @@ CO_TEST_P(
         {.constraintValue = 16 + 6 - 22,
          .penaltyValue = (1.5 * 1.1 * 4 + 1.995 * 1.1 * 2) * kNormPerScopeItem},
     };
-
-    // goal value is the sum of max(0, constExpr) + step(constExpr) *
-    // additionalPenaltyExpr per constraint. Only region1 is broken; its
-    // constraint (=24) and scaled penalty
-    // ((3.18 * 1.1 * 4 + 1.0 * 1.1 * 8) * kNormPerScopeItem = 22.792 *
-    // kNormPerScopeItem) contribute.
-    initialExpectedInfo.goalValue =
-        24.0 + (3.18 * 1.1 * 4 + 1.0 * 1.1 * 8) * kNormPerScopeItem;
 
     VERIFY_CONSTRAINT_COMPONENTS_AND_GOAL_VALUES(
         initialExpectedInfo, spec, universe, builder, initial);

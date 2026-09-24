@@ -16,6 +16,7 @@
 
 #include "algopt/rebalancer/common/CoroUtils.h"
 #include "algopt/rebalancer/common/log/RebalancerLog.h"
+#include "algopt/rebalancer/common/ValueRequirement.h"
 #include "algopt/rebalancer/entities/Set.h"
 #include "algopt/rebalancer/entities/Universe.h"
 #include "algopt/rebalancer/materializer/utils/ExpressionBuilder.h"
@@ -45,6 +46,13 @@ struct ConstraintInfo {
   ExprPtr additionalPenaltyExpr = nullptr;
 };
 
+// Carries separated objective and penalty. penaltyExpr could be nullptr when
+// there is no applicable penalty.
+struct GoalInfo {
+  ExprPtr objectiveExpr;
+  ExprPtr penaltyExpr;
+};
+
 class SpecBuilder {
  public:
   explicit SpecBuilder(std::shared_ptr<const entities::Universe> universe);
@@ -57,6 +65,12 @@ class SpecBuilder {
 
   virtual folly::coro::Task<ExprPtr> goalCoro(
       ExpressionBuilder& expressionBuilder) const = 0;
+
+  // Materialization calls either goalCoro() or goal(), never both.
+  // Builders with additionalPenaltyExpr must override this to exclude it from
+  // objectiveExpr.
+  virtual folly::coro::Task<GoalInfo> goal(
+      ExpressionBuilder& expressionBuilder) const;
 
   virtual folly::coro::Task<std::vector<ConstraintInfo>> constraints(
       ExpressionBuilder& expressionBuilder) const = 0;
@@ -87,6 +101,13 @@ class SpecBuilder {
       const entities::Universe& universe);
 
   static ExprPtr getConstraintViolation(const ConstraintInfo& constraint);
+
+  static GoalInfo getSeparatedConstraintViolation(
+      const std::vector<ConstraintInfo>& constraints,
+      ExpressionBuilder& expressionBuilder,
+      const entities::Universe& universe,
+      ValueRequirement penaltyValueRequirement =
+          ValueRequirement::NON_NEGATIVE);
 
  protected:
   std::shared_ptr<const entities::Universe> universe_;

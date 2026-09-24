@@ -40,6 +40,18 @@ folly::coro::Task<ExprPtr> GroupDiversitySpecBuilder::goalCoro(
       co_await constraints(expressionBuilder), *universe_);
 }
 
+folly::coro::Task<GoalInfo> GroupDiversitySpecBuilder::goal(
+    ExpressionBuilder& expressionBuilder) const {
+  // GroupDiversitySpec allows negative dimension so skip value requirement.
+  // TODO(@yangsea): investigate if negative dimension is valid use case or if
+  // we can improve penalty formula to avoid negative.
+  co_return getSeparatedConstraintViolation(
+      co_await constraints(expressionBuilder),
+      expressionBuilder,
+      *universe_,
+      ValueRequirement::NONE);
+}
+
 ExprPtr GroupDiversitySpecBuilder::buildLookup(
     ExpressionBuilder& expressionBuilder,
     entities::ScopeItemId scopeItemId,

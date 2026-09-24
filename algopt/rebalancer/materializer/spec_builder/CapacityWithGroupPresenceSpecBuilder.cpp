@@ -238,6 +238,12 @@ folly::coro::Task<ExprPtr> CapacityWithGroupPresenceSpecBuilder::goalCoro(
       co_await constraints(expressionBuilder), *universe_);
 }
 
+folly::coro::Task<GoalInfo> CapacityWithGroupPresenceSpecBuilder::goal(
+    ExpressionBuilder& expressionBuilder) const {
+  co_return getSeparatedConstraintViolation(
+      co_await constraints(expressionBuilder), expressionBuilder, *universe_);
+}
+
 folly::coro::Task<std::vector<ConstraintInfo>>
 CapacityWithGroupPresenceSpecBuilder::constraints(
     ExpressionBuilder& expressionBuilder) const {
