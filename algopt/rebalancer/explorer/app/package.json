@@ -27,6 +27,7 @@
     "@nest/nds": "file:../../libs/nds",
     "@nest/next-core": "file:../../libs/next-core",
     "@nest/otel": "file:../../libs/otel",
+    "@nest/pre": "^0.1.5",
     "@nest/relay": "file:../../libs/relay",
     "@nest/thrift-proxy": "file:../../libs/thrift-proxy",
     "@react-querybuilder/material": "^8.14.1",
