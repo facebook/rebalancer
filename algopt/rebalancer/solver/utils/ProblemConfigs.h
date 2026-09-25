@@ -50,6 +50,7 @@ struct ProblemConfigs {
   bool validateAppliedMoves = false;
   bool enableParallelizedBoundsComputing = false;
   bool addMetricsExprsToOrchestrator = false;
+  bool rolloutPruneOptimalSubgraphs = false;
   // Learned (GNN) move-legality filter, pre-built by the caller (the only
   // torch-dependent seam, kept out of the solver core). When set, the Problem
   // unions it with the constraint-built filter. Null when the learned filter is

@@ -42,7 +42,7 @@ class HotContainerSelector {
   bool enableObjectPotentialSorting_;
   bool exploreMovesFromContainersNotInObjective_;
   GlobalObjective::View objectiveView_;
-  const interface::HottestTraversalConfig& traversalConfig_;
+  interface::HottestTraversalConfig traversalConfig_;
   algopt::Timer findTimer_;
   std::optional<AbstractIterator<entities::ContainerId>> containersIterator_;
   std::optional<AbstractIterator<entities::ContainerId>> containersIteratorEnd_;

@@ -53,6 +53,9 @@ void fillMissingRolloutConfigValues(interface::RolloutConfig& config) {
   fillMissingValue(
       config.useSeparatedLocalSearchPenaltyObjective(),
       interface::kUseSeparatedLocalSearchPenaltyObjectiveRolloutDefault);
+  fillMissingValue(
+      config.pruneOptimalSubgraphs(),
+      interface::kPruneOptimalSubgraphsRolloutDefault);
 }
 #endif
 

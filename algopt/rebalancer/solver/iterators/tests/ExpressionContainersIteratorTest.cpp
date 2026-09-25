@@ -18,6 +18,8 @@
 #include "algopt/rebalancer/solver/expressions/tests/ExpressionUtils.h"
 #include "algopt/rebalancer/solver/expressions/TopToBottomEvaluator.h"
 #include "algopt/rebalancer/solver/iterators/ExpressionContainersIterator.h"
+#include "algopt/rebalancer/solver/solvers/HotContainerSelector.h"
+#include "algopt/rebalancer/solver/tests/ExprProblemCreation.h"
 
 #include <folly/container/irange.h>
 #include <folly/coro/BlockingWait.h>
@@ -38,6 +40,26 @@ static void verifyIfNodesInSubgraphAffectSameContainers(
     EXPECT_EQ(computedAns, expectedAns)
         << "expr at pos " << i << " is incorrect";
   }
+}
+
+static std::vector<entities::ContainerId> getHotContainers(Problem& problem) {
+  const interface::HottestTraversalConfig traversalConfig;
+  HotContainerSelector selector(
+      problem,
+      /*randomSeed=*/0,
+      /*enableObjectPotentialSorting=*/false,
+      /*exploreMovesFromContainersNotInObjective=*/false,
+      problem.objective.getView(),
+      traversalConfig);
+  selector.reset();
+
+  std::vector<entities::ContainerId> containers;
+  PackerSet<entities::ContainerId> skipContainers;
+  while (const auto container = selector.next(skipContainers)) {
+    containers.push_back(*container);
+    skipContainers.insert(*container);
+  }
+  return containers;
 }
 
 class ExpressionContainersIteratorTest : public ExpressionTestsBase {};
@@ -441,7 +463,7 @@ TEST_F(
 
 CO_TEST_F(
     ExpressionContainersIteratorTest,
-    ContainerOrderingWithAndWithoutTraversalConfig) {
+    ContainerOrderingWithTraversalAndRolloutConfigs) {
   setInitialAssignment(
       entities::Map<std::string, std::vector<std::string>>{
           {"container1", {"object1"}},
@@ -582,6 +604,22 @@ CO_TEST_F(
         descending.begin(), descending.end());
     EXPECT_EQ(descendingExpected, descendingActual);
   }
+
+  const ProblemConfigs problemConfigs;
+  const auto problem = createTestProblem(
+      universe,
+      {lookup1, lookup2, ls1, ls2},
+      const_expr(0, *universe),
+      {},
+      problemConfigs);
+
+  const std::vector<entities::ContainerId> prunedExpected = {
+      container(3), container(1), container(2), container(5)};
+
+  // The cases above cover the solver config on and off. Here the solver config
+  // remains off, so pruning must come from the rollout config.
+  problem->configs.rolloutPruneOptimalSubgraphs = true;
+  EXPECT_EQ(prunedExpected, getHotContainers(*problem));
 
   verifyIfNodesInSubgraphAffectSameContainers(
       {{op, true}, {lookup1, true}, {lookup2, true}, {ls1, false}});

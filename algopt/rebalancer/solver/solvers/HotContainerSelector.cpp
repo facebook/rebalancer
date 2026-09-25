@@ -135,7 +135,11 @@ HotContainerSelector::HotContainerSelector(
       exploreMovesFromContainersNotInObjective_(
           exploreMovesFromContainersNotInObjective),
       objectiveView_(objectiveView),
-      traversalConfig_{traversalConfig} {}
+      traversalConfig_{traversalConfig} {
+  traversalConfig_.pruneOptimalSubgraphs() =
+      *traversalConfig_.pruneOptimalSubgraphs() ||
+      problem.configs.rolloutPruneOptimalSubgraphs;
+}
 
 std::optional<entities::ContainerId> HotContainerSelector::next(
     const PackerSet<entities::ContainerId>& skipContainers) {

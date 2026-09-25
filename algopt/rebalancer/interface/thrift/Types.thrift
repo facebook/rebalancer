@@ -39,6 +39,10 @@ struct RolloutConfig {
   // and use them only after all Global values in the active stage tie.
   2: bool useSeparatedLocalSearchPenaltyObjective = false;
 
+  // Skip expression subgraphs that are already optimal while selecting hot
+  // containers.
+  3: bool pruneOptimalSubgraphs = false;
+
   // Temporary setting used to test saving, replaying, and logging a MetaConfig
   // value.
   32767: bool testOnlyConfig = false;

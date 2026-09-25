@@ -431,6 +431,8 @@ ProblemConfigs CoreSolver::makeProblemConfig(
   problemConfig.useDynamicObjectOrdering =
       *problemSpec.useDynamicObjectOrdering();
   problemConfig.validateAppliedMoves = *problemSpec.validateAppliedMoves();
+  problemConfig.rolloutPruneOptimalSubgraphs =
+      *problemSpec.rolloutConfig()->pruneOptimalSubgraphs();
 
   if (auto decompositionScopeName = problemSpec.decompositionScopeName()) {
     problemConfig.decompositionScopeName = *decompositionScopeName;
