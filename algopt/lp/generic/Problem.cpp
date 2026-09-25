@@ -549,6 +549,10 @@ const ProblemImpl& Problem::get() const {
   return *problem_;
 }
 
+std::string_view Problem::backendName() const {
+  return problem_->backendName();
+}
+
 std::optional<IIS> Problem::getIIS() {
   return problem_->getIIS();
 }

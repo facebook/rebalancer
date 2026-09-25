@@ -28,6 +28,13 @@ namespace facebook::algopt::lp::detail {
 class GenericProblemImpl : public ProblemImpl {
  public:
   explicit GenericProblemImpl(const std::function<Problem()>& factory);
+
+  // `problem_` is realized in the constructor, so the backend it reports is
+  // already final here -- including a HiGHS fallback.
+  std::string_view backendName() const override {
+    return problem_.backendName();
+  }
+
   // Variables are created via problem interface but are not owned by a specific
   // problem and may be shared across problems
   virtual std::shared_ptr<VariableImpl> makeVar(

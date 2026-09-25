@@ -456,6 +456,7 @@ void OptimalSolver::solve(
 
   auto solverSummary = SolverSummary{
       .solverType = SolverType::OPTIMAL,
+      .solverPackage = std::string(p.lp_store.getLpProblem().backendName()),
       .endReason = endReason,
       .auxInfo = std::to_string(timer.getSeconds()),
   };

@@ -18,8 +18,30 @@
 #include "algopt/lp/generic/Problem.h"
 
 #include <functional>
+#include <string_view>
 
 namespace facebook::algopt::lp {
+
+namespace detail {
+
+// Runs `load`, and if it throws, tries each backend in the build-time fallback
+// chain until one loads, skipping the requested backend. `solverName` must
+// match Problem::backendName(), e.g. "XPRESS". The chain is opt-in and is
+// configured by the REBALANCER_*FALLBACK* macros documented in
+// ProblemFactory.cpp; it is empty unless a build sets one, in which case
+// `load`'s exception simply propagates. Where a chain reaching HiGHS is
+// configured, a commercial solver that fails to load (most often an expired
+// license) degrades to a slower solve rather than failing outright. If nothing
+// in the chain loads, `load`'s exception propagates too, so a build
+// misconfiguration is not masked.
+//
+// Internal to the make*Problem() implementations below; declared here only so
+// tests can drive it with a loader that fails on demand.
+Problem loadWithFallback(
+    std::string_view solverName,
+    const std::function<Problem()>& load);
+
+} // namespace detail
 
 class ProblemFactory {
  public:

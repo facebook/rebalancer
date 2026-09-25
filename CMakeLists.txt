@@ -192,6 +192,10 @@ include_directories(
 
 add_definitions(-DREBALANCER_OSS_BUILD)
 
+# A solver that fails to load falls back to HiGHS, never to the other
+# commercial solver; see ProblemFactory.cpp.
+add_compile_definitions(REBALANCER_SOLVER_FALLBACK_TO_HIGHS_ONLY)
+
 option(USE_HIGHS "Build with HiGHS solver" OFF)
 if(highs_FOUND OR USE_HIGHS)
     add_compile_definitions(REBALANCER_USE_HIGHS)

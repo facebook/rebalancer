@@ -40,6 +40,10 @@ class GurobiProblem : public ProblemImpl {
  public:
   explicit GurobiProblem();
 
+  std::string_view backendName() const override {
+    return "GUROBI";
+  }
+
   std::shared_ptr<VariableImpl> makeVar(const std::string& name) override;
   std::shared_ptr<VariableImpl> makeIntVar(const std::string& name) override;
   std::shared_ptr<VariableImpl> makeSemiContVar(

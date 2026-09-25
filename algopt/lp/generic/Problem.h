@@ -27,6 +27,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace facebook::algopt::lp {
@@ -121,6 +122,12 @@ class ProblemImpl {
   ProblemImpl& operator=(const ProblemImpl&) = default;
   ProblemImpl& operator=(ProblemImpl&&) = default;
   virtual ~ProblemImpl();
+
+  // Concrete solver backend backing this problem ("GUROBI", "XPRESS",
+  // "HIGHS", ...). Wrappers report the backend they delegate to, so this
+  // reflects a fallback (see ProblemFactory::loadWithFallback) rather
+  // than whatever backend was originally requested.
+  virtual std::string_view backendName() const = 0;
 
   virtual std::shared_ptr<VariableImpl> makeVar(const std::string& name) = 0;
   virtual std::shared_ptr<VariableImpl> makeIntVar(const std::string& name) = 0;
@@ -296,6 +303,9 @@ class Problem {
   Problem(Problem&& problem) noexcept = default;
   Problem& operator=(Problem&& problem) = default;
   ~Problem() = default;
+
+  // See ProblemImpl::backendName().
+  std::string_view backendName() const;
 
   Variable makeVar(const std::string& name = "");
   Variable makeIntVar(const std::string& name = "");

@@ -89,6 +89,11 @@ struct SolutionStats {
 struct SolverSummary {
   SolverType solverType;
 
+  // Solver backend that actually ran, which differs from the requested one
+  // when a commercial solver fails to load and falls back to HiGHS. Only set
+  // by MIP solvers.
+  std::optional<std::string> solverPackage = std::nullopt;
+
   interface::EndReason endReason;
   /* some endReason has detailed numerical information,
    * such as move_limit, time_limit etc,

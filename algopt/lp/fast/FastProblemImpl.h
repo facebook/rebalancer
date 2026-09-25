@@ -32,6 +32,10 @@ class FastProblemImpl : public ProblemImpl {
  public:
   FastProblemImpl() = default;
 
+  std::string_view backendName() const override {
+    return "FAST";
+  }
+
   std::shared_ptr<VariableImpl> makeVar(const std::string& name) override;
   std::shared_ptr<VariableImpl> makeIntVar(const std::string& name) override;
   std::shared_ptr<VariableImpl> makeSemiContVar(

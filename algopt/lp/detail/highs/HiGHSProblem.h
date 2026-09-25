@@ -37,6 +37,10 @@ class HiGHSProblem : public ProblemImpl {
   HiGHSProblem(HiGHSProblem&&) = delete;
   HiGHSProblem& operator=(HiGHSProblem&&) = delete;
 
+  std::string_view backendName() const override {
+    return "HIGHS";
+  }
+
   std::shared_ptr<VariableImpl> makeVar(const std::string& name) override;
   std::shared_ptr<VariableImpl> makeIntVar(const std::string& name) override;
   std::shared_ptr<VariableImpl> makeSemiContVar(
