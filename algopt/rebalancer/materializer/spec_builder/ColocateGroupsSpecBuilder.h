@@ -41,6 +41,8 @@ class ColocateGroupsSpecBuilder : public SpecBuilder {
   SpecParameters getSpecInfo() const override;
 
  private:
+  ValueRequirement getPenaltyValueRequirement() const override;
+
   std::shared_ptr<Expression> getContinuousPenaltyExpr(
       entities::GroupId groupId,
       double groupWeight,

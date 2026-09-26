@@ -33,6 +33,7 @@ namespace facebook::rebalancer::materializer {
 struct SplitConstraint {
   ExprPtr hardComponent;
   ExprPtr softComponent;
+  ExprPtr penaltyComponent;
 };
 
 class Materializer {
@@ -44,7 +45,8 @@ class Materializer {
       bool continuousExpressions,
       std::shared_ptr<LogCollector> logger = std::make_shared<LogCollector>(),
       bool shouldCollectMetrics = false,
-      bool enableInvalidMoveFilter = false);
+      bool enableInvalidMoveFilter = false,
+      bool useSeparatedLocalSearchPenaltyObjective = false);
 
  private:
   explicit Materializer(
@@ -53,7 +55,8 @@ class Materializer {
       bool continuousExpressions,
       std::shared_ptr<LogCollector> logger,
       bool shouldCollectMetrics = false,
-      bool enableInvalidMoveFilter = false);
+      bool enableInvalidMoveFilter = false,
+      bool useSeparatedLocalSearchPenaltyObjective = false);
 
   std::shared_ptr<MaterializedProblem> materialize();
 
@@ -66,13 +69,21 @@ class Materializer {
       ExpressionBuilder& expressionBuilder,
       const entities::Constraint& constraint,
       const ConstraintInfo& constraintInfo,
-      std::shared_ptr<const entities::Universe> universe);
+      const SpecBuilder& specBuilder,
+      std::shared_ptr<const entities::Universe> universe,
+      bool useSeparatedLocalSearchPenaltyObjective);
 
   folly::coro::Task<void> materializeGoalCoro(
       ExpressionBuilder& expressionBuilder,
       entities::GoalId goalId);
 
   static ExprPtr getSoftenedConstraint(
+      const ConstraintInfo& constraintInfo,
+      const entities::Constraint& constraint);
+
+  static GoalInfo getSeparatedSoftenedConstraint(
+      ExpressionBuilder& expressionBuilder,
+      const SpecBuilder& specBuilder,
       const ConstraintInfo& constraintInfo,
       const entities::Constraint& constraint);
 
@@ -101,6 +112,7 @@ class Materializer {
   folly::SynchronizedPtr<std::shared_ptr<MaterializedProblem>> materialized_;
   std::unique_ptr<InvalidMoveFilter> invalidMoveFilter_;
   std::shared_ptr<Metrics::Builder> metricsBuilder_;
+  bool useSeparatedLocalSearchPenaltyObjective_{false};
 };
 
 } // namespace facebook::rebalancer::materializer

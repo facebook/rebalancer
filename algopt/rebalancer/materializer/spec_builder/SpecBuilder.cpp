@@ -46,6 +46,10 @@ entities::Set<entities::ContainerId> SpecBuilder::nonAcceptingContainers()
 void SpecBuilder::populateInvalidMoveFilter(
     InvalidMoveFilter& /*filter*/) const {}
 
+ValueRequirement SpecBuilder::getPenaltyValueRequirement() const {
+  return ValueRequirement::NON_NEGATIVE;
+}
+
 folly::coro::Task<GoalInfo> SpecBuilder::goal(
     ExpressionBuilder& expressionBuilder) const {
   co_return GoalInfo{
@@ -87,9 +91,7 @@ ExprPtr SpecBuilder::getConstraintViolation(const ConstraintInfo& constraint) {
 
 GoalInfo SpecBuilder::getSeparatedConstraintViolation(
     const std::vector<ConstraintInfo>& constraints,
-    ExpressionBuilder& expressionBuilder,
-    const entities::Universe& universe,
-    ValueRequirement penaltyValueRequirement) {
+    ExpressionBuilder& expressionBuilder) const {
   ExprPtr objectiveExpr;
   ExprPtr penaltyExpr;
   for (const auto& constraint : constraints) {
@@ -100,6 +102,7 @@ GoalInfo SpecBuilder::getSeparatedConstraintViolation(
     inplace_add(objectiveExpr, violation);
 
     if (constraint.additionalPenaltyExpr != nullptr) {
+      const auto penaltyValueRequirement = getPenaltyValueRequirement();
       if (penaltyValueRequirement != ValueRequirement::NONE) {
         const auto penaltyLowerBound =
             expressionBuilder.getLowerBound(*constraint.additionalPenaltyExpr);
@@ -120,7 +123,7 @@ GoalInfo SpecBuilder::getSeparatedConstraintViolation(
       inplace_add(
           penaltyExpr,
           product(
-              universe.getPrecision().isZero(violationLowerBound)
+              universe_->getPrecision().isZero(violationLowerBound)
                   ? step(violation)
                   : step(violation - violationLowerBound),
               constraint.additionalPenaltyExpr));
@@ -128,7 +131,7 @@ GoalInfo SpecBuilder::getSeparatedConstraintViolation(
   }
   return GoalInfo{
       .objectiveExpr =
-          objectiveExpr ? std::move(objectiveExpr) : const_expr(0, universe),
+          objectiveExpr ? std::move(objectiveExpr) : const_expr(0, *universe_),
       .penaltyExpr = std::move(penaltyExpr)};
 }
 

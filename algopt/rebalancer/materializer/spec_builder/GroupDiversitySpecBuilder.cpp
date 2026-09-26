@@ -34,6 +34,10 @@ GroupDiversitySpecBuilder::GroupDiversitySpecBuilder(
       dimensionId_(universe_->getDimensionId(*spec_.dimension())),
       dimension_(universe_->getObjects().getDimension(dimensionId_).only()) {}
 
+ValueRequirement GroupDiversitySpecBuilder::getPenaltyValueRequirement() const {
+  return ValueRequirement::NONE;
+}
+
 folly::coro::Task<ExprPtr> GroupDiversitySpecBuilder::goalCoro(
     ExpressionBuilder& expressionBuilder) const {
   co_return getAggregatedConstraintViolation(
@@ -46,10 +50,7 @@ folly::coro::Task<GoalInfo> GroupDiversitySpecBuilder::goal(
   // TODO(@yangsea): investigate if negative dimension is valid use case or if
   // we can improve penalty formula to avoid negative.
   co_return getSeparatedConstraintViolation(
-      co_await constraints(expressionBuilder),
-      expressionBuilder,
-      *universe_,
-      ValueRequirement::NONE);
+      co_await constraints(expressionBuilder), expressionBuilder);
 }
 
 ExprPtr GroupDiversitySpecBuilder::buildLookup(
@@ -142,7 +143,7 @@ folly::coro::Task<ExprPtr> GroupDiversitySpecBuilder::getContinuousPenaltyExpr(
   double maxUtilUpperbound = 0;
   const auto maxObjectValue = dimension_.getMaximumValue();
   for (auto groupId : partition.getGroupIds()) {
-    double groupUtilUpperBound =
+    const double groupUtilUpperBound =
         partition.getObjectIds(groupId).size() * maxObjectValue;
     maxUtilUpperbound = std::max(maxUtilUpperbound, groupUtilUpperBound);
   }

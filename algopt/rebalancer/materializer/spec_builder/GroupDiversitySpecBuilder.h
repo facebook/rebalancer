@@ -40,6 +40,8 @@ class GroupDiversitySpecBuilder : public SpecBuilder {
   SpecParameters getSpecInfo() const override;
 
  private:
+  ValueRequirement getPenaltyValueRequirement() const override;
+
   // Builds an `ObjectPartitionLookup` for this spec at `scopeItemId`,
   // varying only the penalty `transform` and per-group `coefficient`.
   ExprPtr buildLookup(

@@ -32,22 +32,33 @@ using namespace facebook::rebalancer::interface;
 namespace facebook::rebalancer::materializer {
 
 namespace {
-void expandVecToIndex(
+void expandGoalsToIndex(
     int index,
-    std::vector<ExprPtr>& vec,
+    std::vector<GoalInfo>& goals,
     const entities::Universe& universe) {
-  auto fromIndex = vec.size();
-  for (int j = fromIndex; j < index + 1; ++j) {
-    vec.emplace_back(const_expr(0, universe));
+  const auto targetSize = static_cast<size_t>(index + 1);
+  while (goals.size() < targetSize) {
+    goals.push_back(
+        GoalInfo{
+            .objectiveExpr = const_expr(0, universe), .penaltyExpr = nullptr});
   }
 }
-void inplaceAddToVecIndex(
+void inplaceAddToGoalsIndex(
     int index,
-    std::vector<ExprPtr>& vec,
-    const ExprPtr& expr,
+    std::vector<GoalInfo>& goals,
+    const GoalInfo& goal,
     const entities::Universe& universe) {
-  expandVecToIndex(index, vec, universe);
-  inplace_add(vec.at(index), expr);
+  expandGoalsToIndex(index, goals, universe);
+  auto& aggregate = goals.at(index);
+  if (goal.objectiveExpr) {
+    inplace_add(aggregate.objectiveExpr, goal.objectiveExpr);
+  }
+  if (goal.penaltyExpr) {
+    if (!aggregate.penaltyExpr) {
+      aggregate.penaltyExpr = const_expr(0, universe);
+    }
+    inplace_add(aggregate.penaltyExpr, goal.penaltyExpr);
+  }
 }
 } // namespace
 
@@ -57,14 +68,16 @@ const std::shared_ptr<const MaterializedProblem> Materializer::materialize(
     bool continuousExpressions,
     std::shared_ptr<LogCollector> logger,
     bool shouldCollectMetrics,
-    bool enableInvalidMoveFilter) {
+    bool enableInvalidMoveFilter,
+    bool useSeparatedLocalSearchPenaltyObjective) {
   Materializer materializer(
       std::move(executor),
       std::move(universe),
       continuousExpressions,
       std::move(logger),
       shouldCollectMetrics,
-      enableInvalidMoveFilter);
+      enableInvalidMoveFilter,
+      useSeparatedLocalSearchPenaltyObjective);
   return materializer.materialize();
 }
 
@@ -74,7 +87,8 @@ Materializer::Materializer(
     bool continuousExpressions,
     std::shared_ptr<LogCollector> logger,
     bool shouldCollectMetrics,
-    bool enableInvalidMoveFilter)
+    bool enableInvalidMoveFilter,
+    bool useSeparatedLocalSearchPenaltyObjective)
     : executor_(std::move(executor)),
       universe_(std::move(universe)),
       specBuilderFactory_(universe_, continuousExpressions, logger),
@@ -88,7 +102,9 @@ Materializer::Materializer(
               : nullptr),
       metricsBuilder_(
           shouldCollectMetrics ? std::make_shared<Metrics::Builder>()
-                               : nullptr) {}
+                               : nullptr),
+      useSeparatedLocalSearchPenaltyObjective_(
+          useSeparatedLocalSearchPenaltyObjective) {}
 
 std::shared_ptr<MaterializedProblem> Materializer::materialize() {
   auto updatesInInitialAssignment = getUpdatesInInitialAssignment();
@@ -212,6 +228,7 @@ folly::coro::Task<void> Materializer::materializeConstraintCoro(
 
   auto userConstraint = const_expr(0, *universe_);
   ExprPtr softConstraint;
+  ExprPtr constraintPenalty;
   auto hardConstraint = any_positive({}, *universe_);
 
   auto constraints = co_await specBuilder->constraints(expressionBuilder);
@@ -225,21 +242,34 @@ folly::coro::Task<void> Materializer::materializeConstraintCoro(
         return a.constraintExpr.get() < b.constraintExpr.get();
       });
 
+  const auto addComponentTo = [&](const ExprPtr& component,
+                                  ExprPtr& aggregate) {
+    if (!component) {
+      return;
+    }
+    if (!aggregate) {
+      aggregate = const_expr(0, *universe_);
+    }
+    inplace_add(aggregate, component);
+  };
+
   // TODO: The loop below is quite expensive when there are many expressions in
   // components (since they take significant time to initialize, etc.).
   // Parallelize it after making Context thread-safe.
   for (auto& constraintInfo : constraints) {
     userConstraint += max(0, constraintInfo.constraintExpr);
 
-    auto [hardComponent, softComponent] = splitConstraintComponent(
-        expressionBuilder, constraint, constraintInfo, universe_);
+    auto [hardComponent, softComponent, penaltyComponent] =
+        splitConstraintComponent(
+            expressionBuilder,
+            constraint,
+            constraintInfo,
+            *specBuilder,
+            universe_,
+            useSeparatedLocalSearchPenaltyObjective_);
 
-    if (softComponent != nullptr) {
-      if (softConstraint == nullptr) {
-        softConstraint = const_expr(0, *universe_);
-      }
-      inplace_add(softConstraint, softComponent);
-    }
+    addComponentTo(softComponent, softConstraint);
+    addComponentTo(penaltyComponent, constraintPenalty);
 
     if (hardComponent != nullptr) {
       inplace_any_positive(hardConstraint, hardComponent);
@@ -251,16 +281,11 @@ folly::coro::Task<void> Materializer::materializeConstraintCoro(
   if (softConstraint) {
     softConstraint->description =
         fmt::format("initially broken {}", description);
-    materialized_.withWLock([&](auto& wlockedMaterialized) {
-      inplaceAddToVecIndex(
-          constraint.getTupleIndex(),
-          wlockedMaterialized.finalGoals,
-          softConstraint,
-          *universe_);
-      wlockedMaterialized.softConstraints.emplace(constraintId, softConstraint);
-    });
-
     softConstraint->setSpecAnnotation(specType);
+  }
+
+  if (constraintPenalty) {
+    constraintPenalty->setSpecAnnotation(specType);
   }
 
   hardConstraint->setSpecAnnotation(specType);
@@ -271,6 +296,18 @@ folly::coro::Task<void> Materializer::materializeConstraintCoro(
   auto nonAcceptingContainers = specBuilder->nonAcceptingContainers();
 
   materialized_.withWLock([&](auto& wlockedMaterialized) {
+    if (softConstraint || constraintPenalty) {
+      inplaceAddToGoalsIndex(
+          constraint.getTupleIndex(),
+          wlockedMaterialized.finalGoals,
+          GoalInfo{
+              .objectiveExpr = softConstraint,
+              .penaltyExpr = constraintPenalty},
+          *universe_);
+    }
+    if (softConstraint) {
+      wlockedMaterialized.softConstraints.emplace(constraintId, softConstraint);
+    }
     any_positive_add(wlockedMaterialized.finalConstraint, hardConstraint);
     wlockedMaterialized.userConstraints.emplace(constraintId, userConstraint);
     inplace_add(
@@ -304,30 +341,52 @@ SplitConstraint Materializer::splitConstraintComponent(
     ExpressionBuilder& expressionBuilder,
     const entities::Constraint& constraint,
     const ConstraintInfo& constraintInfo,
-    std::shared_ptr<const entities::Universe> universe) {
+    const SpecBuilder& specBuilder,
+    std::shared_ptr<const entities::Universe> universe,
+    bool useSeparatedLocalSearchPenaltyObjective) {
   auto& constraintExpr = constraintInfo.constraintExpr;
+  const auto softened = [&]() {
+    if (useSeparatedLocalSearchPenaltyObjective) {
+      return getSeparatedSoftenedConstraint(
+          expressionBuilder, specBuilder, constraintInfo, constraint);
+    }
+    return GoalInfo{
+        .objectiveExpr = getSoftenedConstraint(constraintInfo, constraint),
+        .penaltyExpr = nullptr};
+  };
   switch (constraint.getPolicy()) {
     case ConstraintPolicy::DEFAULT: {
       const double initialValue = constraintExpr->getInitialValue();
       const bool initiallyBroken =
           universe->getPrecision().compare(initialValue, 0) == 1;
-      return !initiallyBroken
-          ? SplitConstraint{.hardComponent = constraintExpr, .softComponent = nullptr}
-          : SplitConstraint{
-                .hardComponent = getViolationBeyondInitial(
-                    constraintExpr,
-                    initialValue,
-                    expressionBuilder.getInitialAssignment()),
-                .softComponent =
-                    getSoftenedConstraint(constraintInfo, constraint)};
+      if (!initiallyBroken) {
+        return SplitConstraint{
+            .hardComponent = constraintExpr,
+            .softComponent = nullptr,
+            .penaltyComponent = nullptr};
+      }
+      auto [objectiveExpr, penaltyExpr] = softened();
+      return SplitConstraint{
+          .hardComponent = getViolationBeyondInitial(
+              constraintExpr,
+              initialValue,
+              expressionBuilder.getInitialAssignment()),
+          .softComponent = std::move(objectiveExpr),
+          .penaltyComponent = std::move(penaltyExpr)};
     }
     case ConstraintPolicy::HARD: {
-      return {.hardComponent = constraintExpr, .softComponent = nullptr};
+      return {
+          .hardComponent = constraintExpr,
+          .softComponent = nullptr,
+          .penaltyComponent = nullptr};
     }
-    case ConstraintPolicy::SOFT:
+    case ConstraintPolicy::SOFT: {
+      auto [objectiveExpr, penaltyExpr] = softened();
       return {
           .hardComponent = nullptr,
-          .softComponent = getSoftenedConstraint(constraintInfo, constraint)};
+          .softComponent = std::move(objectiveExpr),
+          .penaltyComponent = std::move(penaltyExpr)};
+    }
     default:
       throw std::runtime_error("Unhandled ConstraintPolicy");
   }
@@ -347,25 +406,36 @@ folly::coro::Task<void> Materializer::materializeGoalCoro(
       fmt::format("[goal] {}", description));
   const algopt::Timer timer(true);
 
-  auto expression = co_await specBuilder->goalCoro(expressionBuilder);
+  auto goalInfo = useSeparatedLocalSearchPenaltyObjective_
+      ? co_await specBuilder->goal(expressionBuilder)
+      : GoalInfo{
+            .objectiveExpr = co_await specBuilder->goalCoro(expressionBuilder),
+            .penaltyExpr = nullptr};
 
-  expression->setSpecAnnotation(specType);
+  goalInfo.objectiveExpr->setSpecAnnotation(specType);
 
   double weight = goal.getWeight();
   if (weight == 1) {
-    expression->description = description;
+    goalInfo.objectiveExpr->description = description;
   } else {
-    expression *= weight;
-    expression->description = fmt::format("{} * ({})", weight, description);
+    goalInfo.objectiveExpr *= weight;
+    if (goalInfo.penaltyExpr != nullptr) {
+      goalInfo.penaltyExpr *= weight;
+    }
+    goalInfo.objectiveExpr->description =
+        fmt::format("{} * ({})", weight, description);
+  }
+  if (goalInfo.penaltyExpr != nullptr) {
+    goalInfo.penaltyExpr->setSpecAnnotation(specType);
   }
 
   materialized_.withWLock([&](auto& wlockedMaterialized) {
-    inplaceAddToVecIndex(
+    inplaceAddToGoalsIndex(
         goal.getTupleIndex(),
         wlockedMaterialized.finalGoals,
-        expression,
+        goalInfo,
         *universe_);
-    wlockedMaterialized.userGoals.emplace(goalId, expression);
+    wlockedMaterialized.userGoals.emplace(goalId, goalInfo.objectiveExpr);
   });
 
   logger_->log(
@@ -395,6 +465,28 @@ ExprPtr Materializer::getSoftenedConstraint(
 
   return invalidState * step(constraintInfo.constraintExpr) +
       std::move(weightedPenalty);
+}
+
+GoalInfo Materializer::getSeparatedSoftenedConstraint(
+    ExpressionBuilder& expressionBuilder,
+    const SpecBuilder& specBuilder,
+    const ConstraintInfo& constraintInfo,
+    const entities::Constraint& constraint) {
+  const auto invalidCost = constraint.getInvalidCost();
+  const auto invalidState = constraint.getInvalidState();
+
+  auto separated = specBuilder.getSeparatedConstraintViolation(
+      {constraintInfo}, expressionBuilder);
+  separated.objectiveExpr *= invalidCost;
+  if (separated.penaltyExpr != nullptr) {
+    separated.penaltyExpr *= invalidCost;
+  }
+  if (invalidState == 0) {
+    return separated;
+  }
+  separated.objectiveExpr = invalidState * step(constraintInfo.constraintExpr) +
+      std::move(separated.objectiveExpr);
+  return separated;
 }
 
 ExprPtr Materializer::getViolationBeyondInitial(
@@ -440,16 +532,28 @@ void Materializer::buildLabeledConstraints() {
 void Materializer::buildGlobalObjectiveAndLabeledObjectives() {
   // build globalObjective
   GlobalObjective::Builder globalObjectiveBuilder;
+  GlobalObjective::Builder penaltyObjectiveBuilder;
   // build labeled objectives
   GlobalLabeledObjectives::Builder globalLabeledObjectivesBuilder;
   materialized_.withWLock([&](auto& wlockedMaterialized) {
     for (const auto pos :
          folly::irange(wlockedMaterialized.finalGoals.size())) {
-      auto& goalExpr = wlockedMaterialized.finalGoals.at(pos);
-      globalObjectiveBuilder.setObjective(pos, goalExpr);
+      const auto& goalInfo = wlockedMaterialized.finalGoals.at(pos);
+      globalObjectiveBuilder.setObjective(
+          static_cast<int>(pos), goalInfo.objectiveExpr);
+      if (useSeparatedLocalSearchPenaltyObjective_) {
+        penaltyObjectiveBuilder.setObjective(
+            static_cast<int>(pos),
+            goalInfo.penaltyExpr ? goalInfo.penaltyExpr
+                                 : const_expr(0, *universe_));
+      }
     }
     wlockedMaterialized.globalObjective =
         globalObjectiveBuilder.build(*universe_);
+    if (useSeparatedLocalSearchPenaltyObjective_) {
+      wlockedMaterialized.penaltyObjective =
+          penaltyObjectiveBuilder.build(*universe_);
+    }
 
     // if there are no userGoals or softConstraints, then just set a
     // labeledObjective with root to be const_expr(0, *universe_) as

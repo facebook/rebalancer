@@ -22,6 +22,7 @@
 #include "algopt/rebalancer/materializer/utils/ExpressionBuilder.h"
 #include "algopt/rebalancer/solver/expressions/Expression.h"
 #include "algopt/rebalancer/solver/moves/InvalidMoveFilter.h"
+#include "algopt/rebalancer/solver/utils/GoalInfo.h"
 
 #include <thrift/lib/cpp/util/EnumUtils.h>
 
@@ -44,13 +45,6 @@ struct ConstraintInfo {
   // max(0, constraintExpr) + step(constraintExpr) * additionalPenaltyExpr
   // = step(constraintExpr) * (constraintExpr + additionalPenaltyExpr)
   ExprPtr additionalPenaltyExpr = nullptr;
-};
-
-// Carries separated objective and penalty. penaltyExpr could be nullptr when
-// there is no applicable penalty.
-struct GoalInfo {
-  ExprPtr objectiveExpr;
-  ExprPtr penaltyExpr;
 };
 
 class SpecBuilder {
@@ -96,20 +90,19 @@ class SpecBuilder {
   // Default: no-op.
   virtual void populateInvalidMoveFilter(InvalidMoveFilter& filter) const;
 
+  GoalInfo getSeparatedConstraintViolation(
+      const std::vector<ConstraintInfo>& constraints,
+      ExpressionBuilder& expressionBuilder) const;
+
   static ExprPtr getAggregatedConstraintViolation(
       const std::vector<ConstraintInfo>& constraints,
       const entities::Universe& universe);
 
   static ExprPtr getConstraintViolation(const ConstraintInfo& constraint);
 
-  static GoalInfo getSeparatedConstraintViolation(
-      const std::vector<ConstraintInfo>& constraints,
-      ExpressionBuilder& expressionBuilder,
-      const entities::Universe& universe,
-      ValueRequirement penaltyValueRequirement =
-          ValueRequirement::NON_NEGATIVE);
-
  protected:
+  virtual ValueRequirement getPenaltyValueRequirement() const;
+
   std::shared_ptr<const entities::Universe> universe_;
 };
 

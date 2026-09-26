@@ -24,6 +24,44 @@
 
 namespace facebook::rebalancer::materializer::tests {
 
+namespace {
+
+class TestSpecBuilder final : public SpecBuilder {
+ public:
+  explicit TestSpecBuilder(
+      std::shared_ptr<const entities::Universe> universe,
+      ValueRequirement penaltyValueRequirement = ValueRequirement::NON_NEGATIVE)
+      : SpecBuilder(std::move(universe)),
+        penaltyValueRequirement_(penaltyValueRequirement) {}
+
+  folly::coro::Task<ExprPtr> goalCoro(
+      ExpressionBuilder& /*expressionBuilder*/) const override {
+    co_return nullptr;
+  }
+
+  folly::coro::Task<std::vector<ConstraintInfo>> constraints(
+      ExpressionBuilder& /*expressionBuilder*/) const override {
+    co_return std::vector<ConstraintInfo>{};
+  }
+
+  std::string description() const override {
+    return {};
+  }
+
+  SpecParameters getSpecInfo() const override {
+    return {};
+  }
+
+ private:
+  ValueRequirement getPenaltyValueRequirement() const override {
+    return penaltyValueRequirement_;
+  }
+
+  ValueRequirement penaltyValueRequirement_;
+};
+
+} // namespace
+
 class SpecBuilderTest : public SpecBuilderTestBase<> {
  protected:
   void setUpTestUniverse() {
@@ -40,8 +78,9 @@ CO_TEST_F(SpecBuilderTest, SeparatedPenaltyUsesViolationFloor) {
       {boundsOverride(const_expr(2, *universe), 1, 2),
        const_expr(7, *universe)}};
 
-  const auto goalInfo = SpecBuilder::getSeparatedConstraintViolation(
-      constraints, expressionBuilder(), *universe);
+  const TestSpecBuilder specBuilder(universe);
+  const auto goalInfo = specBuilder.getSeparatedConstraintViolation(
+      constraints, expressionBuilder());
   EXPECT_NEAR(3, evaluate(goalInfo.objectiveExpr, deltaFromInitial({})), 1e-8);
   EXPECT_NEAR(7, evaluate(goalInfo.penaltyExpr, deltaFromInitial({})), 1e-8);
   co_return;
@@ -56,8 +95,9 @@ CO_TEST_F(SpecBuilderTest, NegativeConstraintLowerBoundUsesZeroViolationFloor) {
       {boundsOverride(const_expr(1, *universe), -1, 1),
        const_expr(7, *universe)}};
 
-  const auto goalInfo = SpecBuilder::getSeparatedConstraintViolation(
-      constraints, expressionBuilder(), *universe);
+  const TestSpecBuilder specBuilder(universe);
+  const auto goalInfo = specBuilder.getSeparatedConstraintViolation(
+      constraints, expressionBuilder());
   EXPECT_NEAR(1, evaluate(goalInfo.objectiveExpr, deltaFromInitial({})), 1e-8);
   EXPECT_NEAR(7, evaluate(goalInfo.penaltyExpr, deltaFromInitial({})), 1e-8);
   co_return;
@@ -70,9 +110,10 @@ CO_TEST_F(SpecBuilderTest, NegativePenaltyIsRejectedByDefault) {
       {boundsOverride(const_expr(1, *universe), 0.0, 1.0),
        const_expr(-1, *universe)}};
 
+  const TestSpecBuilder specBuilder(universe);
   REBALANCER_EXPECT_RUNTIME_ERROR(
-      (void)SpecBuilder::getSeparatedConstraintViolation(
-          constraints, expressionBuilder(), *universe),
+      (void)specBuilder.getSeparatedConstraintViolation(
+          constraints, expressionBuilder()),
       "Additional penalty expression has invalid lower bound -1");
   co_return;
 }
@@ -84,8 +125,9 @@ CO_TEST_F(SpecBuilderTest, NegativePenaltyIsAcceptedWhenUnrestricted) {
       {boundsOverride(const_expr(1, *universe), 0.0, 1.0),
        const_expr(-1, *universe)}};
 
-  const auto goalInfo = SpecBuilder::getSeparatedConstraintViolation(
-      constraints, expressionBuilder(), *universe, ValueRequirement::NONE);
+  const TestSpecBuilder specBuilder(universe, ValueRequirement::NONE);
+  const auto goalInfo = specBuilder.getSeparatedConstraintViolation(
+      constraints, expressionBuilder());
   EXPECT_NE(nullptr, goalInfo.penaltyExpr);
   EXPECT_NEAR(-1, evaluate(goalInfo.penaltyExpr, deltaFromInitial({})), 1e-8);
   co_return;
@@ -101,8 +143,9 @@ CO_TEST_F(SpecBuilderTest, InfinitePenaltyUpperBoundIsAccepted) {
            0.0,
            std::numeric_limits<double>::infinity())}};
 
-  const auto goalInfo = SpecBuilder::getSeparatedConstraintViolation(
-      constraints, expressionBuilder(), *universe);
+  const TestSpecBuilder specBuilder(universe);
+  const auto goalInfo = specBuilder.getSeparatedConstraintViolation(
+      constraints, expressionBuilder());
   EXPECT_NEAR(1, evaluate(goalInfo.penaltyExpr, deltaFromInitial({})), 1e-8);
   co_return;
 }
@@ -113,9 +156,10 @@ CO_TEST_F(SpecBuilderTest, UnsetConstraintIsRejected) {
   const auto constraints =
       std::vector<ConstraintInfo>{{nullptr, const_expr(7, *universe)}};
 
+  const TestSpecBuilder specBuilder(universe);
   REBALANCER_EXPECT_RUNTIME_ERROR(
-      (void)SpecBuilder::getSeparatedConstraintViolation(
-          constraints, expressionBuilder(), *universe),
+      (void)specBuilder.getSeparatedConstraintViolation(
+          constraints, expressionBuilder()),
       "Constraint expression is not set");
   co_return;
 }

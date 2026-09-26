@@ -70,6 +70,10 @@ ColocateGroupsSpecBuilder::ColocateGroupsSpecBuilder(
   }
 }
 
+ValueRequirement ColocateGroupsSpecBuilder::getPenaltyValueRequirement() const {
+  return ValueRequirement::NONE;
+}
+
 folly::coro::Task<ExprPtr> ColocateGroupsSpecBuilder::goalCoro(
     ExpressionBuilder& expressionBuilder) const {
   const auto& groupIds = partition_.getGroupIds();
@@ -93,10 +97,7 @@ folly::coro::Task<GoalInfo> ColocateGroupsSpecBuilder::goal(
   // TODO(@yangsea): investigate if the formula can be improved to avoid
   // negative penalty.
   co_return getSeparatedConstraintViolation(
-      co_await constraints(expressionBuilder),
-      expressionBuilder,
-      *universe_,
-      ValueRequirement::NONE);
+      co_await constraints(expressionBuilder), expressionBuilder);
 }
 
 folly::coro::Task<std::vector<ConstraintInfo>>

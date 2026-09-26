@@ -104,23 +104,24 @@ class MaterializerTest : public SpecBuilderTestBase<int> {
   }
 
   static void verifyGlobalObjective(
-      const std::vector<ExprPtr>& finalGoals,
+      const std::vector<GoalInfo>& finalGoals,
       const GlobalObjective& globalObjective) {
     EXPECT_EQ(finalGoals.size(), globalObjective.size());
 
     for (const auto pos : folly::irange(finalGoals.size())) {
+      const auto tuplePosition = static_cast<int>(pos);
       // check that globalObjective and finalGoals are using the same
       // expressions
       EXPECT_EQ(
-          finalGoals.at(pos)->getId(),
-          globalObjective.getObjectiveAt(pos)->getId());
+          finalGoals.at(pos).objectiveExpr->getId(),
+          globalObjective.getObjectiveAt(tuplePosition)->getId());
     }
   }
 
   static void verifyLabeledObjectives(
       const entities::Map<entities::GoalId, ExprPtr>& userGoals,
       const entities::Map<entities::ConstraintId, ExprPtr>& softConstraints,
-      const std::vector<ExprPtr>& finalGoals,
+      const std::vector<GoalInfo>& finalGoals,
       const GlobalLabeledObjectives& labeledObjectives,
       const entities::Universe& universe) {
     PackerMap<int, std::vector<ExprPtr>> tupleIndexToGoals;
@@ -136,12 +137,13 @@ class MaterializerTest : public SpecBuilderTestBase<int> {
     }
 
     for (const auto pos : folly::irange(labeledObjectives.size())) {
-      auto& labeledObjsAtPos = labeledObjectives.getObjectiveAt(pos);
+      const auto tuplePosition = static_cast<int>(pos);
+      auto& labeledObjsAtPos = labeledObjectives.getObjectiveAt(tuplePosition);
 
       // check that all the userGoal and softConstraints are added to
       // labeledObjectives
       EXPECT_EQ(
-          tupleIndexToGoals[pos].size(),
+          tupleIndexToGoals[tuplePosition].size(),
           labeledObjsAtPos.getExpressions().size());
 
       int nLabeledObjs = 0;
@@ -152,7 +154,7 @@ class MaterializerTest : public SpecBuilderTestBase<int> {
         // are the same as that in labeledObjectives
         EXPECT_EQ(
             objExpr->getId(),
-            tupleIndexToGoals.at(pos).at(nLabeledObjs)->getId());
+            tupleIndexToGoals.at(tuplePosition).at(nLabeledObjs)->getId());
 
         nLabeledObjs++;
       }
@@ -161,7 +163,8 @@ class MaterializerTest : public SpecBuilderTestBase<int> {
       // in finalGoals.at(pos), which in turn implies it is the same as
       // globalObjecive.at(pos)
       EXPECT_EQ(
-          labeledObjsAtPos.getRoot()->getId(), finalGoals.at(pos)->getId());
+          labeledObjsAtPos.getRoot()->getId(),
+          finalGoals.at(pos).objectiveExpr->getId());
     }
   }
 
@@ -187,14 +190,20 @@ class MaterializerTest : public SpecBuilderTestBase<int> {
 
   static std::shared_ptr<const MaterializedProblem> getMaterializedProblem(
       std::shared_ptr<const entities::Universe> universe,
-      int numThreads) {
+      int numThreads,
+      bool continuousExpressions = false,
+      bool useSeparatedLocalSearchPenaltyObjective = false) {
     const std::shared_ptr<folly::CPUThreadPoolExecutor> executor =
         get_executor(numThreads);
 
     return Materializer::materialize(
         std::make_shared<algopt::treeprof::ExecutorWrapper>(executor),
         std::move(universe),
-        false);
+        continuousExpressions,
+        std::make_shared<LogCollector>(),
+        false,
+        false,
+        useSeparatedLocalSearchPenaltyObjective);
   }
 
   int kNumThreads{1};
@@ -221,19 +230,26 @@ CO_TEST_P(MaterializerTest, DefaultConstraintPolicy) {
   // amount times invalidCost).
   EXPECT_NEAR(
       10400.0,
-      evaluate(materialized.finalGoals.at(0), deltaFromInitial({})),
+      evaluate(
+          materialized.finalGoals.at(0).objectiveExpr, deltaFromInitial({})),
       1e-8);
 
   // The second item in the goals tuple is zero as there aren't any goals in
   // this position.
   EXPECT_NEAR(
-      0.0, evaluate(materialized.finalGoals.at(1), deltaFromInitial({})), 1e-8);
+      0.0,
+      evaluate(
+          materialized.finalGoals.at(1).objectiveExpr, deltaFromInitial({})),
+      1e-8);
 
   // The third item in the goals tuple is the user-defined goal0. It evaluates
   // to the amount of cpu placed in host0, which is 2 for the initial
   // assignment, times the goal weight 0.1.
   EXPECT_NEAR(
-      0.2, evaluate(materialized.finalGoals.at(2), deltaFromInitial({})), 1e-8);
+      0.2,
+      evaluate(
+          materialized.finalGoals.at(2).objectiveExpr, deltaFromInitial({})),
+      1e-8);
 
   // verify that globalObjective uses the same expressions as those in
   // finalGoals
@@ -325,6 +341,71 @@ CO_TEST_P(MaterializerTest, DefaultConstraintPolicy) {
   EXPECT_EQ(false, materialized.similarContainers.has_value());
 }
 
+CO_TEST_P(MaterializerTest, MaterializesGlobalAndPenaltyObjectives) {
+  co_await addPartition(
+      "job", {{"job0", {"task0", "task1"}}, {"job1", {"task2"}}});
+  interface::ColocateGroupsSpec spec;
+  spec.name() = "colocate";
+  spec.scope() = "host";
+  spec.partitionName() = "job";
+  spec.limits()->globalLimit() = 1;
+  interface::ConstraintSpecs constraint;
+  constraint.colocateGroupsSpec() = spec;
+  co_await addConstraint(
+      "constraint0",
+      constraint,
+      interface::ConstraintPolicy::SOFT,
+      /*invalidCost=*/100,
+      /*invalidState=*/10000,
+      /*tupleIndex=*/1);
+
+  const auto universe = buildUniverse();
+  const auto materialized = getMaterializedProblem(
+      universe,
+      MaterializerTest::GetParam(),
+      /*continuousExpressions=*/true,
+      /*useSeparatedLocalSearchPenaltyObjective=*/true);
+
+  EXPECT_EQ(3, materialized->globalObjective.size());
+  EXPECT_EQ(3, materialized->penaltyObjective.size());
+  // job0 is present on two hosts, so its violation is 1. Its normalized
+  // utilization is 0.5 on each host, giving a continuous penalty of
+  // 2 * (0.5 - 0.1 * 0.5^2) = 0.95.
+  EXPECT_NEAR(
+      10100,
+      evaluate(
+          materialized->globalObjective.getObjectiveAt(1),
+          deltaFromInitial({})),
+      1e-8);
+  EXPECT_NEAR(
+      95,
+      evaluate(
+          materialized->penaltyObjective.getObjectiveAt(1),
+          deltaFromInitial({})),
+      1e-8);
+  EXPECT_NEAR(
+      0.2,
+      evaluate(
+          materialized->globalObjective.getObjectiveAt(2),
+          deltaFromInitial({})),
+      1e-8);
+  EXPECT_NEAR(
+      0,
+      evaluate(
+          materialized->penaltyObjective.getObjectiveAt(2),
+          deltaFromInitial({})),
+      1e-8);
+  EXPECT_EQ(
+      materialized->finalGoals.at(1).penaltyExpr,
+      materialized->penaltyObjective.getObjectiveAt(1));
+  EXPECT_EQ(nullptr, materialized->finalGoals.at(2).penaltyExpr);
+  EXPECT_EQ(
+      materialized->globalObjective.getObjectiveAt(1)->getId(),
+      materialized->labeledObjectives.getObjectiveAt(1).getRoot()->getId());
+  verifyGlobalObjective(
+      materialized->finalGoals, materialized->globalObjective);
+}
+
 CO_TEST_P(MaterializerTest, HardConstraintPolicy) {
   co_await addTestConstraint(interface::ConstraintPolicy::HARD);
   const auto universe = buildUniverse();
@@ -332,22 +413,35 @@ CO_TEST_P(MaterializerTest, HardConstraintPolicy) {
       getMaterializedProblem(universe, MaterializerTest::GetParam());
   auto& materialized = *materializedPtr;
   EXPECT_EQ(3, materialized.finalGoals.size());
+  EXPECT_EQ(0, materialized.penaltyObjective.size());
+  for (const auto& goalInfo : materialized.finalGoals) {
+    EXPECT_EQ(nullptr, goalInfo.penaltyExpr);
+  }
 
   // The first item in the goals tuple doesn't contain any goals nor softened
   // constraints.
   EXPECT_NEAR(
-      0.0, evaluate(materialized.finalGoals.at(0), deltaFromInitial({})), 1e-8);
+      0.0,
+      evaluate(
+          materialized.finalGoals.at(0).objectiveExpr, deltaFromInitial({})),
+      1e-8);
 
   // The second item in the goals tuple is zero as there aren't any goals in
   // this position.
   EXPECT_NEAR(
-      0.0, evaluate(materialized.finalGoals.at(1), deltaFromInitial({})), 1e-8);
+      0.0,
+      evaluate(
+          materialized.finalGoals.at(1).objectiveExpr, deltaFromInitial({})),
+      1e-8);
 
   // The third item in the goals tuple is the user-defined goal0. It evaluates
   // to the amount of cpu placed in host0, which is 2 for the initial
   // assignment, times the goal weight 0.1.
   EXPECT_NEAR(
-      0.2, evaluate(materialized.finalGoals.at(2), deltaFromInitial({})), 1e-8);
+      0.2,
+      evaluate(
+          materialized.finalGoals.at(2).objectiveExpr, deltaFromInitial({})),
+      1e-8);
 
   // verify that globalObjective uses the same expressions as those in
   // finalGoals
@@ -422,7 +516,10 @@ CO_TEST_P(MaterializerTest, SoftConstraintPolicy) {
   // The broken constraint is added to tupel index 1, and there is no goal in
   // tuple index 0. Therefore, expect the value at goal tuple 0 to be 0.
   EXPECT_NEAR(
-      0, evaluate(materialized.finalGoals.at(0), deltaFromInitial({})), 1e-8);
+      0,
+      evaluate(
+          materialized.finalGoals.at(0).objectiveExpr, deltaFromInitial({})),
+      1e-8);
 
   // The second item in the goals tuple is the soft component of constraint0,
   // which corresponds to host2 initially exceeding capacity by 4 cpu units.
@@ -431,7 +528,7 @@ CO_TEST_P(MaterializerTest, SoftConstraintPolicy) {
   EXPECT_NEAR(
       10400.0,
       evaluate(
-          materialized.finalGoals.at(1),
+          materialized.finalGoals.at(1).objectiveExpr,
           deltaFromInitial({}),
           nonDefaultLpTolerances),
       1e-8);
@@ -441,7 +538,7 @@ CO_TEST_P(MaterializerTest, SoftConstraintPolicy) {
   EXPECT_NEAR(
       10600.0,
       evaluate(
-          materialized.finalGoals.at(1),
+          materialized.finalGoals.at(1).objectiveExpr,
           deltaFromInitial({{"task0", "host2"}}),
           nonDefaultLpTolerances),
       1e-8);
@@ -452,7 +549,7 @@ CO_TEST_P(MaterializerTest, SoftConstraintPolicy) {
   EXPECT_NEAR(
       20600.0,
       evaluate(
-          materialized.finalGoals.at(1),
+          materialized.finalGoals.at(1).objectiveExpr,
           deltaFromInitial({{"task0", "host1"}})),
       1e-8);
 
@@ -460,7 +557,10 @@ CO_TEST_P(MaterializerTest, SoftConstraintPolicy) {
   // to the amount of cpu placed in host0, which is 2 for the initial
   // assignment, times the goal weight 0.1.
   EXPECT_NEAR(
-      0.2, evaluate(materialized.finalGoals.at(2), deltaFromInitial({})), 1e-8);
+      0.2,
+      evaluate(
+          materialized.finalGoals.at(2).objectiveExpr, deltaFromInitial({})),
+      1e-8);
 
   // verify that globalObjective uses the same expressions as those in
   // finalGoals

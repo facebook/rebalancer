@@ -22,12 +22,14 @@
 #include "algopt/rebalancer/solver/summary/LabeledConstraints.h"
 #include "algopt/rebalancer/solver/summary/metrics/Metrics.h"
 #include "algopt/rebalancer/solver/utils/GlobalObjective.h"
+#include "algopt/rebalancer/solver/utils/GoalInfo.h"
 
 namespace facebook::rebalancer {
 
 struct MaterializedProblem {
   explicit MaterializedProblem(const entities::Universe& universe)
-      : globalObjective(GlobalObjective(universe)) {}
+      : globalObjective(GlobalObjective(universe)),
+        penaltyObjective(GlobalObjective(universe)) {}
   // Context: depending on constraint policy settings, a user-provided
   // constraint may be broken into a pair of soft and hard constraints,
   // typically based on the initial assignment. Components of a constraint which
@@ -37,7 +39,7 @@ struct MaterializedProblem {
   // The goal tuple to minimize. The lexicographically smallest is optimal. It
   // incorporates the user-provided goals and the soft components of
   // user-provided constraints.
-  std::vector<ExprPtr> finalGoals;
+  std::vector<GoalInfo> finalGoals;
 
   // The constraint to satisfy. A positive value indicates a constraint
   // violation. It incorporates the hard components of user-provided
@@ -53,9 +55,9 @@ struct MaterializedProblem {
   entities::Map<entities::ConstraintId, ExprPtr> softConstraints;
   entities::Map<entities::ConstraintId, ExprPtr> hardConstraints;
 
-  // globalObjective, where the expression at each tuple position i is
-  // finalGoals.at(i)
+  // globalObjective and penaltyObjective are built from finalGoals.
   GlobalObjective globalObjective;
+  GlobalObjective penaltyObjective;
   GlobalLabeledObjectives labeledObjectives;
 
   LabeledConstraints labeledHardConstraints;
