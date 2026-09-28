@@ -33,6 +33,8 @@ enum SolverType {
   SimplifiedGurobi,
   SimplifiedXpress,
   GenericGurobi,
+  HiGHS,
+  SimplifiedHiGHS,
 };
 
 class MultipleObjectivesTest : public ::testing::TestWithParam<SolverType> {
@@ -95,6 +97,11 @@ class MultipleObjectivesTest : public ::testing::TestWithParam<SolverType> {
     } else if (GetParam() == SolverType::GenericGurobi) {
       return ProblemFactory::makeGenericProblem(
           ProblemFactory::makeGurobiProblem);
+    } else if (GetParam() == SolverType::HiGHS) {
+      return ProblemFactory::makeHiGHSProblem();
+    } else if (GetParam() == SolverType::SimplifiedHiGHS) {
+      return ProblemFactory::makeSimplifiedProblem(
+          ProblemFactory::makeHiGHSProblem);
     } else {
       throw std::runtime_error("unexpected solver type");
     }
@@ -106,8 +113,21 @@ class MultipleObjectivesTest : public ::testing::TestWithParam<SolverType> {
   std::vector<Expression> objectives_;
 };
 
-#if !defined(REBALANCER_USE_GUROBI) && !defined(REBALANCER_USE_XPRESS)
+#if !defined(REBALANCER_USE_GUROBI) && !defined(REBALANCER_USE_XPRESS) && \
+    !defined(REBALANCER_USE_HIGHS)
 GTEST_ALLOW_UNINSTANTIATED_PARAMETERIZED_TEST(MultipleObjectivesTest);
+#endif
+
+#ifdef REBALANCER_USE_HIGHS
+INSTANTIATE_TEST_CASE_P(
+    HiGHSTest,
+    MultipleObjectivesTest,
+    ::testing::Values(SolverType::HiGHS));
+
+INSTANTIATE_TEST_CASE_P(
+    HiGHSWithSimplifierTest,
+    MultipleObjectivesTest,
+    ::testing::Values(SolverType::SimplifiedHiGHS));
 #endif
 
 #ifdef REBALANCER_USE_GUROBI
@@ -201,6 +221,12 @@ TEST_P(MultipleObjectivesTest, QuadraticObjective) {
       GetParam() == SolverType::SimplifiedXpress) {
     // quadratic expressions are not supported in SimplifiedProblem, so skip
     // those cases.
+    return;
+  }
+
+  if (GetParam() == SolverType::HiGHS ||
+      GetParam() == SolverType::SimplifiedHiGHS) {
+    // The HiGHS backend does not support quadratic objectives.
     return;
   }
 

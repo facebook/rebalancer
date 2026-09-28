@@ -754,25 +754,22 @@ TEST(EndToEndTest, DecomposableGurobi) {
 
 #ifdef REBALANCER_USE_HIGHS
 
+// HiGHS ignores setCallback rather than invoking it, so the callback bodies in
+// testExample and testNoSolutionFound never run. Both tests still assert on the
+// solve itself, so they are included.
+TEST(EndToEndTest, HiGHS) {
+  runTest(ProblemFactory::makeHiGHSProblem);
+  testLogging(ProblemFactory::makeHiGHSProblem);
+  verifyModelFingerprint(ProblemFactory::makeHiGHSProblem, false);
+}
+
 TEST(EndToEndTest, HiGHSSimplified) {
   auto factory = []() {
     return ProblemFactory::makeSimplifiedProblem(
         ProblemFactory::makeHiGHSProblem);
   };
-  // TODO(T000000000): Once HiGHS setCallback is implemented, replace this
-  // with runTest(factory) and add verifyModelFingerprint(factory, false).
-  // Currently skipping testExample and testNoSolutionFound because they
-  // use setCallback which is not yet implemented for HiGHS.
-  testTolerances(factory);
-  testVariables(factory);
-  testOperators(factory);
-  testConstraints(factory);
-  testInfeasible(factory);
-  testNoConstraintSolve(factory);
-  testUnboundedSolve(factory);
-  testNoVariables(factory);
-  testMultipleSetObjectiveCalls(factory);
-  testMultiObjective(factory);
+  runTest(factory);
+  verifyModelFingerprint(factory, false);
 }
 
 #endif

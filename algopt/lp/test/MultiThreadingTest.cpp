@@ -31,7 +31,7 @@ namespace interface = facebook::rebalancer::interface;
 // NOTE: this test intentionally only tests for problems that go through
 // GenericProblemImpl, since ones that directly go through XpressProblem and
 // GurobiProblem are not thread-safe
-enum SolverType { SimplifiedGurobi, SimplifiedXpress };
+enum SolverType { SimplifiedGurobi, SimplifiedXpress, SimplifiedHiGHS };
 
 class MultiThreadingTest : public ::testing::TestWithParam<SolverType> {
  protected:
@@ -39,6 +39,9 @@ class MultiThreadingTest : public ::testing::TestWithParam<SolverType> {
     if (GetParam() == SolverType::SimplifiedXpress) {
       return lp::ProblemFactory::makeSimplifiedProblem(
           lp::ProblemFactory::makeXpressProblem);
+    } else if (GetParam() == SolverType::SimplifiedHiGHS) {
+      return lp::ProblemFactory::makeSimplifiedProblem(
+          lp::ProblemFactory::makeHiGHSProblem);
     } else {
       return lp::ProblemFactory::makeSimplifiedProblem(
           lp::ProblemFactory::makeGurobiProblem);
@@ -55,6 +58,11 @@ INSTANTIATE_TEST_CASE_P(
     XpressWithSimplifierTest,
     MultiThreadingTest,
     ::testing::Values(SolverType::SimplifiedXpress));
+
+INSTANTIATE_TEST_CASE_P(
+    HiGHSWithSimplifierTest,
+    MultiThreadingTest,
+    ::testing::Values(SolverType::SimplifiedHiGHS));
 
 TEST_P(MultiThreadingTest, Basic) {
   if (GetParam() == SolverType::SimplifiedGurobi) {

@@ -43,6 +43,21 @@ TEST(StartValuesTest, XpressFeasible) {
           thrift::WarmStartStatus::FEASIBLE_SOLUTION_OBTAINED);
 }
 
+// HiGHS applies the start values but does not report a WarmStartStatus, so this
+// only checks that warm starting does not perturb the solve.
+TEST(StartValuesTest, HiGHSFeasible) {
+  auto problem = ProblemFactory::makeHiGHSProblem();
+  auto var = problem.makeVar();
+  var.setLB(0);
+  var.setUB(10);
+  problem.addStartValue(var, 5);
+  problem.setObjective(var);
+  problem.solve();
+
+  EXPECT_EQ(thrift::ProblemStatus::OPTIMAL_FOUND, problem.getStatus());
+  EXPECT_NEAR(0, var.getValue(), 1e-8);
+}
+
 TEST(StartValuesTest, XpressInfeasible) {
   REBALANCER_SKIP_IF_NO_XPRESS();
   auto problem = ProblemFactory::makeXpressProblem();
