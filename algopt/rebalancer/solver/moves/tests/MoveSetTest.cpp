@@ -17,6 +17,7 @@
 #include "algopt/rebalancer/solver/moves/MoveSet.h"
 #include "algopt/rebalancer/solver/tests/IdConverterTestUtils.h"
 
+#include <fmt/core.h>
 #include <folly/container/irange.h>
 #include <gtest/gtest.h>
 
@@ -87,27 +88,31 @@ TEST(MoveSetTest, ToString) {
   entities::tests::UniverseBuilderTestUtils builder("task", "host");
   builder.setInitialAssignment(
       {{"host1", {"task1"}}, {"host2", {"task2"}}, {"host3", {}}});
+  // IDs depend on the map's iteration order, which differs between builds.
+  const auto task1 = builder.object("task1");
+  const auto task2 = builder.object("task2");
+  const auto host1 = builder.container("host1");
+  const auto host2 = builder.container("host2");
+  const auto host3 = builder.container("host3");
 
   MoveSet moves;
-  moves.insert(
-      Move{
-          builder.object("task1"),
-          builder.container("host1"),
-          builder.container("host3")});
-  moves.insert(
-      Move{
-          builder.object("task2"),
-          builder.container("host2"),
-          builder.container("host3")});
+  moves.insert(Move{task1, host1, host3});
+  moves.insert(Move{task2, host2, host3});
 
   const auto universe = builder.buildUniverse();
-  const auto result = moves.toString(*universe);
   EXPECT_EQ(
-      "[\n"
-      "  Object = task1 (id: 0), Source Container = host1 (id: 0), Destination Container = host3 (id: 1)\n"
-      "  Object = task2 (id: 1), Source Container = host2 (id: 2), Destination Container = host3 (id: 1)\n"
-      "]",
-      result);
+      fmt::format(
+          "[\n"
+          "  Object = task1 (id: {}), Source Container = host1 (id: {}), Destination Container = host3 (id: {})\n"
+          "  Object = task2 (id: {}), Source Container = host2 (id: {}), Destination Container = host3 (id: {})\n"
+          "]",
+          task1,
+          host1,
+          host3,
+          task2,
+          host2,
+          host3),
+      moves.toString(*universe));
 }
 
 TEST(MoveSetTest, EmptyToString) {
