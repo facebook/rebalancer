@@ -109,7 +109,7 @@ void FixedSourceMoveType::getBundleMoveCandidates(
     const MovesEvaluator& evaluator,
     const interface::ObjectsToExploreOptions& bundleOptions,
     folly::F14FastSet<std::pair<ObjectBundle, entities::ContainerId>>& moves) {
-  const auto bundleHints = singleFixedSourceSpec_.objectBundleFormationHints();
+  auto bundleHints = singleFixedSourceSpec_.objectBundleFormationHints();
   const bool adjustBundleSizeForIncompleteBundles = bundleHints &&
       bundleHints.value().adjustBundleSizeForIncompleteBundles().value_or(
           false);
