@@ -23,7 +23,10 @@
 
 #include <folly/container/F14Map.h>
 
+#include <memory>
 #include <optional>
+#include <string>
+#include <vector>
 
 namespace facebook::algopt::lp::detail {
 
@@ -108,6 +111,14 @@ class HiGHSProblem : public ProblemImpl {
   std::vector<std::shared_ptr<const ExpressionImpl>> objectives_;
 
   Highs highs_;
+  // One entry per HiGHS row, in row order. HiGHS is not given names, so getIIS
+  // translates its indices through these and colNames_.
+  struct Row {
+    std::weak_ptr<const ConstraintImpl> constraint;
+    std::string name;
+  };
+  std::vector<Row> rows_;
+  std::vector<std::string> colNames_;
   folly::F14FastMap<std::shared_ptr<const VariableImpl>, double> initialValues_;
   Timer timer_;
   bool loggingDisabled_ = false;

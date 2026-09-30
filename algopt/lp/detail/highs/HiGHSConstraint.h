@@ -16,21 +16,13 @@
 
 #ifdef REBALANCER_USE_HIGHS
 
-#include "algopt/lp/detail/highs/highs.h"
 #include "algopt/lp/generic/Constraint.h"
 
 namespace facebook::algopt::lp::detail {
 
-class HiGHSConstraint : public ConstraintImpl {
- public:
-  explicit HiGHSConstraint(HighsInt rowIndex);
-
-  /// Get the underlying row index
-  HighsInt getRowIndex() const;
-
- private:
-  HighsInt rowIndex_;
-};
+// Deliberately holds no row index: deleting a row shifts every later one, so
+// HiGHSProblem finds a constraint's current row by identity instead.
+class HiGHSConstraint : public ConstraintImpl {};
 
 } // namespace facebook::algopt::lp::detail
 

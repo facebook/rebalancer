@@ -29,8 +29,10 @@
 #include <folly/logging/xlog.h>
 #include <folly/String.h>
 
+#include <algorithm>
 #include <cmath>
 #include <filesystem>
+#include <iterator>
 #include <map>
 #include <optional>
 #include <stdexcept>
@@ -95,6 +97,7 @@ std::shared_ptr<VariableImpl> HiGHSProblem::makeVar(
   REBALANCER_HIGHS_CALL(highs_.addVar(lowerBound, upperBound));
 
   const HighsInt colIndex = highs_.getNumCol() - 1;
+  colNames_.push_back(name);
 
   // Set the variable type if not continuous
   switch (type) {
@@ -127,7 +130,7 @@ std::shared_ptr<VariableImpl> HiGHSProblem::makeVar(
 
 std::shared_ptr<ConstraintImpl> HiGHSProblem::newConstraint(
     std::shared_ptr<const RelationImpl> relation,
-    const std::string& /*name*/) {
+    const std::string& name) {
   const auto& highsRelation = dynamic_cast<const HiGHSRelation&>(*relation);
 
   const auto& expr = highsRelation.getExpression();
@@ -185,17 +188,25 @@ std::shared_ptr<ConstraintImpl> HiGHSProblem::newConstraint(
     REBALANCER_HIGHS_CALL(highs_.addRow(lhs, rhs, 0, nullptr, nullptr));
   }
 
-  const HighsInt rowIndex = highs_.getNumRow() - 1;
-
-  return std::make_shared<HiGHSConstraint>(rowIndex);
+  auto constraint = std::make_shared<HiGHSConstraint>();
+  rows_.push_back({constraint, name});
+  return constraint;
 }
 
 void HiGHSProblem::deleteConstraint(
     std::shared_ptr<ConstraintImpl> constraint) {
-  const auto& highsConstraint =
-      dynamic_cast<const HiGHSConstraint&>(*constraint);
-  const HighsInt rowIndex = highsConstraint.getRowIndex();
+  // Compared by control block, which the weak_ptr keeps alive, so a new
+  // constraint allocated at a freed one's address cannot match its row.
+  const auto it = std::find_if(rows_.begin(), rows_.end(), [&](const Row& row) {
+    return !row.constraint.owner_before(constraint) &&
+        !constraint.owner_before(row.constraint);
+  });
+  if (it == rows_.end()) {
+    throw HiGHSError("deleteConstraint: constraint is not in this problem");
+  }
+  const HighsInt rowIndex = std::distance(rows_.begin(), it);
   REBALANCER_HIGHS_CALL(highs_.deleteRows(1, &rowIndex));
+  rows_.erase(it);
 }
 
 int HiGHSProblem::getObjectiveSize() const {
@@ -509,7 +520,46 @@ void HiGHSProblem::setCallback(
 }
 
 std::optional<IIS> HiGHSProblem::getIIS() {
-  throw std::runtime_error("getIIS is not yet implemented for HiGHS.");
+  // The default strategy only checks for trivially infeasible rows and bounds.
+  // FromLp runs the elasticity filter, which keeps integrality, and
+  // Irreducible then deletes members until the set is minimal.
+  REBALANCER_HIGHS_CALL(highs_.setOptionValue(
+      "iis_strategy", kIisStrategyFromLp + kIisStrategyIrreducible));
+  HighsIis highsIis;
+  // HiGHS validates the IIS as an LP, dropping integrality, so a MIP that is
+  // infeasible only because of integrality fails validation with kError. An
+  // IIS is diagnostic, so report none rather than failing the caller's solve.
+  if (highs_.getIis(highsIis) == HighsStatus::kError) {
+    XLOG(WARNING) << "HiGHS could not compute an IIS";
+    return std::nullopt;
+  }
+  // NO_SOLUTION_EXISTS also covers unbounded models, which have no IIS.
+  if (highsIis.status_ < kIisModelStatusInfeasible) {
+    XLOG(WARNING) << fmt::format(
+        "HiGHS found no IIS (IIS status {}, model status {})",
+        highsIis.status_,
+        highs_.modelStatusToString(highs_.getModelStatus()));
+    return std::nullopt;
+  }
+
+  IIS iis;
+  iis.constraintIds.reserve(highsIis.row_index_.size());
+  iis.lowerBoundVars.reserve(highsIis.col_index_.size());
+  iis.upperBoundVars.reserve(highsIis.col_index_.size());
+  for (const auto row : highsIis.row_index_) {
+    iis.constraintIds.push_back(rows_.at(row).name);
+  }
+  for (const auto i : folly::irange(highsIis.col_index_.size())) {
+    const auto& name = colNames_.at(highsIis.col_index_[i]);
+    const auto bound = highsIis.col_bound_[i];
+    if (bound == kIisBoundStatusLower || bound == kIisBoundStatusBoxed) {
+      iis.lowerBoundVars.push_back(name);
+    }
+    if (bound == kIisBoundStatusUpper || bound == kIisBoundStatusBoxed) {
+      iis.upperBoundVars.push_back(name);
+    }
+  }
+  return iis;
 }
 
 void HiGHSProblem::replay(const std::string& /* fileName */) const {
