@@ -92,7 +92,9 @@ class AllowWorseningHighPriObjTestBase {
       balanceSpec.dimension() = "shard_count";
       balanceSpec.formula() = BalanceSpecFormula::MAX;
       balanceSpec.filter()->itemsWhitelist() = {"h1", "h3"};
-      balanceSpec.upperBound() = 0;
+      auto& upperBounds = balanceSpec.upperBounds().ensure();
+      upperBounds.type() = LimitType::ABSOLUTE;
+      upperBounds.globalLimit() = 0;
       balanceSpec.boundType() = BalanceSpecBoundType::RELATIVE;
 
       solver->addGoal(std::move(balanceSpec), /*weight=*/1, /*tuplePos=*/2);

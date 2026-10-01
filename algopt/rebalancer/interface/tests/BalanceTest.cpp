@@ -413,7 +413,9 @@ TEST_P(BalanceTest, Legacy) {
   spec.dimension() = "cpu";
   spec.formula() = BalanceSpecFormula::LEGACY;
   spec.fixAverageToInitial() = true;
-  spec.upperBound() = 1.1;
+  auto& upperBounds = spec.upperBounds().ensure();
+  upperBounds.type() = LimitType::ABSOLUTE;
+  upperBounds.globalLimit() = 1.1;
 
   solver->addGoal(spec);
 
@@ -989,7 +991,9 @@ TEST_P(BalanceTest, MaxFormulaBigUpperboundNoFixAverageToInitial) {
   balanceSpec.scope() = "host";
   balanceSpec.dimension() = "cpu";
   balanceSpec.formula() = BalanceSpecFormula::MAX;
-  balanceSpec.upperBound() = 0.9;
+  auto& upperBounds = balanceSpec.upperBounds().ensure();
+  upperBounds.type() = LimitType::ABSOLUTE;
+  upperBounds.globalLimit() = 0.9;
   balanceSpec.definition() = BalanceSpecDefinition::AFTER;
   balanceSpec.boundType() = BalanceSpecBoundType::ABSOLUTE;
 
@@ -1245,7 +1249,9 @@ TEST_P(BalanceTest, IdealWithAbsoluteUpperBoundTrickyScenario) {
   balanceSpec.formula() = BalanceSpecFormula::IDEAL;
   balanceSpec.boundType() = BalanceSpecBoundType::ABSOLUTE;
   balanceSpec.ignoreUpperBoundForIdealWithAbsOrRelBoundTypes() = false;
-  balanceSpec.upperBound() = 0.5;
+  auto& upperBounds = balanceSpec.upperBounds().ensure();
+  upperBounds.type() = LimitType::ABSOLUTE;
+  upperBounds.globalLimit() = 0.5;
 
   solver->addGoal(balanceSpec);
 
