@@ -18,6 +18,7 @@
 #include <folly/small_vector.h>
 
 #include <iterator>
+#include <vector>
 
 namespace facebook::rebalancer {
 /**
