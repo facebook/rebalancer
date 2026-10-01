@@ -25,30 +25,33 @@ WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
 # Playwright is a dev-only e2e dependency; its browsers aren't needed to build.
 ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+RUN corepack enable
 
 # package.json's @nest/* (file:) deps don't resolve outside fbsource, so install
-# from package.oss.json. yarn.lock is .dockerignored (pins the internal mirror);
-# yarn regenerates a public-registry lock here.
+# from package.oss.json. pnpm-lock.yaml is .dockerignored (pins the internal
+# mirror); pnpm regenerates a public-registry lock here.
 COPY package.oss.json ./
 RUN cp package.oss.json package.json \
- && yarn install --network-timeout 600000
+ && pnpm install --fetch-timeout 600000
 
 COPY . .
-# COPY . . brought the internal package.json back; restore the OSS one (yarn.lock
-# is .dockerignored, so the regenerated public-registry lock is preserved).
+# COPY . . brought the internal package.json back; restore the OSS one
+# (pnpm-lock.yaml is .dockerignored, so the regenerated public-registry lock is
+# preserved).
 RUN cp package.oss.json package.json
-RUN yarn build
+RUN pnpm build
 # Prune devDependencies so the runner ships production deps only.
-RUN yarn install --production --frozen-lockfile --network-timeout 600000
+RUN pnpm install --prod --frozen-lockfile --fetch-timeout 600000
 
 FROM node:${NODE_VERSION}-slim AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
+RUN corepack enable
 
 # next start re-evaluates next.config.ts and its local imports, so keep the source
 # tree alongside .next and the pruned production node_modules.
 COPY --from=builder /app ./
 
 EXPOSE 3000
-CMD ["yarn", "start"]
+CMD ["pnpm", "start"]

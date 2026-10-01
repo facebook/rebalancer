@@ -3,8 +3,8 @@
   "oncall": "algopt",
   "framework": "nextjs",
   "commands": {
-    "build": "yarn run build",
-    "install": "yarn install"
+    "build": "pnpm run build",
+    "install": "pnpm install"
   },
   "creator": "kvelakur",
   "template": "nextjs"

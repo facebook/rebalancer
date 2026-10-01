@@ -26,7 +26,7 @@ coverage
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-# Pins the internal npm mirror; excluded so yarn regenerates a public-registry lock.
-yarn.lock
+# Pins the internal npm mirror; excluded so pnpm regenerates a public-registry lock.
+pnpm-lock.yaml
 # Internal-only fb/ adapters (@nest/*-backed); also stripped by ShipIt.
 **/fb

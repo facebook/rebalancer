@@ -1,4 +1,4 @@
-# To re-generate this file, cd nest/apps/<your-app> and run yarn relay:full
+# To re-generate this file, cd nest/apps/<your-app> and run pnpm relay:full
 # @generated
 
 directive @fb_owner on QUERY | MUTATION | SUBSCRIPTION | FIELD | FRAGMENT_DEFINITION | FRAGMENT_SPREAD | INLINE_FRAGMENT | OBJECT | FIELD_DEFINITION | INTERFACE | UNION | ENUM | INPUT_OBJECT

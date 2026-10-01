@@ -20,14 +20,14 @@ Then open [http://localhost:3000](http://localhost:3000).
 ```bash
 # package.oss.json is this app's dependency manifest — use it as package.json.
 cp package.oss.json package.json
-yarn install
+pnpm install
 REBALANCER_PROXY_URL=http://localhost:8081 \
 REBALANCER_PROXY_TOKEN=secret \
-yarn build && yarn start
-# or for development: ... yarn dev
+pnpm build && pnpm start
+# or for development: ... pnpm dev
 ```
 
-> **Note:** if `yarn install` cannot resolve a package, regenerate `yarn.lock`
+> **Note:** if `pnpm install` cannot resolve a package, regenerate `pnpm-lock.yaml`
 > against the public npm registry. The `Dockerfile` handles this automatically
 > for the container build.
 

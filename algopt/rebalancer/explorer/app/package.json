@@ -11,7 +11,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "relay": "relay-compiler",
-    "relay:full": "../../scripts/relay/extract_relay_subschema.sh && yarn relay",
+    "relay:full": "../../scripts/relay/extract_relay_subschema.sh && pnpm relay",
     "test": "vitest run",
     "test:watch": "vitest"
   },
