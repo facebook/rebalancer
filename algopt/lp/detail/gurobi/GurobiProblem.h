@@ -25,6 +25,8 @@
 #include "algopt/lp/generic/Variable.h"
 #include "algopt/rebalancer/algopt_common/Timer.h"
 
+#include <string_view>
+
 namespace facebook::algopt::lp::detail {
 
 enum GurobiWarmStartType {
@@ -117,6 +119,13 @@ class GurobiProblem : public ProblemImpl {
 
   // Returns a map of variable name -> solved value for all Gurobi variables.
   folly::F14FastMap<std::string, double> getSolvedVariableValues() const;
+
+  // Returns the post-presolve nonzero count parsed from a Gurobi log message
+  // of the form "Presolved: R rows, C columns, N nonzeros", or `current` if
+  // the message is not such a line or a count was already recorded (`current`
+  // >= 0). Only the first line counts, so the value describes the same
+  // presolve as the cumulative row/column deletion counters.
+  static int updatePresolvedNonZeros(int current, std::string_view message);
 
  protected:
   virtual void solveForObjectiveAt(int pos, std::optional<double> timeLimit)

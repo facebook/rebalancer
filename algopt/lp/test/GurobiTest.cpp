@@ -235,4 +235,30 @@ TEST(GurobiTest, ToThriftQuadraticConstraint) {
   EXPECT_EQ(1.0, qc->expr()->quadraticCoeffs()->at(0).at(1)); // x*y
 }
 
+TEST(GurobiTest, UpdatePresolvedNonZerosParsesPresolvedLine) {
+  EXPECT_EQ(
+      707622,
+      GurobiProblem::updatePresolvedNonZeros(
+          -1, "Presolved: 45512 rows, 372758 columns, 707622 nonzeros\n"));
+}
+
+TEST(GurobiTest, UpdatePresolvedNonZerosIgnoresOtherMessages) {
+  EXPECT_EQ(
+      -1,
+      GurobiProblem::updatePresolvedNonZeros(
+          -1, "Presolve removed 16509 rows and 71187 columns\n"));
+}
+
+// A hierarchical multi-objective solve prints one "Presolved:" line for the
+// initial presolve and another for each objective pass; the first must win.
+TEST(GurobiTest, UpdatePresolvedNonZerosKeepsFirstPresolvedLine) {
+  const int initial = GurobiProblem::updatePresolvedNonZeros(
+      -1, "Presolved: 45512 rows, 372758 columns, 707622 nonzeros\n");
+
+  const int afterObjectivePass = GurobiProblem::updatePresolvedNonZeros(
+      initial, "Presolved: 76 rows, 280 columns, 735 nonzeros\n");
+
+  EXPECT_EQ(707622, afterObjectivePass);
+}
+
 #endif

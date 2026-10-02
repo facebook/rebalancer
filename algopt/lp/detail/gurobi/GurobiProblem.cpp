@@ -39,6 +39,7 @@
 #include <optional>
 #include <sstream>
 #include <stdexcept>
+#include <string_view>
 #include <variant>
 
 namespace {
@@ -1286,6 +1287,37 @@ void GurobiProblem::addStartValue(
   }
 }
 
+int GurobiProblem::updatePresolvedNonZeros(
+    int current,
+    std::string_view message) {
+  // Hierarchical multi-objective solves presolve again in every objective
+  // pass and print a "Presolved:" line each time; a later pass can shrink to a
+  // handful of rows, so a last-line-wins value mixes dimensions across passes.
+  if (current >= 0 || message.find("Presolved:") == std::string_view::npos) {
+    return current;
+  }
+  const auto nnzPos = message.find("nonzeros");
+  if (nnzPos == std::string_view::npos) {
+    return current;
+  }
+  const auto end = message.rfind(' ', nnzPos - 1);
+  if (end == std::string_view::npos) {
+    return current;
+  }
+  auto start = message.rfind(' ', end - 1);
+  if (start == std::string_view::npos) {
+    start = message.rfind(',', end - 1);
+  }
+  if (start == std::string_view::npos) {
+    return current;
+  }
+  try {
+    return std::stoi(std::string(message.substr(start + 1, end - start - 1)));
+  } catch (const std::exception&) {
+    return current;
+  }
+}
+
 GurobiProblem::CallbackWrapper::CallbackWrapper(
     std::function<ProblemCallbackAction(ProblemCallbackData)> callback)
     : callback_(std::move(callback)),
@@ -1308,28 +1340,8 @@ void GurobiProblem::CallbackWrapper::callback() {
     return;
   }
   if (where == GRB_CB_MESSAGE) {
-    // Parse the "Presolved:" summary line to capture post-presolve NNZ.
-    // Gurobi outputs: "Presolved: 1234 rows, 5678 columns, 91011 nonzeros"
-    const auto msg = getStringInfo(GRB_CB_MSG_STRING);
-    if (msg.find("Presolved:") != std::string::npos) {
-      const auto nnzPos = msg.find("nonzeros");
-      if (nnzPos != std::string::npos) {
-        const auto end = msg.rfind(' ', nnzPos - 1);
-        if (end != std::string::npos) {
-          auto start = msg.rfind(' ', end - 1);
-          if (start == std::string::npos) {
-            start = msg.rfind(',', end - 1);
-          }
-          if (start != std::string::npos) {
-            try {
-              presolveNnz_ = std::stoi(msg.substr(start + 1, end - start - 1));
-            } catch (const std::exception&) {
-              // Parsing failed, leave as -1.
-            }
-          }
-        }
-      }
-    }
+    presolveNnz_ = GurobiProblem::updatePresolvedNonZeros(
+        presolveNnz_, getStringInfo(GRB_CB_MSG_STRING));
     return;
   }
   if (where == GRB_CB_MIPNODE) {
