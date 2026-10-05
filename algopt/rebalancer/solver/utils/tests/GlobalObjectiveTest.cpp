@@ -12,12 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "algopt/rebalancer/entities/Universe.h"
+#include "algopt/rebalancer/solver/expressions/Expression.h"
 #include "algopt/rebalancer/solver/expressions/Operators.h"
 #include "algopt/rebalancer/solver/utils/GlobalObjective.h"
 
 #include <gtest/gtest.h>
 
 #include <set>
+#include <stdexcept>
+#include <string>
+#include <utility>
+#include <vector>
 
 using namespace facebook::rebalancer;
 

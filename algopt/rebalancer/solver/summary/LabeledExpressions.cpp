@@ -14,6 +14,11 @@
 
 #include "algopt/rebalancer/solver/summary/LabeledExpressions.h"
 
+#include "algopt/rebalancer/solver/expressions/Expression.h"
+
+#include <stdexcept>
+#include <utility>
+
 namespace facebook::rebalancer {
 
 LabeledExpression::LabeledExpression(

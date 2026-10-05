@@ -12,12 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "algopt/rebalancer/entities/Identifiers.h"
+#include "algopt/rebalancer/entities/Map.h"
+#include "algopt/rebalancer/entities/ObjectValueTypes.h"
+#include "algopt/rebalancer/entities/Partition.h"
 #include "algopt/rebalancer/solver/tests/IdConverterTestUtils.h"
 #include "algopt/rebalancer/solver/utils/ObjectStore.h"
+#include "algopt/rebalancer/solver/utils/Util.h"
 
 #include <folly/container/irange.h>
+#include <folly/lang/Bits.h>
 #include <gtest/gtest.h>
 
+#include <memory>
+#include <ranges>
+#include <string>
+#include <utility>
 #include <vector>
 
 namespace facebook::rebalancer::packer::tests {

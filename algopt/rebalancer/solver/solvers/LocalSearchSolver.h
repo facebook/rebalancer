@@ -14,7 +14,11 @@
 
 #pragma once
 
+#include "algopt/rebalancer/interface/thrift/gen-cpp2/SolverSpecs_types.h"
 #include "algopt/rebalancer/solver/solvers/Solver.h"
+
+#include <optional>
+#include <stdint.h>
 
 namespace facebook::rebalancer {
 

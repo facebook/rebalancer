@@ -20,8 +20,15 @@
 #include "algopt/rebalancer/solver/solvers/LocalSearchStageSolver.h"
 #include "algopt/rebalancer/solver/solvers/OptimalSolver.h"
 #include "algopt/rebalancer/solver/solvers/OptimalSubsetSolver.h"
+#include "algopt/rebalancer/solver/solvers/Solver.h"
+
+#include <thrift/lib/cpp2/FieldRef.h>
 
 #include <algorithm>
+#include <iterator>
+#include <stdexcept>
+#include <utility>
+#include <vector>
 
 #ifndef REBALANCER_OSS_BUILD
 #include "algopt/rebalancer/solver/solvers/fb/RasHybridSolver.h"

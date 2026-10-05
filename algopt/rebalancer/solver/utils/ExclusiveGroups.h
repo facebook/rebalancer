@@ -16,6 +16,8 @@
 
 #include "algopt/rebalancer/solver/utils/Util.h"
 
+#include <string>
+
 namespace facebook::rebalancer {
 
 PackerMap<std::string, std::string> computeExclusiveGroupsAssignment(

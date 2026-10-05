@@ -14,14 +14,34 @@
 
 #include "algopt/rebalancer/solver/utils/equivalence_sets/EquivalenceSets.h"
 
+#include "algopt/rebalancer/algopt_common/Utils.h"
+#include "algopt/rebalancer/entities/Identifiers.h"
+#include "algopt/rebalancer/entities/ObjectDimension.h"
+#include "algopt/rebalancer/entities/Objects.h"
+#include "algopt/rebalancer/entities/ObjectScalarDimension.h"
+#include "algopt/rebalancer/entities/ObjectValueTypes.h"
+#include "algopt/rebalancer/entities/Partition.h"
+#include "algopt/rebalancer/entities/Scope.h"
+#include "algopt/rebalancer/entities/Universe.h"
+#include "algopt/rebalancer/solver/utils/Util.h"
+
+#include "multifeed/hash/QuickHashSet.h"
+
 #include <fmt/core.h>
+#include <folly/container/F14Set.h>
+#include <folly/container/HeterogeneousAccess.h>
 #include <folly/container/irange.h>
 #include <folly/Conv.h>
+#include <folly/logging/LogStreamProcessor.h>
 #include <folly/logging/xlog.h>
 #include <folly/Range.h>
 
 #include <map>
+#include <optional>
+#include <ranges>
 #include <sstream>
+#include <stdexcept>
+#include <string>
 
 namespace facebook::rebalancer {
 

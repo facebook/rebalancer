@@ -14,6 +14,8 @@
 
 #include "algopt/rebalancer/solver/utils/ObjectDeduper.h"
 
+#include "algopt/rebalancer/solver/utils/equivalence_sets/EquivalenceSets.h"
+#include "algopt/rebalancer/solver/utils/ObjectStore.h"
 namespace facebook::rebalancer {
 
 ObjectDeduper::ObjectDeduper(

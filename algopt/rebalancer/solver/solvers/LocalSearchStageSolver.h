@@ -16,9 +16,20 @@
 
 #include "algopt/rebalancer/algopt_common/Timer.h"
 #include "algopt/rebalancer/interface/thrift/gen-cpp2/SolverSpecs_types.h"
+#include "algopt/rebalancer/interface/thrift/gen-cpp2/Types_types.h"
 #include "algopt/rebalancer/solver/moves/EvalSummary.h"
 #include "algopt/rebalancer/solver/solvers/Solver.h"
 #include "algopt/rebalancer/solver/utils/Util.h"
+
+#include <iterator>
+#include <memory>
+#include <optional>
+#include <stddef.h>
+#include <stdint.h>
+#include <string>
+#include <tuple>
+#include <utility>
+#include <vector>
 
 namespace facebook::rebalancer {
 

@@ -19,6 +19,7 @@
 #include "algopt/rebalancer/solver/utils/Change.h"
 
 #include <functional>
+#include <memory>
 
 namespace facebook::rebalancer {
 

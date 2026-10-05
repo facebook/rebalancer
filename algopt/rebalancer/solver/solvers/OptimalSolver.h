@@ -14,8 +14,21 @@
 
 #pragma once
 
+#include "algopt/lp/generic/thrift/gen-cpp2/problem_types.h"
+#include "algopt/rebalancer/entities/Identifiers.h"
+#include "algopt/rebalancer/interface/thrift/gen-cpp2/SolverSpecs_types.h"
+#include "algopt/rebalancer/interface/thrift/gen-cpp2/Types_types.h"
+#include "algopt/rebalancer/solver/expressions/Expression.h"
 #include "algopt/rebalancer/solver/solvers/Solver.h"
+#include "algopt/rebalancer/solver/utils/ChangeSet.h"
+#include "algopt/rebalancer/solver/utils/Context.h"
 #include "algopt/rebalancer/solver/utils/Problem.h"
+#include "algopt/rebalancer/solver/utils/Util.h"
+
+#include <optional>
+#include <stddef.h>
+#include <string>
+#include <vector>
 
 namespace facebook::rebalancer {
 

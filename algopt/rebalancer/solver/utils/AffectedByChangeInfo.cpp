@@ -14,6 +14,14 @@
 
 #include "algopt/rebalancer/solver/utils/AffectedByChangeInfo.h"
 
+#include "algopt/rebalancer/entities/Identifiers.h"
+#include "algopt/rebalancer/entities/Set.h"
+
+#include "multifeed/hash/QuickHashSet.h"
+
+#include <stdexcept>
+#include <utility>
+
 namespace facebook::rebalancer {
 
 AffectedByChange::AffectedByChange(bool affectedByAllChanges)

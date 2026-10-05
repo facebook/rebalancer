@@ -21,10 +21,20 @@
 #include "algopt/rebalancer/solver/expressions/Max.h"
 #include "algopt/rebalancer/solver/expressions/Orchestrator.h"
 #include "algopt/rebalancer/solver/expressions/TopToBottomEvaluator.h"
+#include "algopt/rebalancer/solver/utils/Context.h"
 
+#include <fmt/core.h>
 #include <fmt/format.h>
+#include <folly/container/F14Map.h>
 #include <folly/Synchronized.h>
 #include <folly/Utility.h>
+
+#include <algorithm>
+#include <iterator>
+#include <memory>
+#include <stdexcept>
+#include <string>
+#include <vector>
 
 namespace facebook::rebalancer {
 

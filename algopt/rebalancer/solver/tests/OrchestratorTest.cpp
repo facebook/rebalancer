@@ -12,19 +12,38 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "algopt/rebalancer/entities/Identifiers.h"
+#include "algopt/rebalancer/entities/Universe.h"
 #include "algopt/rebalancer/solver/expressions/Expression.h"
+#include "algopt/rebalancer/solver/expressions/ObjectLookup.h"
+#include "algopt/rebalancer/solver/expressions/ObjectVector.h"
 #include "algopt/rebalancer/solver/expressions/Operators.h"
 #include "algopt/rebalancer/solver/expressions/Orchestrator.h"
 #include "algopt/rebalancer/solver/expressions/tests/ExpressionUtils.h"
 #include "algopt/rebalancer/solver/expressions/TopToBottomEvaluator.h"
 #include "algopt/rebalancer/solver/tests/IdConverterTestUtils.h"
 #include "algopt/rebalancer/solver/tests/MockExpression.h"
+#include "algopt/rebalancer/solver/utils/AffectedByChangeInfo.h"
 #include "algopt/rebalancer/solver/utils/Assignment.h"
+#include "algopt/rebalancer/solver/utils/Change.h"
 #include "algopt/rebalancer/solver/utils/ChangeSet.h"
+#include "algopt/rebalancer/solver/utils/Context.h"
+#include "algopt/rebalancer/solver/utils/Util.h"
 
+#include "multifeed/hash/HeterogeneousAccess.h"
+#include "multifeed/hash/QuickHashSet.h"
+
+#include <folly/container/F14Map.h>
+#include <folly/container/F14Set.h>
+#include <folly/lang/Hint.h>
+#include <folly/Optional.h>
 #include <gtest/gtest.h>
 
 #include <memory>
+#include <optional>
+#include <string>
+#include <utility>
+#include <vector>
 
 constexpr double kOldValue = 1.0;
 constexpr double kNewValue = 2.0;

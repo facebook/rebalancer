@@ -12,9 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "algopt/rebalancer/algopt_common/thrift/gen-cpp2/Types_types.h"
 #include "algopt/rebalancer/solver/utils/Precision.h"
 
 #include <gtest/gtest.h>
+#include <thrift/lib/cpp2/FieldRef.h>
+
+#include <string>
 
 namespace facebook::rebalancer::tests {
 

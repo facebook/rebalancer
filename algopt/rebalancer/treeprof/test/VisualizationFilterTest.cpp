@@ -12,14 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "algopt/rebalancer/treeprof/Event.h"
 #include "algopt/rebalancer/treeprof/EventRecorder.h"
 #include "algopt/rebalancer/treeprof/visualizer/EventTreeVisualizer.h"
+#include "algopt/rebalancer/treeprof/visualizer/VisualizationFilter.h"
 
+#include <fmt/core.h>
 #include <folly/container/irange.h>
 #include <gtest/gtest.h>
 
 #include <cstdlib>
 #include <memory>
+#include <ranges>
+#include <string>
+#include <utility>
 
 using namespace ::testing;
 using namespace facebook::algopt::treeprof;

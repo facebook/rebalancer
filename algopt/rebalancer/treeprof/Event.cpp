@@ -14,7 +14,13 @@
 
 #include "algopt/rebalancer/treeprof/Event.h"
 
+#include <folly/Synchronized.h>
+
 #include <algorithm>
+#include <initializer_list>
+#include <iterator>
+#include <stdexcept>
+#include <utility>
 
 namespace facebook::algopt::treeprof {
 

@@ -13,9 +13,18 @@
 // limitations under the License.
 
 #include "algopt/rebalancer/entities/Identifiers.h"
+#include "algopt/rebalancer/interface/thrift/gen-cpp2/Types_types.h"
 #include "algopt/rebalancer/solver/utils/equivalence_sets/EquivalenceSetsMatching.h"
 
+#include <folly/container/F14Map.h>
+#include <folly/lang/Assume.h>
+#include <folly/lang/Hint.h>
 #include <gtest/gtest.h>
+#include <thrift/lib/cpp2/FieldRef.h>
+
+#include <string>
+#include <utility>
+#include <vector>
 
 using namespace std;
 using namespace facebook::rebalancer::entities;

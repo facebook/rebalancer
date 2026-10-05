@@ -17,6 +17,9 @@
 #include "algopt/rebalancer/interface/thrift/gen-cpp2/Types_types.h"
 #include "algopt/rebalancer/solver/utils/Problem.h"
 
+#include <functional>
+#include <optional>
+
 namespace facebook::rebalancer {
 
 using Profile =

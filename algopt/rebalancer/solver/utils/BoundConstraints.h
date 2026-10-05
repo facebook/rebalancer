@@ -19,6 +19,10 @@
 
 #include <folly/Optional.h>
 
+#include <memory>
+#include <optional>
+#include <utility>
+
 namespace facebook::rebalancer {
 
 class BoundConstraints {

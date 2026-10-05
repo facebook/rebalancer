@@ -13,11 +13,15 @@
 // limitations under the License.
 
 #include "algopt/rebalancer/algopt_common/TestUtils.h"
+#include "algopt/rebalancer/algopt_common/thrift/gen-cpp2/Types_types.h"
 #include "algopt/rebalancer/solver/utils/ContainerPotential.h"
 #include "algopt/rebalancer/solver/utils/GlobalObjectiveValue.h"
 #include "algopt/rebalancer/solver/utils/Precision.h"
 
+#include "gmock/gmock.h"
 #include <gtest/gtest.h>
+
+#include <string>
 
 using namespace std;
 using namespace facebook::rebalancer;

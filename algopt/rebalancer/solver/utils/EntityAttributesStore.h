@@ -14,9 +14,19 @@
 
 #pragma once
 
+#include "algopt/rebalancer/entities/Map.h"
 #include "algopt/rebalancer/solver/utils/EntityAttributes.h"
 
+#include "multifeed/hash/HeterogeneousAccess.h"
+
+#include <boost/iterator/iterator_facade.hpp>
+#include <fmt/core.h>
 #include <folly/container/MapUtil.h>
+
+#include <memory>
+#include <stdexcept>
+#include <string>
+#include <utility>
 
 namespace facebook::rebalancer {
 

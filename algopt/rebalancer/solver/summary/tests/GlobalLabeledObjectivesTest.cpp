@@ -13,13 +13,23 @@
 // limitations under the License.
 
 #include "algopt/rebalancer/algopt_common/TestUtils.h"
+#include "algopt/rebalancer/entities/Universe.h"
+#include "algopt/rebalancer/interface/thrift/gen-cpp2/Types_types.h"
+#include "algopt/rebalancer/solver/expressions/Expression.h"
 #include "algopt/rebalancer/solver/expressions/Operators.h"
 #include "algopt/rebalancer/solver/expressions/TopToBottomEvaluator.h"
 #include "algopt/rebalancer/solver/summary/GlobalLabeledObjectives.h"
+#include "algopt/rebalancer/solver/summary/LabeledObjectives.h"
 #include "algopt/rebalancer/solver/utils/Assignment.h"
+#include "algopt/rebalancer/solver/utils/Context.h"
 #include "algopt/rebalancer/solver/utils/GlobalObjective.h"
 
+#include "gmock/gmock.h"
 #include <gtest/gtest.h>
+#include <thrift/lib/cpp2/FieldRef.h>
+
+#include <string>
+#include <vector>
 
 using namespace facebook::rebalancer;
 

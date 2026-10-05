@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "algopt/rebalancer/solver/if/gen-cpp2/packer_types.h"
 #include "algopt/rebalancer/solver/solvers/Solver.h"
 
 #include <memory>

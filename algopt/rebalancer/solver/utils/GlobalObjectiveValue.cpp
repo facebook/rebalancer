@@ -14,12 +14,19 @@
 
 #include "algopt/rebalancer/solver/utils/GlobalObjectiveValue.h"
 
+#include "algopt/rebalancer/solver/utils/Precision.h"
+
 #include <fmt/core.h>
 #include <folly/container/irange.h>
 #include <folly/gen/Base.h>
+#include <folly/gen/Core.h>
 #include <folly/gen/String.h>
+#include <folly/String.h>
 
+#include <algorithm>
+#include <ranges>
 #include <sstream>
+#include <stdexcept>
 #include <string>
 #include <vector>
 

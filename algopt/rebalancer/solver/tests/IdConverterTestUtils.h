@@ -13,7 +13,12 @@
 // limitations under the License.
 
 #pragma once
+
 #include "algopt/rebalancer/entities/Identifiers.h"
+#include "algopt/rebalancer/entities/Map.h"
+
+#include <memory>
+#include <utility>
 
 namespace facebook::rebalancer::packer::tests {
 

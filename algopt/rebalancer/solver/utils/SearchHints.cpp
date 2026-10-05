@@ -14,6 +14,14 @@
 
 #include "algopt/rebalancer/solver/utils/SearchHints.h"
 
+#include "algopt/rebalancer/solver/moves/MoveSet.h"
+#include "algopt/rebalancer/solver/moves/MovesEvaluator.h"
+#include "algopt/rebalancer/solver/utils/Problem.h"
+#include "algopt/rebalancer/solver/utils/SimilarContainers.h"
+
+#include <memory>
+#include <utility>
+
 namespace facebook::rebalancer {
 
 SearchHints::SearchHints(SearchHintsConfig config)

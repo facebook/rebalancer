@@ -14,9 +14,13 @@
 
 #pragma once
 
+#include "algopt/lp/generic/Expression.h"
 #include "algopt/lp/generic/Variable.h"
+#include "algopt/rebalancer/common/log/LogCollector.h"
 #include "algopt/rebalancer/entities/Identifiers.h"
 #include "algopt/rebalancer/entities/Universe.h"
+#include "algopt/rebalancer/interface/thrift/gen-cpp2/Types_types.h"
+#include "algopt/rebalancer/materializer/utils/Cache.h"
 #include "algopt/rebalancer/solver/expressions/Expression.h"
 #include "algopt/rebalancer/solver/expressions/Orchestrator.h"
 #include "algopt/rebalancer/solver/moves/InvalidMoveFilter.h"
@@ -26,18 +30,30 @@
 #include "algopt/rebalancer/solver/summary/GlobalLabeledObjectives.h"
 #include "algopt/rebalancer/solver/summary/LabeledConstraints.h"
 #include "algopt/rebalancer/solver/utils/Assignment.h"
+#include "algopt/rebalancer/solver/utils/ChangeSet.h"
+#include "algopt/rebalancer/solver/utils/Context.h"
 #include "algopt/rebalancer/solver/utils/EntityAttributesStore.h"
+#include "algopt/rebalancer/solver/utils/equivalence_sets/EquivalenceSets.h"
 #include "algopt/rebalancer/solver/utils/equivalence_sets/EquivalenceSetsStore.h"
 #include "algopt/rebalancer/solver/utils/GlobalObjective.h"
 #include "algopt/rebalancer/solver/utils/MaterializedProblem.h"
+#include "algopt/rebalancer/solver/utils/ObjectStore.h"
 #include "algopt/rebalancer/solver/utils/ProblemConfigs.h"
 #include "algopt/rebalancer/solver/utils/SimilarContainers.h"
 #include "algopt/rebalancer/solver/utils/Util.h"
+#include "algopt/rebalancer/treeprof/ExecutorWrapper.h"
 
+#include <folly/container/F14Set.h>
 #include <folly/CppAttributes.h>
 #include <folly/Function.h>
+#include <folly/Optional.h>
 
 #include <memory>
+#include <optional>
+#include <stddef.h>
+#include <string>
+#include <utility>
+#include <vector>
 
 namespace facebook::rebalancer {
 

@@ -15,9 +15,17 @@
 #include "algopt/rebalancer/solver/summary/metrics/tests/GroupRoutingTrafficMetricsTest.h"
 
 #include "algopt/rebalancer/algopt_common/TestUtils.h"
+#include "algopt/rebalancer/interface/thrift/gen-cpp2/Metrics_types.h"
+#include "algopt/rebalancer/solver/expressions/Expression.h"
 #include "algopt/rebalancer/solver/summary/metrics/GroupRoutingTrafficMetrics.h"
+#include "algopt/rebalancer/solver/utils/Context.h"
 
+#include "gmock/gmock.h"
+#include <folly/container/F14Map.h>
+#include <folly/lang/Assume.h>
+#include <folly/lang/Hint.h>
 #include <gtest/gtest.h>
+#include <thrift/lib/cpp2/FieldRef.h>
 
 namespace facebook::rebalancer::packer::tests {
 

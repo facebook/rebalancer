@@ -13,9 +13,19 @@
 // limitations under the License.
 
 #pragma once
+
+#include "algopt/rebalancer/entities/Identifiers.h"
 #include "algopt/rebalancer/entities/Set.h"
+#include "algopt/rebalancer/interface/thrift/gen-cpp2/SolverSpecs_types.h"
 #include "algopt/rebalancer/materializer/utils/Cache.h"
 #include "algopt/rebalancer/solver/utils/equivalence_sets/EquivalenceSets.h"
+
+#include <folly/container/F14Set.h>
+
+#include <memory>
+#include <string>
+#include <string_view>
+#include <vector>
 
 namespace facebook::rebalancer {
 

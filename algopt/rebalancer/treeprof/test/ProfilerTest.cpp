@@ -13,21 +13,37 @@
 // limitations under the License.
 
 #include "algopt/rebalancer/algopt_common/TestUtils.h"
+#include "algopt/rebalancer/treeprof/Event.h"
 #include "algopt/rebalancer/treeprof/EventRecorder.h"
 #include "algopt/rebalancer/treeprof/ExecutorWrapper.h"
 #include "algopt/rebalancer/treeprof/Profiler.h"
 #include "algopt/rebalancer/treeprof/visualizer/EventTreeVisualizer.h"
+#include "algopt/rebalancer/treeprof/visualizer/VisualizationFilter.h"
 
+#include "gmock/gmock.h"
 #include <folly/BenchmarkUtil.h>
 #include <folly/coro/BlockingWait.h>
 #include <folly/coro/Collect.h>
 #include <folly/coro/Task.h>
+#include <folly/ExceptionWrapper.h>
+#include <folly/Executor.h>
 #include <folly/executors/CPUThreadPoolExecutor.h>
+#include <folly/logging/LogStreamProcessor.h>
 #include <folly/logging/xlog.h>
+#include <folly/memory/Malloc.h>
+#include <folly/ScopeGuard.h>
+#include <folly/tracing/AsyncStack.h>
 #include <gtest/gtest.h>
 
+#include <atomic>
+#include <coroutine>
 #include <functional>
 #include <memory>
+#include <ostream>
+#include <stdlib.h>
+#include <string>
+#include <utility>
+#include <vector>
 
 using namespace ::testing;
 using namespace facebook::algopt::treeprof;

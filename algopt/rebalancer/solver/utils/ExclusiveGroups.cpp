@@ -14,7 +14,27 @@
 
 #include "algopt/rebalancer/solver/utils/ExclusiveGroups.h"
 
+#include "algopt/lp/environment/Environment.h"
+#include "algopt/lp/factory/ProblemFactory.h"
+#include "algopt/lp/generic/Expression.h"
+#include "algopt/lp/generic/Operators.h"
+#include "algopt/lp/generic/Problem.h"
+#include "algopt/lp/generic/thrift/gen-cpp2/problem_types.h"
+#include "algopt/lp/generic/Variable.h"
 #include "algopt/lp/lp.h"
+#include "algopt/rebalancer/solver/utils/Util.h"
+
+#include "multifeed/hash/HeterogeneousAccess.h"
+#include "multifeed/hash/QuickHashMap.h"
+
+#include <boost/iterator/iterator_facade.hpp>
+#include <folly/logging/LogStreamProcessor.h>
+#include <folly/logging/xlog.h>
+
+#include <ostream>
+#include <stdexcept>
+#include <utility>
+#include <vector>
 
 constexpr double kTimeoutSeconds = 30.0;
 

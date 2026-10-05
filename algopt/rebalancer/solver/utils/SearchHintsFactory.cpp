@@ -15,6 +15,14 @@
 #include "algopt/rebalancer/solver/utils/SearchHintsFactory.h"
 
 #include "algopt/rebalancer/solver/moves/SingleColdestStratifiedMoveType.h"
+#include "algopt/rebalancer/solver/utils/SearchHints.h"
+
+#include <folly/Range.h>
+#include <thrift/lib/cpp2/FieldRef.h>
+
+#include <algorithm>
+#include <utility>
+#include <vector>
 
 namespace facebook::rebalancer {
 

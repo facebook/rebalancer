@@ -13,8 +13,15 @@
 // limitations under the License.
 
 #include "algopt/rebalancer/entities/Identifiers.h"
+#include "algopt/rebalancer/entities/Map.h"
 #include "algopt/rebalancer/entities/Partition.h"
 #include "algopt/rebalancer/entities/Scope.h"
+
+#include <functional>
+#include <memory>
+#include <optional>
+#include <stddef.h>
+#include <utility>
 #pragma once
 
 namespace facebook::rebalancer {

@@ -14,15 +14,35 @@
 
 #pragma once
 
+#include "algopt/rebalancer/entities/Containers.h"
+#include "algopt/rebalancer/entities/Identifiers.h"
+#include "algopt/rebalancer/entities/Universe.h"
+#include "algopt/rebalancer/interface/thrift/gen-cpp2/Types_types.h"
+#include "algopt/rebalancer/solver/expressions/Expression.h"
 #include "algopt/rebalancer/solver/expressions/TopToBottomEvaluator.h"
 #include "algopt/rebalancer/solver/moves/InvalidMoveFilter.h"
 #include "algopt/rebalancer/solver/summary/GlobalLabeledObjectives.h"
+#include "algopt/rebalancer/solver/summary/LabeledConstraints.h"
+#include "algopt/rebalancer/solver/summary/LabeledExpressions.h"
+#include "algopt/rebalancer/solver/summary/LabeledObjectives.h"
+#include "algopt/rebalancer/solver/utils/Assignment.h"
+#include "algopt/rebalancer/solver/utils/Context.h"
 #include "algopt/rebalancer/solver/utils/GlobalObjective.h"
+#include "algopt/rebalancer/solver/utils/MaterializedProblem.h"
 #include "algopt/rebalancer/solver/utils/Problem.h"
+#include "algopt/rebalancer/solver/utils/ProblemConfigs.h"
+#include "algopt/rebalancer/solver/utils/Util.h"
 
+#include <fmt/core.h>
 #include <folly/container/irange.h>
+#include <folly/lang/Hint.h>
 
+#include <memory>
+#include <optional>
+#include <ranges>
+#include <string>
 #include <utility>
+#include <vector>
 
 namespace facebook::rebalancer::packer::tests {
 

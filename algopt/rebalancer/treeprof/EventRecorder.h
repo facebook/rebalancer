@@ -21,6 +21,8 @@
 
 #include <memory>
 #include <optional>
+#include <stdint.h>
+#include <string>
 
 namespace facebook::algopt::treeprof {
 

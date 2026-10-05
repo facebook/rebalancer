@@ -15,14 +15,19 @@
 #pragma once
 
 #include "algopt/rebalancer/common/log/RebalancerLog.h"
+#include "algopt/rebalancer/solver/expressions/Expression.h"
 #include "algopt/rebalancer/solver/summary/LabeledExpressions.h"
 #include "algopt/rebalancer/solver/summary/LabeledObjectives.h"
 #include "algopt/rebalancer/solver/utils/GlobalObjective.h"
+#include "algopt/rebalancer/solver/utils/GlobalObjectiveValue.h"
 
 #include <folly/small_vector.h>
 
+#include <initializer_list>
 #include <map>
+#include <stddef.h>
 #include <string>
+#include <utility>
 
 namespace facebook::rebalancer {
 

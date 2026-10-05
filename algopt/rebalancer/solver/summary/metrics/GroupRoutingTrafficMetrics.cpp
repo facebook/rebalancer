@@ -14,6 +14,20 @@
 
 #include "algopt/rebalancer/solver/summary/metrics/GroupRoutingTrafficMetrics.h"
 
+#include "algopt/rebalancer/entities/Universe.h"
+#include "algopt/rebalancer/interface/thrift/gen-cpp2/Metrics_types.h"
+#include "algopt/rebalancer/solver/expressions/GroupRoutingRing.h"
+#include "algopt/rebalancer/solver/utils/TrafficTable.h"
+
+#include "multifeed/hash/QuickHashMap.h"
+
+#include <folly/container/F14Map.h>
+#include <folly/lang/Assume.h>
+#include <folly/Synchronized.h>
+#include <thrift/lib/cpp2/FieldRef.h>
+
+#include <string>
+
 namespace facebook::rebalancer {
 namespace {
 using GroupId = entities::GroupId;

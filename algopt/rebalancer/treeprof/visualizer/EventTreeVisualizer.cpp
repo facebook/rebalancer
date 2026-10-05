@@ -14,14 +14,28 @@
 
 #include "algopt/rebalancer/treeprof/visualizer/EventTreeVisualizer.h"
 
+#include "algopt/rebalancer/treeprof/visualizer/VisualizationFilter.h"
+
 #include <fmt/core.h>
+#include <folly/ConstexprMath.h>
+#include <folly/container/F14Map.h>
+#include <folly/container/HeterogeneousAccess.h>
 #include <folly/container/irange.h>
+#include <folly/logging/LogStreamProcessor.h>
 #include <folly/logging/xlog.h>
 #include <folly/String.h>
 
+#include <algorithm>
+#include <cmath>
+#include <iterator>
 #include <memory>
+#include <ranges>
 #include <sstream>
 #include <stdexcept>
+#include <stdint.h>
+#include <string_view>
+#include <tuple>
+#include <utility>
 
 namespace facebook::algopt::treeprof {
 

@@ -13,9 +13,16 @@
 // limitations under the License.
 
 #include "algopt/rebalancer/solver/utils/ExclusiveGroups.h"
+#include "algopt/rebalancer/solver/utils/Util.h"
 #include "algopt/rebalancer/tests/SolverTestUtils.h"
 
+#include "multifeed/hash/HeterogeneousAccess.h"
+#include "multifeed/hash/QuickHashMap.h"
+
 #include <gtest/gtest.h>
+
+#include <string>
+#include <utility>
 
 using namespace facebook::rebalancer;
 

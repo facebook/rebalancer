@@ -15,12 +15,27 @@
 #include "algopt/rebalancer/solver/summary/metrics/tests/GroupRoutingLatencyMetricsTest.h"
 
 #include "algopt/rebalancer/algopt_common/TestUtils.h"
+#include "algopt/rebalancer/entities/Containers.h"
+#include "algopt/rebalancer/entities/Identifiers.h"
+#include "algopt/rebalancer/entities/Universe.h"
+#include "algopt/rebalancer/interface/thrift/gen-cpp2/Metrics_types.h"
+#include "algopt/rebalancer/interface/thrift/gen-cpp2/ProblemSpecs_types.h"
 #include "algopt/rebalancer/interface/thrift/ThriftUtils.h"
 #include "algopt/rebalancer/solver/expressions/Expression.h"
 #include "algopt/rebalancer/solver/expressions/Operators.h"
 #include "algopt/rebalancer/solver/summary/metrics/GroupRoutingLatencyMetrics.h"
+#include "algopt/rebalancer/solver/utils/Assignment.h"
+#include "algopt/rebalancer/solver/utils/Context.h"
 
+#include "gmock/gmock.h"
+#include <folly/container/F14Map.h>
+#include <folly/lang/Assume.h>
+#include <folly/lang/Hint.h>
 #include <gtest/gtest.h>
+#include <thrift/lib/cpp2/FieldRef.h>
+
+#include <memory>
+#include <optional>
 
 namespace thriftUtils = facebook::rebalancer::interface::thriftUtils;
 

@@ -14,10 +14,25 @@
 
 #pragma once
 
+#include "algopt/rebalancer/entities/Map.h"
+#include "algopt/rebalancer/solver/expressions/tests/ExpressionTestsBase.h"
 #include "algopt/rebalancer/solver/summary/metrics/GroupRoutingLatencyMetrics.h"
 #include "algopt/rebalancer/solver/summary/metrics/tests/MetricsTestBase.h"
 
+#include "multifeed/hash/HeterogeneousAccess.h"
+
+#include <boost/iterator/iterator_facade.hpp>
+#include <fmt/core.h>
+#include <folly/container/MapUtil.h>
 #include <folly/coro/BlockingWait.h>
+#include <folly/coro/Task.h>
+#include <folly/ExceptionWrapper.h>
+#include <folly/tracing/AsyncStack.h>
+
+#include <coroutine>
+#include <string>
+#include <utility>
+#include <vector>
 
 namespace facebook::rebalancer::packer::tests {
 

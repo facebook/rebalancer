@@ -15,6 +15,9 @@
 #include "algopt/rebalancer/treeprof/EventHolder.h"
 
 #include "algopt/rebalancer/algopt_common/Timer.h"
+#include "algopt/rebalancer/treeprof/Event.h"
+
+#include <utility>
 
 namespace facebook::algopt::treeprof {
 

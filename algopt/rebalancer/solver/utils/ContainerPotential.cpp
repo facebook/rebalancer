@@ -13,6 +13,9 @@
 // limitations under the License.
 
 #include <algopt/rebalancer/solver/utils/ContainerPotential.h>
+#include <algopt/rebalancer/solver/utils/GlobalObjectiveValue.h>
+
+#include <utility>
 
 namespace facebook::rebalancer {
 

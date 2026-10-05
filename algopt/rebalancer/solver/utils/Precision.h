@@ -17,6 +17,8 @@
 #include "algopt/rebalancer/algopt_common/Precision.h"
 #include "algopt/rebalancer/algopt_common/thrift/gen-cpp2/Types_types.h"
 
+#include <utility>
+
 namespace facebook::rebalancer {
 
 class Precision {

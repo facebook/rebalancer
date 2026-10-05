@@ -12,14 +12,38 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "algopt/rebalancer/algopt_common/Utils.h"
+#include "algopt/rebalancer/entities/Containers.h"
 #include "algopt/rebalancer/entities/Identifiers.h"
+#include "algopt/rebalancer/entities/Map.h"
+#include "algopt/rebalancer/entities/Universe.h"
 #include "algopt/rebalancer/solver/expressions/tests/ExpressionTestsBase.h"
 #include "algopt/rebalancer/solver/utils/Assignment.h"
 #include "algopt/rebalancer/solver/utils/equivalence_sets/EquivalenceSets.h"
+#include "algopt/rebalancer/solver/utils/Util.h"
 
+#include "multifeed/hash/HeterogeneousAccess.h"
+#include "multifeed/hash/QuickHashMap.h"
+#include "multifeed/hash/QuickHashSet.h"
+
+#include "gtest/gtest.h"
+#include <boost/iterator/iterator_facade.hpp>
+#include <fmt/core.h>
 #include <fmt/format.h>
 #include <folly/container/irange.h>
+#include <folly/container/MapUtil.h>
 #include <folly/coro/GtestHelpers.h>
+#include <folly/coro/Task.h>
+#include <folly/ExceptionWrapper.h>
+#include <folly/tracing/AsyncStack.h>
+
+#include <algorithm>
+#include <memory>
+#include <ranges>
+#include <set>
+#include <string>
+#include <utility>
+#include <vector>
 
 using namespace std;
 using namespace facebook::rebalancer::entities;

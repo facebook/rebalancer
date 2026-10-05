@@ -16,6 +16,7 @@
 
 #include "algopt/lp/generic/Expression.h"
 #include "algopt/rebalancer/algopt_common/BucketedPriorityQueue.h"
+#include "algopt/rebalancer/entities/Identifiers.h"
 #include "algopt/rebalancer/materializer/utils/Cache.h"
 #include "algopt/rebalancer/solver/utils/ChangeSet.h"
 #include "algopt/rebalancer/solver/utils/equivalence_sets/EquivalenceSets.h"
@@ -25,9 +26,16 @@
 
 #include <folly/container/F14Map.h>
 #include <folly/container/F14Set.h>
+#include <folly/container/HeterogeneousAccess.h>
+#include <folly/lang/Hint.h>
 #include <folly/Optional.h>
 
+#include <atomic>
+#include <memory>
+#include <optional>
 #include <stdexcept>
+#include <stdint.h>
+#include <utility>
 
 namespace facebook::rebalancer {
 

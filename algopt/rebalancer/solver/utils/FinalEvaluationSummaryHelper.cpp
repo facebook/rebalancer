@@ -14,6 +14,29 @@
 
 #include "algopt/rebalancer/solver/utils/FinalEvaluationSummaryHelper.h"
 
+#include "algopt/rebalancer/entities/Identifiers.h"
+#include "algopt/rebalancer/entities/Universe.h"
+#include "algopt/rebalancer/solver/moves/MoveStatsAggregator.h"
+#include "algopt/rebalancer/solver/summary/LabeledExpressions.h"
+#include "algopt/rebalancer/solver/utils/Assignment.h"
+#include "algopt/rebalancer/solver/utils/equivalence_sets/EquivalenceSets.h"
+#include "algopt/rebalancer/solver/utils/Problem.h"
+#include "algopt/rebalancer/solver/utils/ProblemConfigs.h"
+#include "algopt/rebalancer/solver/utils/Util.h"
+
+#include "multifeed/hash/HeterogeneousAccess.h"
+
+#include <boost/iterator/iterator_facade.hpp>
+#include <folly/container/MapUtil.h>
+#include <thrift/lib/cpp2/FieldRef.h>
+
+#include <iterator>
+#include <map>
+#include <memory>
+#include <string>
+#include <utility>
+#include <vector>
+
 namespace facebook::rebalancer {
 
 interface::FinalEvaluationSummary FinalEvaluationSummaryHelper::makeSummary(

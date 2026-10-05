@@ -14,10 +14,24 @@
 
 #include "algopt/rebalancer/solver/utils/EntityAttributes.h"
 
+#include "algopt/rebalancer/entities/Identifiers.h"
+#include "algopt/rebalancer/entities/Partition.h"
+#include "algopt/rebalancer/entities/Scope.h"
 #include "algopt/rebalancer/entities/Set.h"
+#include "algopt/rebalancer/solver/utils/Change.h"
 #include "algopt/rebalancer/solver/utils/ChangeSet.h"
 
+#include "multifeed/hash/HeterogeneousAccess.h"
+#include "multifeed/hash/QuickHashMap.h"
+
+#include <boost/iterator/iterator_facade.hpp>
+#include <fmt/core.h>
+#include <fmt/format.h>
 #include <folly/container/MapUtil.h>
+
+#include <stdexcept>
+#include <string>
+#include <vector>
 
 namespace facebook::rebalancer {
 namespace {

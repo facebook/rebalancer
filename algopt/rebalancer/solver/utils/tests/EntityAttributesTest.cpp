@@ -12,13 +12,35 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "algopt/rebalancer/entities/Containers.h"
+#include "algopt/rebalancer/entities/Identifiers.h"
+#include "algopt/rebalancer/entities/Map.h"
+#include "algopt/rebalancer/entities/Universe.h"
 #include "algopt/rebalancer/solver/expressions/tests/ExpressionTestsBase.h"
 #include "algopt/rebalancer/solver/moves/Move.h"
 #include "algopt/rebalancer/solver/utils/Assignment.h"
 #include "algopt/rebalancer/solver/utils/EntityAttributes.h"
 #include "algopt/rebalancer/solver/utils/EntityAttributesStore.h"
+#include "algopt/rebalancer/solver/utils/ObjectStore.h"
 
+#include "multifeed/hash/HeterogeneousAccess.h"
+
+#include "gtest/gtest.h"
+#include <boost/iterator/iterator_facade.hpp>
+#include <fmt/core.h>
+#include <folly/container/MapUtil.h>
 #include <folly/coro/GtestHelpers.h>
+#include <folly/coro/Task.h>
+#include <folly/ExceptionWrapper.h>
+#include <folly/tracing/AsyncStack.h>
+
+#include <coroutine>
+#include <memory>
+#include <optional>
+#include <stddef.h>
+#include <string>
+#include <utility>
+#include <vector>
 namespace facebook::rebalancer::packer::tests {
 // Test setup:
 // - 4 objects: obj0, obj1, obj2, obj3

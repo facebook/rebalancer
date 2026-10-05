@@ -14,6 +14,17 @@
 
 #include "algopt/rebalancer/solver/utils/equivalence_sets/EquivalenceSetsMatching.h"
 
+#include "algopt/rebalancer/interface/thrift/gen-cpp2/Types_types.h"
+
+#include <folly/ConstexprMath.h>
+#include <folly/container/F14Set.h>
+#include <folly/container/HeterogeneousAccess.h>
+#include <folly/lang/Assume.h>
+#include <thrift/lib/cpp2/FieldRef.h>
+
+#include <algorithm>
+#include <stdexcept>
+
 namespace facebook {
 namespace rebalancer {
 namespace interface {

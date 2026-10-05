@@ -13,9 +13,14 @@
 // limitations under the License.
 
 #include "algopt/rebalancer/solver/tests/IdConverterTestUtils.h"
+#include "algopt/rebalancer/solver/utils/Change.h"
 #include "algopt/rebalancer/solver/utils/ChangeSet.h"
 
 #include <gtest/gtest.h>
+
+#include <stddef.h>
+#include <string>
+#include <vector>
 
 namespace facebook::rebalancer::packer::tests {
 

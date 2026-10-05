@@ -14,11 +14,13 @@
 
 #pragma once
 
+#include "algopt/rebalancer/entities/Identifiers.h"
 #include "algopt/rebalancer/entities/Universe.h"
 #include "algopt/rebalancer/solver/utils/EntityAttributes.h"
 
 #include <folly/container/F14Map.h>
 #include <folly/container/F14Set.h>
+#include <folly/lang/Hint.h>
 
 namespace facebook::rebalancer {
 

@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "algopt/rebalancer/algopt_common/Utils.h"
 #include "algopt/rebalancer/entities/Identifiers.h"
 #include "algopt/rebalancer/solver/utils/Change.h"
 #include "algopt/rebalancer/solver/utils/Util.h"
@@ -21,6 +22,8 @@
 #include <folly/container/MapUtil.h>
 
 #include <ranges>
+#include <stddef.h>
+#include <utility>
 #include <vector>
 
 namespace facebook::rebalancer {

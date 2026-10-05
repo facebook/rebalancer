@@ -14,9 +14,23 @@
 
 #include "algopt/rebalancer/solver/utils/SimilarContainers.h"
 
+#include "algopt/rebalancer/algopt_common/ValueSortedMap.h"
+#include "algopt/rebalancer/entities/Identifiers.h"
+#include "algopt/rebalancer/solver/utils/ContainerPotential.h"
+#include "algopt/rebalancer/solver/utils/Util.h"
+
+#include "multifeed/hash/HeterogeneousAccess.h"
+
+#include <fmt/core.h>
+#include <fmt/format.h>
 #include <folly/container/irange.h>
+#include <folly/container/MapUtil.h>
 
 #include <algorithm>
+#include <numeric>
+#include <ranges>
+#include <stddef.h>
+#include <stdexcept>
 #include <vector>
 
 namespace facebook::rebalancer {

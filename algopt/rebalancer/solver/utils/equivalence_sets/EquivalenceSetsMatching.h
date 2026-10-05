@@ -13,9 +13,17 @@
 // limitations under the License.
 
 #pragma once
+
 #include "algopt/rebalancer/interface/thrift/gen-cpp2/Types_types.h"
 
+#include <folly/container/F14Map.h>
+#include <folly/lang/Hint.h>
+
+#include <compare>
 #include <queue>
+#include <string>
+#include <utility>
+#include <vector>
 
 namespace facebook {
 namespace rebalancer {

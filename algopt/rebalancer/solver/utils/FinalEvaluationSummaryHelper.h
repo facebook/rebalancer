@@ -15,6 +15,7 @@
 #pragma once
 
 #include "algopt/rebalancer/common/log/RebalancerLog.h"
+#include "algopt/rebalancer/interface/thrift/gen-cpp2/Types_types.h"
 #include "algopt/rebalancer/solver/moves/MoveStatsAggregator.h"
 #include "algopt/rebalancer/solver/utils/Problem.h"
 

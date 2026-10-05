@@ -17,6 +17,9 @@
 
 #include <gtest/gtest.h>
 
+#include <memory>
+#include <string>
+
 using namespace ::testing;
 using namespace facebook::algopt::treeprof;
 

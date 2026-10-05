@@ -12,8 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <algopt/rebalancer/entities/Identifiers.h>
 #include <algopt/rebalancer/solver/utils/ContainerSetWithHash.h>
+#include <algopt/rebalancer/solver/utils/Util.h>
 
+#include "multifeed/hash/QuickHashSet.h"
+
+#include <boost/iterator/iterator_facade.hpp>
 #include <folly/hash/Hash.h>
 
 #include <stdexcept>

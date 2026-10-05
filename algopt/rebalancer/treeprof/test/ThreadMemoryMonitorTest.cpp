@@ -15,8 +15,12 @@
 #include "algopt/rebalancer/treeprof/ThreadMemoryMonitor.h"
 
 #include <folly/Benchmark.h>
-#include <folly/memory/MallctlHelper.h>
+#include <folly/BenchmarkUtil.h>
+#include <folly/memory/Malloc.h>
 #include <gtest/gtest.h>
+
+#include <stdlib.h>
+#include <string>
 
 using namespace ::testing;
 using namespace facebook::algopt::treeprof;

@@ -18,6 +18,11 @@
 #include "algopt/rebalancer/solver/solvers/Solver.h"
 #include "algopt/rebalancer/solver/utils/Problem.h"
 
+#include <optional>
+#include <string>
+#include <utility>
+#include <vector>
+
 namespace facebook::rebalancer {
 
 using interface::OptimalSubsetSolverSpec;

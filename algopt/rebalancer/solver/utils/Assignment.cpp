@@ -14,7 +14,31 @@
 
 #include "algopt/rebalancer/solver/utils/Assignment.h"
 
+#include "algopt/rebalancer/entities/Partition.h"
+#include "algopt/rebalancer/entities/Universe.h"
+#include "algopt/rebalancer/solver/utils/Change.h"
+#include "algopt/rebalancer/solver/utils/ChangeSet.h"
 #include "algopt/rebalancer/solver/utils/equivalence_sets/EquivalenceSets.h"
+#include "algopt/rebalancer/solver/utils/IndexedAssignment.h"
+#include "algopt/rebalancer/solver/utils/ObjectStore.h"
+
+#include "multifeed/hash/HeterogeneousAccess.h"
+#include "multifeed/hash/QuickHashSet.h"
+
+#include <boost/iterator/iterator_categories.hpp>
+#include <boost/iterator/iterator_facade.hpp>
+#include <fmt/core.h>
+#include <fmt/format.h>
+#include <folly/container/MapUtil.h>
+#include <folly/logging/LogStreamProcessor.h>
+#include <folly/logging/xlog.h>
+
+#include <functional>
+#include <list>
+#include <ostream>
+#include <stdexcept>
+#include <string>
+#include <tuple>
 
 namespace facebook::rebalancer {
 

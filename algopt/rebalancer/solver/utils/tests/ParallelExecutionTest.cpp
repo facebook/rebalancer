@@ -14,15 +14,33 @@
 
 #include "algopt/rebalancer/solver/utils/ParallelExecution.h"
 
+#include <sys/mman.h>
+
 #include <folly/container/Reserve.h>
 #include <folly/executors/CPUThreadPoolExecutor.h>
+#include <folly/executors/task_queue/BlockingQueue.h>
+#include <folly/executors/task_queue/LifoSemMPMCQueue.h>
+#include <folly/executors/thread_factory/NamedThreadFactory.h>
+#include <folly/synchronization/AtomicUtil.h>
+#include <folly/Try.h>
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <chrono>
+#include <exception>
+#include <functional>
+#include <iterator>
+#include <memory>
 #include <mutex>
 #include <numeric>
+#include <optional>
 #include <set>
+#include <stdexcept>
+#include <string>
 #include <thread>
+#include <type_traits>
+#include <utility>
+#include <vector>
 
 using namespace facebook::rebalancer;
 using namespace folly;

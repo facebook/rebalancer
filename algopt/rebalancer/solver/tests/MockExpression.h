@@ -17,6 +17,14 @@
 #include "algopt/rebalancer/solver/expressions/Evaluator.h"
 #include "algopt/rebalancer/solver/expressions/Expression.h"
 #include "algopt/rebalancer/solver/utils/Assignment.h"
+#include "algopt/rebalancer/solver/utils/Util.h"
+
+#include <folly/container/F14Set.h>
+#include <folly/lang/Hint.h>
+
+#include <memory>
+#include <string_view>
+#include <utility>
 
 namespace facebook::rebalancer {
 

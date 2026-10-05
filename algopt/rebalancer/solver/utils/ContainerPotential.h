@@ -14,6 +14,7 @@
 
 #pragma once
 #include <algopt/rebalancer/solver/utils/GlobalObjectiveValue.h>
+#include <algopt/rebalancer/solver/utils/Precision.h>
 
 namespace facebook::rebalancer {
 

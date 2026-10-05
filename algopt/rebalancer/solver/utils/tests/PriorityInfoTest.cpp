@@ -15,6 +15,8 @@
 
 #include <gtest/gtest.h>
 
+#include <string>
+
 namespace facebook::rebalancer::packer::tests {
 
 TEST(TrafficTableTest, Equality) {

@@ -19,6 +19,19 @@
 #include "algopt/rebalancer/solver/utils/ObjectStore.h"
 #include "algopt/rebalancer/solver/utils/Util.h"
 
+#include <fmt/core.h>
+#include <folly/container/MapUtil.h>
+#include <folly/lang/Hint.h>
+
+#include <functional>
+#include <optional>
+#include <stdexcept>
+#include <string>
+#include <tuple>
+#include <type_traits>
+#include <utility>
+#include <variant>
+
 namespace facebook::rebalancer {
 
 template <typename IndexType, typename SecondaryIndexType = std::nullopt_t>

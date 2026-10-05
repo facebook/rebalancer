@@ -14,25 +14,76 @@
 
 #include "algopt/rebalancer/solver/solvers/OptimalSolver.h"
 
+#include "algopt/lp/generic/Expression.h"
 #include "algopt/lp/generic/Operators.h"
 #include "algopt/lp/generic/Problem.h"
+#include "algopt/lp/generic/Variable.h"
+#include "algopt/rebalancer/algopt_common/thrift/gen-cpp2/Types_types.h"
 #include "algopt/rebalancer/algopt_common/thrift/ThriftUtils.h"
 #include "algopt/rebalancer/algopt_common/Timer.h"
 #include "algopt/rebalancer/common/CoroUtils.h"
+#include "algopt/rebalancer/common/log/LogCollector.h"
+#include "algopt/rebalancer/common/log/RebalancerLog.h"
+#include "algopt/rebalancer/entities/Universe.h"
 #include "algopt/rebalancer/interface/thrift/gen-cpp2/SolverSpecs_types.h"
+#include "algopt/rebalancer/solver/expressions/Orchestrator.h"
+#include "algopt/rebalancer/solver/if/gen-cpp2/packer_types.h"
+#include "algopt/rebalancer/solver/moves/MoveResult.h"
+#include "algopt/rebalancer/solver/moves/MoveStatsAggregator.h"
+#include "algopt/rebalancer/solver/solvers/LPStore.h"
+#include "algopt/rebalancer/solver/solvers/Solver.h"
+#include "algopt/rebalancer/solver/utils/Assignment.h"
+#include "algopt/rebalancer/solver/utils/Change.h"
+#include "algopt/rebalancer/solver/utils/equivalence_sets/EquivalenceSets.h"
+#include "algopt/rebalancer/solver/utils/GlobalObjective.h"
+#include "algopt/rebalancer/solver/utils/GlobalObjectiveValue.h"
 #include "algopt/rebalancer/solver/utils/MovesSummaryHelper.h"
+#include "algopt/rebalancer/solver/utils/ObjectStore.h"
+#include "algopt/rebalancer/solver/utils/Precision.h"
 #include "algopt/rebalancer/solver/utils/Problem.h"
+#include "algopt/rebalancer/solver/utils/ProblemConfigs.h"
 #include "algopt/rebalancer/treeprof/EventRecorder.h"
 #include <algopt/rebalancer/interface/thrift/gen-cpp2/Types_types.h>
 
+#include "multifeed/hash/QuickHashMap.h"
+
+#include <boost/iterator/iterator_facade.hpp>
+#include <fmt/core.h>
+#include <fmt/format.h>
+#include <folly/container/F14Map.h>
+#include <folly/container/F14Set.h>
+#include <folly/container/HeterogeneousAccess.h>
 #include <folly/container/irange.h>
+#include <folly/container/MapUtil.h>
+#include <folly/coro/BlockingWait.h>
+#include <folly/coro/Collect.h>
+#include <folly/coro/Task.h>
+#include <folly/coro/ViaIfAsync.h>
+#include <folly/ExceptionWrapper.h>
+#include <folly/lang/Hint.h>
+#include <folly/logging/LogStreamProcessor.h>
 #include <folly/logging/xlog.h>
+#include <folly/ScopeGuard.h>
+#include <folly/tracing/AsyncStack.h>
+#include <thrift/lib/cpp2/FieldRef.h>
 #ifndef _WIN32
 #include <folly/Subprocess.h>
 #include <folly/system/Shell.h>
 #endif
 
+#include <algorithm>
 #include <filesystem>
+#include <functional>
+#include <map>
+#include <math.h>
+#include <memory>
+#include <ostream>
+#include <ranges>
+#include <stdexcept>
+#include <stdio.h>
+#include <string.h>
+#include <tuple>
+#include <utility>
 
 #ifndef _WIN32
 using namespace folly::literals::shell_literals;

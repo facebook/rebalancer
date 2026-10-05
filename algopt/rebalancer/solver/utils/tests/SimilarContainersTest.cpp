@@ -13,17 +13,34 @@
 // limitations under the License.
 
 #include "algopt/rebalancer/algopt_common/TestUtils.h"
+#include "algopt/rebalancer/algopt_common/thrift/gen-cpp2/Types_types.h"
+#include "algopt/rebalancer/entities/Identifiers.h"
 #include "algopt/rebalancer/solver/tests/IdConverterTestUtils.h"
+#include "algopt/rebalancer/solver/utils/Precision.h"
 #include "algopt/rebalancer/solver/utils/SimilarContainers.h"
 #include <algopt/rebalancer/solver/utils/ContainerPotential.h>
 #include <algopt/rebalancer/solver/utils/GlobalObjectiveValue.h>
 #include <algopt/rebalancer/solver/utils/Util.h>
 
+#include "multifeed/hash/QuickHashSet.h"
+
+#include "gmock/gmock.h"
+#include <boost/iterator/iterator_facade.hpp>
 #include <folly/container/irange.h>
+#include <folly/logging/LogStreamProcessor.h>
 #include <folly/logging/xlog.h>
 #include <gtest/gtest.h>
 
+#include <algorithm>
+#include <functional>
+#include <initializer_list>
+#include <ostream>
+#include <ranges>
 #include <set>
+#include <string>
+#include <unordered_set>
+#include <utility>
+#include <vector>
 
 using namespace std;
 namespace facebook::rebalancer::packer::tests {

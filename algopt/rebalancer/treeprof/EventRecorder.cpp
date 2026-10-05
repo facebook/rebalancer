@@ -14,13 +14,17 @@
 
 #include "algopt/rebalancer/treeprof/EventRecorder.h"
 
+#include "algopt/rebalancer/treeprof/Event.h"
 #include "algopt/rebalancer/treeprof/EventHolder.h"
 #include "algopt/rebalancer/treeprof/ThreadMemoryMonitor.h"
 
+#include <fmt/core.h>
+#include <folly/io/async/Request.h>
 #include <folly/String.h>
 
 #include <limits>
 #include <stdexcept>
+#include <utility>
 
 namespace facebook::algopt::treeprof {
 void updateEvent(Event& event, const EventHolder::NowFn& nowFn) {

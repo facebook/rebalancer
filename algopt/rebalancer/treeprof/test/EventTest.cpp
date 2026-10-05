@@ -15,7 +15,12 @@
 #include "algopt/rebalancer/algopt_common/TestUtils.h"
 #include "algopt/rebalancer/treeprof/Event.h"
 
+#include "gmock/gmock.h"
 #include <gtest/gtest.h>
+
+#include <memory>
+#include <string>
+#include <vector>
 
 using namespace ::testing;
 using namespace facebook::algopt::treeprof;

@@ -14,9 +14,17 @@
 
 #pragma once
 
+#include "algopt/rebalancer/entities/Universe.h"
 #include "algopt/rebalancer/solver/expressions/Expression.h"
 #include "algopt/rebalancer/solver/expressions/Orchestrator.h"
+#include "algopt/rebalancer/solver/utils/BoundConstraints.h"
+#include "algopt/rebalancer/solver/utils/Context.h"
 #include "algopt/rebalancer/solver/utils/GlobalObjectiveValue.h"
+
+#include <folly/container/small_vector.h>
+
+#include <initializer_list>
+#include <utility>
 
 namespace facebook::rebalancer {
 

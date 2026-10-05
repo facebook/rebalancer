@@ -14,7 +14,20 @@
 
 #include "algopt/rebalancer/solver/utils/OneObjectPerGroup.h"
 
+#include "algopt/rebalancer/entities/Partition.h"
+#include "algopt/rebalancer/entities/Universe.h"
 #include "algopt/rebalancer/solver/utils/Assignment.h"
+
+#include "multifeed/hash/HeterogeneousAccess.h"
+
+#include <boost/iterator/iterator_facade.hpp>
+#include <folly/container/F14Map.h>
+#include <folly/container/HeterogeneousAccess.h>
+#include <folly/container/MapUtil.h>
+
+#include <assert.h>
+#include <utility>
+#include <vector>
 
 namespace facebook::rebalancer {
 

@@ -14,6 +14,10 @@
 
 #include "algopt/rebalancer/treeprof/visualizer/VisualizationFilter.h"
 
+#include "algopt/rebalancer/treeprof/Event.h"
+
+#include <utility>
+
 namespace facebook::algopt::treeprof {
 
 PeakMemoryAtLeastXMBytes::PeakMemoryAtLeastXMBytes(double threshold)

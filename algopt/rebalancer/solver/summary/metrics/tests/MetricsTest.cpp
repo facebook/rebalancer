@@ -12,14 +12,43 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "algopt/rebalancer/entities/Containers.h"
+#include "algopt/rebalancer/entities/Identifiers.h"
+#include "algopt/rebalancer/entities/Map.h"
+#include "algopt/rebalancer/entities/Universe.h"
+#include "algopt/rebalancer/interface/thrift/gen-cpp2/Metrics_types.h"
+#include "algopt/rebalancer/interface/thrift/gen-cpp2/ProblemSpecs_types.h"
 #include "algopt/rebalancer/interface/thrift/ThriftUtils.h"
+#include "algopt/rebalancer/materializer/utils/Descriptor.h"
 #include "algopt/rebalancer/solver/expressions/Expression.h"
 #include "algopt/rebalancer/solver/expressions/Operators.h"
+#include "algopt/rebalancer/solver/expressions/tests/ExpressionTestsBase.h"
 #include "algopt/rebalancer/solver/summary/metrics/Metrics.h"
 #include "algopt/rebalancer/solver/summary/metrics/tests/MetricsTestBase.h"
+#include "algopt/rebalancer/solver/utils/Assignment.h"
 
+#include "multifeed/hash/HeterogeneousAccess.h"
+
+#include <boost/iterator/iterator_facade.hpp>
+#include <fmt/core.h>
+#include <folly/container/F14Map.h>
+#include <folly/container/MapUtil.h>
 #include <folly/coro/BlockingWait.h>
+#include <folly/coro/Task.h>
+#include <folly/ExceptionWrapper.h>
+#include <folly/lang/Assume.h>
+#include <folly/lang/Hint.h>
+#include <folly/tracing/AsyncStack.h>
 #include <gtest/gtest.h>
+#include <thrift/lib/cpp2/FieldRef.h>
+
+#include <coroutine>
+#include <memory>
+#include <optional>
+#include <set>
+#include <string>
+#include <utility>
+#include <vector>
 
 using UtilMetric = facebook::rebalancer::materializer::UtilMetric;
 namespace thriftUtils = facebook::rebalancer::interface::thriftUtils;

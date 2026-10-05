@@ -17,8 +17,18 @@
 #include "algopt/rebalancer/treeprof/ExecutorWrapper.h"
 
 #include <folly/Benchmark.h>
+#include <folly/BenchmarkUtil.h>
+#include <folly/Executor.h>
+#include <folly/Function.h>
 #include <folly/io/async/Request.h>
+#include <folly/memory/Malloc.h>
 #include <gtest/gtest.h>
+
+#include <memory>
+#include <stdlib.h>
+#include <string>
+#include <thread>
+#include <utility>
 
 using namespace ::testing;
 using namespace facebook::algopt::treeprof;

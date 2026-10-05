@@ -12,15 +12,59 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "algopt/rebalancer/algopt_common/thrift/gen-cpp2/Types_types.h"
+#include "algopt/rebalancer/entities/builders/AsyncUniverseBuilder.h"
+#include "algopt/rebalancer/entities/builders/ConstraintsBuilder.h"
+#include "algopt/rebalancer/entities/builders/GoalsBuilder.h"
+#include "algopt/rebalancer/entities/Constraint.h"
+#include "algopt/rebalancer/entities/Goal.h"
+#include "algopt/rebalancer/entities/Identifiers.h"
+#include "algopt/rebalancer/entities/Map.h"
+#include "algopt/rebalancer/entities/Universe.h"
+#include "algopt/rebalancer/interface/thrift/gen-cpp2/ProblemSolver_types.h"
+#include "algopt/rebalancer/interface/thrift/gen-cpp2/ProblemSpecs_types.h"
+#include "algopt/rebalancer/interface/thrift/gen-cpp2/SolverSpecs_types.h"
+#include "algopt/rebalancer/interface/thrift/gen-cpp2/Types_types.h"
 #include "algopt/rebalancer/materializer/Materializer.h"
 #include "algopt/rebalancer/solver/expressions/tests/ExpressionTestsBase.h"
+#include "algopt/rebalancer/solver/utils/equivalence_sets/EquivalenceSets.h"
 #include "algopt/rebalancer/solver/utils/Problem.h"
+#include "algopt/rebalancer/solver/utils/ProblemConfigs.h"
+#include "algopt/rebalancer/solver/utils/Util.h"
 #include "algopt/rebalancer/treeprof/ExecutorWrapper.h"
 #include "algopt/rebalancer/treeprof/Profiler.h"
 #include <algopt/rebalancer/solver/utils/equivalence_sets/EquivalenceSetsStore.h>
 
+#include "multifeed/hash/HeterogeneousAccess.h"
+
+#include "gtest/gtest.h"
+#include <boost/iterator/iterator_facade.hpp>
+#include <fmt/core.h>
+#include <fmt/format.h>
+#include <folly/container/F14Set.h>
+#include <folly/container/HeterogeneousAccess.h>
 #include <folly/container/irange.h>
+#include <folly/container/MapUtil.h>
+#include <folly/coro/BlockingWait.h>
 #include <folly/coro/GtestHelpers.h>
+#include <folly/coro/Task.h>
+#include <folly/ExceptionWrapper.h>
+#include <folly/executors/CPUThreadPoolExecutor.h>
+#include <folly/lang/Hint.h>
+#include <folly/logging/LogStreamProcessor.h>
+#include <folly/logging/xlog.h>
+#include <folly/String.h>
+#include <folly/tracing/AsyncStack.h>
+#include <thrift/lib/cpp2/FieldRef.h>
+
+#include <coroutine>
+#include <memory>
+#include <optional>
+#include <ostream>
+#include <ranges>
+#include <string>
+#include <utility>
+#include <vector>
 
 namespace facebook::rebalancer::packer::tests {
 

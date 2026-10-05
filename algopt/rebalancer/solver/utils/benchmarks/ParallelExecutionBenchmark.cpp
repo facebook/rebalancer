@@ -15,6 +15,7 @@
 #include "algopt/rebalancer/algopt_common/Timer.h"
 #include "algopt/rebalancer/solver/utils/ParallelExecution.h"
 
+#include <fmt/core.h>
 #include <fmt/format.h>
 #include <folly/Benchmark.h>
 #include <folly/BenchmarkUtil.h>
@@ -22,14 +23,23 @@
 #include <folly/executors/CPUThreadPoolExecutor.h>
 #include <folly/FileUtil.h>
 #include <folly/init/Init.h>
+#include <folly/lang/Hint.h>
 #include <folly/system/HardwareConcurrency.h>
+#include <folly/Try.h>
 #include <gflags/gflags.h>
 
 #include <array>
+#include <chrono>
 #include <cstdint>
 #include <iomanip>
 #include <iostream>
+#include <iterator>
 #include <numeric>
+#include <optional>
+#include <ranges>
+#include <stddef.h>
+#include <stdexcept>
+#include <string>
 #include <string_view>
 #include <vector>
 

@@ -16,6 +16,8 @@
 
 #include <folly/Executor.h>
 
+#include <memory>
+
 namespace facebook::algopt::treeprof {
 
 class ExecutorWrapper : public folly::Executor {

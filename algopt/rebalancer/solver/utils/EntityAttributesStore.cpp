@@ -14,6 +14,8 @@
 
 #include "algopt/rebalancer/solver/utils/EntityAttributesStore.h"
 
+#include "algopt/rebalancer/solver/utils/EntityAttributes.h"
+
 #include <folly/container/MapUtil.h>
 
 namespace facebook::rebalancer {

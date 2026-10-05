@@ -13,9 +13,16 @@
 // limitations under the License.
 
 #pragma once
+
+#include "algopt/rebalancer/treeprof/Event.h"
 #include "algopt/rebalancer/treeprof/visualizer/VisualizationFilter.h"
 
 #include <folly/container/F14Map.h>
+#include <folly/lang/Hint.h>
+
+#include <memory>
+#include <string>
+#include <vector>
 
 namespace facebook::algopt::treeprof {
 

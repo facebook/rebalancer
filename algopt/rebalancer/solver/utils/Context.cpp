@@ -15,6 +15,12 @@
 #include "algopt/rebalancer/solver/utils/Context.h"
 
 #include "algopt/rebalancer/solver/expressions/ObjectVector.h"
+#include "algopt/rebalancer/solver/utils/equivalence_sets/EquivalenceSets.h"
+#include "algopt/rebalancer/solver/utils/Util.h"
+
+#include "multifeed/hash/HeterogeneousAccess.h"
+
+#include <boost/iterator/iterator_facade.hpp>
 
 namespace facebook::rebalancer {
 

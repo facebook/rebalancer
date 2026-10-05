@@ -14,7 +14,19 @@
 
 #include "algopt/rebalancer/solver/summary/metrics/GroupRoutingLatencyMetrics.h"
 
+#include "algopt/rebalancer/entities/Universe.h"
+#include "algopt/rebalancer/interface/thrift/gen-cpp2/Metrics_types.h"
 #include "algopt/rebalancer/interface/thrift/ThriftUtils.h"
+#include "algopt/rebalancer/solver/expressions/Expression.h"
+
+#include <folly/container/F14Map.h>
+#include <folly/lang/Assume.h>
+#include <folly/Synchronized.h>
+#include <thrift/lib/cpp2/FieldRef.h>
+
+#include <string>
+#include <utility>
+#include <vector>
 
 namespace facebook::rebalancer {
 namespace thriftUtils = interface::thriftUtils;

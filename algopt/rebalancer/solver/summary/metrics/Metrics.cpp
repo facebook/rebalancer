@@ -15,12 +15,30 @@
 #include "algopt/rebalancer/solver/summary/metrics/Metrics.h"
 
 #include "algopt/rebalancer/entities/Identifiers.h"
+#include "algopt/rebalancer/entities/Universe.h"
+#include "algopt/rebalancer/interface/thrift/gen-cpp2/Metrics_types.h"
 #include "algopt/rebalancer/materializer/utils/Descriptor.h"
+#include "algopt/rebalancer/solver/expressions/Expression.h"
+#include "algopt/rebalancer/solver/expressions/GroupRoutingRing.h"
+#include "algopt/rebalancer/solver/expressions/ObjectPartitionLookup.h"
 #include "algopt/rebalancer/solver/summary/metrics/GroupRoutingLatencyMetrics.h"
 #include "algopt/rebalancer/solver/summary/metrics/GroupRoutingTrafficMetrics.h"
+#include "algopt/rebalancer/solver/summary/metrics/MetricCollection.h"
 #include "algopt/rebalancer/solver/summary/metrics/ScopeItemUtilMetrics.h"
+#include "algopt/rebalancer/solver/utils/Context.h"
 
+#include "multifeed/hash/QuickHashMap.h"
+
+#include <boost/iterator/iterator_categories.hpp>
+#include <boost/iterator/iterator_facade.hpp>
+#include <fmt/core.h>
+#include <folly/lang/Hint.h>
+#include <folly/Synchronized.h>
+#include <thrift/lib/cpp/util/EnumUtils.h>
+
+#include <optional>
 #include <stdexcept>
+#include <string>
 
 namespace facebook::rebalancer {
 

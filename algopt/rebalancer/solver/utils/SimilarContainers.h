@@ -21,7 +21,11 @@
 #include "algopt/rebalancer/solver/utils/GlobalObjectiveValue.h"
 #include "algopt/rebalancer/solver/utils/Util.h"
 
+#include <functional>
+#include <iterator>
+#include <optional>
 #include <random>
+#include <utility>
 #include <vector>
 
 namespace facebook::rebalancer {

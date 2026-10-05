@@ -13,10 +13,16 @@
 // limitations under the License.
 
 #include "algopt/rebalancer/algopt_common/TestUtils.h"
+#include "algopt/rebalancer/entities/Identifiers.h"
 #include "algopt/rebalancer/solver/tests/IdConverterTestUtils.h"
 #include "algopt/rebalancer/solver/utils/ContainerSetWithHash.h"
+#include "algopt/rebalancer/solver/utils/Util.h"
 
+#include "gmock/gmock.h"
 #include <gtest/gtest.h>
+
+#include <memory>
+#include <string>
 
 namespace facebook::rebalancer::packer::tests {
 

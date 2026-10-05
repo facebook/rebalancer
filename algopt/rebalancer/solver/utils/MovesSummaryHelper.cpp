@@ -14,7 +14,21 @@
 
 #include "algopt/rebalancer/solver/utils/MovesSummaryHelper.h"
 
+#include "algopt/rebalancer/solver/moves/Move.h"
+#include "algopt/rebalancer/solver/moves/MoveResult.h"
+#include "algopt/rebalancer/solver/moves/MoveSet.h"
+#include "algopt/rebalancer/solver/moves/MoveStatsAggregator.h"
+#include "algopt/rebalancer/solver/summary/LabeledExpressions.h"
+#include "algopt/rebalancer/solver/utils/Problem.h"
+
 #include <folly/container/irange.h>
+#include <thrift/lib/cpp2/FieldRef.h>
+
+#include <memory>
+#include <ranges>
+#include <string>
+#include <utility>
+#include <vector>
 
 namespace facebook::rebalancer {
 

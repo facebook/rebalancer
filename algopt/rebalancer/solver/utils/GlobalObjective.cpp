@@ -15,12 +15,26 @@
 #include "algopt/rebalancer/solver/utils/GlobalObjective.h"
 
 #include "algopt/rebalancer/algopt_common/Precision.h"
+#include "algopt/rebalancer/solver/expressions/Expression.h"
 #include "algopt/rebalancer/solver/expressions/Operators.h"
+#include "algopt/rebalancer/solver/expressions/Orchestrator.h"
 #include "algopt/rebalancer/solver/expressions/TopToBottomEvaluator.h"
+#include "algopt/rebalancer/solver/utils/BoundConstraints.h"
+#include "algopt/rebalancer/solver/utils/Context.h"
+#include "algopt/rebalancer/solver/utils/GlobalObjectiveValue.h"
+#include "algopt/rebalancer/solver/utils/Util.h"
 
 #include <fmt/core.h>
 #include <folly/container/irange.h>
+#include <folly/logging/LogStreamProcessor.h>
 #include <folly/logging/xlog.h>
+
+#include <algorithm>
+#include <memory>
+#include <ostream>
+#include <ranges>
+#include <stdexcept>
+#include <string>
 
 namespace facebook::rebalancer {
 GlobalObjective::Builder& GlobalObjective::Builder::addToObjective(

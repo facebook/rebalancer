@@ -20,6 +20,13 @@
 #include "algopt/rebalancer/solver/utils/Util.h"
 
 #include <folly/container/F14Set.h>
+#include <folly/lang/Hint.h>
+
+#include <iterator>
+#include <stddef.h>
+#include <stdint.h>
+#include <utility>
+#include <vector>
 
 namespace facebook::rebalancer {
 

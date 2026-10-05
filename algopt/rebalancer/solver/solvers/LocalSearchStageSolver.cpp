@@ -14,16 +14,39 @@
 
 #include "algopt/rebalancer/solver/solvers/LocalSearchStageSolver.h"
 
+#include "algopt/rebalancer/algopt_common/thrift/gen-cpp2/Types_types.h"
+#include "algopt/rebalancer/common/log/LogCollector.h"
+#include "algopt/rebalancer/common/log/RebalancerLog.h"
+#include "algopt/rebalancer/interface/thrift/gen-cpp2/SolverSpecs_types.h"
+#include "algopt/rebalancer/solver/if/gen-cpp2/packer_types.h"
 #include "algopt/rebalancer/solver/moves/EvalSummary.h"
+#include "algopt/rebalancer/solver/moves/MoveType.h"
 #include "algopt/rebalancer/solver/moves/MoveTypeFactory.h"
+#include "algopt/rebalancer/solver/profilers/LocalSearchProfiler.h"
 #include "algopt/rebalancer/solver/solvers/CoreLocalSearchSolve.h"
+#include "algopt/rebalancer/solver/solvers/Solver.h"
+#include "algopt/rebalancer/solver/utils/equivalence_sets/EquivalenceSetsStore.h"
+#include "algopt/rebalancer/solver/utils/GlobalObjective.h"
+#include "algopt/rebalancer/solver/utils/GlobalObjectiveValue.h"
+#include "algopt/rebalancer/solver/utils/Problem.h"
+#include "algopt/rebalancer/solver/utils/ProblemConfigs.h"
+#include "algopt/rebalancer/solver/utils/Util.h"
 #include "algopt/rebalancer/treeprof/EventRecorder.h"
 
+#include <fmt/core.h>
 #include <folly/container/irange.h>
+#include <folly/logging/LogStreamProcessor.h>
 #include <folly/logging/xlog.h>
+#include <folly/ScopeGuard.h>
+#include <thrift/lib/cpp2/FieldRef.h>
 
+#include <algorithm>
 #include <cassert>
 #include <cstddef>
+#include <limits>
+#include <ranges>
+#include <set>
+#include <stdexcept>
 #include <string>
 
 namespace facebook::rebalancer {

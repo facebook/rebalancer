@@ -14,10 +14,18 @@
 
 #pragma once
 
+#include "algopt/rebalancer/entities/Identifiers.h"
 #include "algopt/rebalancer/entities/Universe.h"
 #include "algopt/rebalancer/interface/thrift/gen-cpp2/Metrics_types.h"
 #include "algopt/rebalancer/solver/expressions/GroupRoutingRing.h"
 #include "algopt/rebalancer/solver/summary/metrics/MetricCollection.h"
+
+#include <folly/ConstexprMath.h>
+#include <folly/lang/Hint.h>
+
+#include <iterator>
+#include <memory>
+#include <utility>
 
 namespace facebook::rebalancer {
 

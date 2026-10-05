@@ -14,11 +14,17 @@
 
 #pragma once
 
+#include <fmt/core.h>
 #include <folly/FileUtil.h>
 #include <folly/hash/Hash.h>
+#include <folly/logging/LogStreamProcessor.h>
 #include <folly/logging/xlog.h>
 
+#include <cstddef>
+#include <functional>
 #include <ostream>
+#include <string>
+#include <vector>
 
 #ifndef REBALANCER_OSS_BUILD
 #include "multifeed/shared/MFHash.h"

@@ -20,6 +20,7 @@
 #include "algopt/rebalancer/solver/utils/Util.h"
 
 #include <iterator>
+#include <memory>
 
 namespace facebook::rebalancer {
 

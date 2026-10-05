@@ -14,9 +14,12 @@
 
 #pragma once
 
+#include "algopt/rebalancer/interface/thrift/gen-cpp2/Types_types.h"
 #include "algopt/rebalancer/solver/moves/MoveResult.h"
 #include "algopt/rebalancer/solver/moves/MoveStatsAggregator.h"
 #include "algopt/rebalancer/solver/utils/Problem.h"
+
+#include <optional>
 
 namespace facebook::rebalancer {
 

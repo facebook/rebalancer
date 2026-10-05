@@ -14,6 +14,11 @@
 
 #include "algopt/rebalancer/solver/utils/ObjectStore.h"
 
+#include "algopt/rebalancer/entities/Identifiers.h"
+#include "algopt/rebalancer/entities/ObjectValueTypes.h"
+
+#include <stdint.h>
+
 // MurmurHash64A performance-optimized for hash of uint64_t keys
 uint64_t MurmurRehash64A(uint64_t key) {
   constexpr uint64_t kMurmur2Seed = 4193360111ul;

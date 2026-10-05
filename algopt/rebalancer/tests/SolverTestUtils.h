@@ -18,6 +18,7 @@
 #include "algopt/rebalancer/interface/thrift/gen-cpp2/SolverSpecs_types.h"
 
 #include <gtest/gtest.h>
+#include <thrift/lib/cpp2/FieldRef.h>
 
 #include <optional>
 #include <stdexcept>

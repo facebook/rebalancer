@@ -12,14 +12,45 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "algopt/rebalancer/algopt_common/thrift/gen-cpp2/Types_types.h"
+#include "algopt/rebalancer/entities/Containers.h"
+#include "algopt/rebalancer/entities/Identifiers.h"
+#include "algopt/rebalancer/entities/Map.h"
+#include "algopt/rebalancer/entities/Universe.h"
+#include "algopt/rebalancer/solver/expressions/Expression.h"
 #include "algopt/rebalancer/solver/expressions/Operators.h"
 #include "algopt/rebalancer/solver/expressions/tests/ExpressionTestsBase.h"
 #include "algopt/rebalancer/solver/moves/MovesEvaluator.h"
 #include "algopt/rebalancer/solver/tests/ExprProblemCreation.h"
+#include "algopt/rebalancer/solver/utils/Assignment.h"
+#include "algopt/rebalancer/solver/utils/Change.h"
+#include "algopt/rebalancer/solver/utils/ChangeSet.h"
+#include "algopt/rebalancer/solver/utils/ContainerPotential.h"
+#include "algopt/rebalancer/solver/utils/GlobalObjective.h"
+#include "algopt/rebalancer/solver/utils/GlobalObjectiveValue.h"
+#include "algopt/rebalancer/solver/utils/Precision.h"
+#include "algopt/rebalancer/solver/utils/Problem.h"
+#include "algopt/rebalancer/solver/utils/Util.h"
 
+#include "multifeed/hash/HeterogeneousAccess.h"
+
+#include <boost/iterator/iterator_facade.hpp>
+#include <fmt/core.h>
 #include <folly/container/irange.h>
+#include <folly/container/MapUtil.h>
 #include <folly/coro/BlockingWait.h>
+#include <folly/coro/Task.h>
+#include <folly/ExceptionWrapper.h>
+#include <folly/tracing/AsyncStack.h>
 #include <gtest/gtest.h>
+
+#include <coroutine>
+#include <initializer_list>
+#include <memory>
+#include <ranges>
+#include <string>
+#include <utility>
+#include <vector>
 
 namespace facebook::rebalancer::packer::tests {
 namespace {

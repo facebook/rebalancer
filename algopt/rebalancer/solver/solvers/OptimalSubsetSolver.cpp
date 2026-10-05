@@ -15,17 +15,51 @@
 #include "algopt/rebalancer/solver/solvers/OptimalSubsetSolver.h"
 
 #include "algopt/rebalancer/algopt_common/Timer.h"
+#include "algopt/rebalancer/entities/Identifiers.h"
+#include "algopt/rebalancer/entities/Universe.h"
+#include "algopt/rebalancer/interface/thrift/gen-cpp2/SolverSpecs_types.h"
+#include "algopt/rebalancer/interface/thrift/gen-cpp2/Types_types.h"
+#include "algopt/rebalancer/solver/expressions/Expression.h"
 #include "algopt/rebalancer/solver/iterators/ExpressionContainersIterator.h"
 #include "algopt/rebalancer/solver/solvers/OptimalSolver.h"
+#include "algopt/rebalancer/solver/solvers/Solver.h"
+#include "algopt/rebalancer/solver/summary/GlobalLabeledObjectives.h"
+#include "algopt/rebalancer/solver/summary/LabeledExpressions.h"
+#include "algopt/rebalancer/solver/summary/LabeledObjectives.h"
+#include "algopt/rebalancer/solver/utils/Assignment.h"
+#include "algopt/rebalancer/solver/utils/Change.h"
+#include "algopt/rebalancer/solver/utils/ChangeSet.h"
+#include "algopt/rebalancer/solver/utils/GlobalObjective.h"
+#include "algopt/rebalancer/solver/utils/GlobalObjectiveValue.h"
+#include "algopt/rebalancer/solver/utils/Precision.h"
+#include "algopt/rebalancer/solver/utils/Problem.h"
+#include "algopt/rebalancer/solver/utils/ProblemConfigs.h"
 #include "algopt/rebalancer/solver/utils/Util.h"
 
+#include <boost/iterator/iterator_facade.hpp>
+#include <fmt/core.h>
 #include <folly/container/F14Map.h>
+#include <folly/container/HeterogeneousAccess.h>
+#include <folly/hash/Hash.h>
+#include <folly/lang/Assume.h>
+#include <folly/lang/Hint.h>
+#include <folly/logging/LogStreamProcessor.h>
 #include <folly/logging/xlog.h>
 #include <folly/Random.h>
+#include <thrift/lib/cpp2/FieldRef.h>
 
 #include <algorithm>
+#include <cstdlib>
+#include <exception>
 #include <functional>
+#include <map>
+#include <math.h>
+#include <memory>
+#include <numeric>
+#include <random>
 #include <sstream>
+#include <stdexcept>
+#include <stdint.h>
 
 using namespace std;
 using apache::thrift::can_throw;

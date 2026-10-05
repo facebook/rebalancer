@@ -14,6 +14,23 @@
 
 #include "algopt/rebalancer/solver/summary/metrics/ScopeItemUtilMetrics.h"
 
+#include "algopt/rebalancer/algopt_common/AssociativeMap.h"
+#include "algopt/rebalancer/entities/Universe.h"
+#include "algopt/rebalancer/interface/thrift/gen-cpp2/Metrics_types.h"
+#include "algopt/rebalancer/materializer/utils/Descriptor.h"
+#include "algopt/rebalancer/solver/expressions/Expression.h"
+#include "algopt/rebalancer/solver/expressions/ObjectPartitionLookup.h"
+
+#include <folly/container/F14Map.h>
+#include <folly/container/HeterogeneousAccess.h>
+#include <folly/lang/Assume.h>
+#include <folly/Synchronized.h>
+#include <thrift/lib/cpp2/FieldRef.h>
+
+#include <stdexcept>
+#include <string>
+#include <utility>
+
 namespace facebook::rebalancer {
 
 namespace {

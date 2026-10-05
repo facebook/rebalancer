@@ -14,17 +14,42 @@
 
 #include "algopt/rebalancer/algopt_common/thrift/gen-cpp2/Types_types.h"
 #include "algopt/rebalancer/common/log/LogCollector.h"
+#include "algopt/rebalancer/common/log/RebalancerLog.h"
+#include "algopt/rebalancer/entities/builders/AsyncUniverseBuilder.h"
+#include "algopt/rebalancer/entities/Containers.h"
+#include "algopt/rebalancer/entities/Map.h"
 #include "algopt/rebalancer/entities/tests/UniverseBuilderTestUtils.h"
+#include "algopt/rebalancer/entities/Universe.h"
 #include "algopt/rebalancer/interface/ProblemSolver.h"
+#include "algopt/rebalancer/interface/thrift/gen-cpp2/SolverSpecs_types.h"
+#include "algopt/rebalancer/interface/thrift/gen-cpp2/Types_types.h"
+#include "algopt/rebalancer/solver/expressions/Expression.h"
 #include "algopt/rebalancer/solver/expressions/LinearSum.h"
 #include "algopt/rebalancer/solver/expressions/Operators.h"
 #include "algopt/rebalancer/solver/solvers/LocalSearchSolver.h"
 #include "algopt/rebalancer/solver/tests/ExprProblemCreation.h"
+#include "algopt/rebalancer/solver/utils/Assignment.h"
+#include "algopt/rebalancer/solver/utils/GlobalObjective.h"
+#include "algopt/rebalancer/solver/utils/GlobalObjectiveValue.h"
+#include "algopt/rebalancer/solver/utils/Problem.h"
 #include "algopt/rebalancer/solver/utils/ProblemConfigs.h"
+#include "algopt/rebalancer/solver/utils/Util.h"
 
+#include "multifeed/hash/HeterogeneousAccess.h"
+
+#include <boost/iterator/iterator_facade.hpp>
+#include <fmt/core.h>
+#include <folly/container/MapUtil.h>
+#include <folly/ExceptionWrapper.h>
+#include <folly/tracing/AsyncStack.h>
 #include <gtest/gtest.h>
+#include <thrift/lib/cpp2/FieldRef.h>
 
 #include <memory>
+#include <optional>
+#include <string>
+#include <utility>
+#include <vector>
 
 namespace facebook::rebalancer::tests {
 

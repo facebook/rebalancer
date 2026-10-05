@@ -19,7 +19,12 @@
 #include "algopt/rebalancer/treeprof/EventHolder.h"
 #include "algopt/rebalancer/treeprof/ThreadMemoryMonitor.h"
 
+#include <folly/Executor.h>
+#include <folly/Function.h>
 #include <folly/io/async/Request.h>
+
+#include <stdint.h>
+#include <utility>
 
 namespace facebook::algopt::treeprof {
 

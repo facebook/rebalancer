@@ -14,12 +14,20 @@
 
 #pragma once
 
+#include "algopt/rebalancer/entities/Identifiers.h"
 #include "algopt/rebalancer/entities/Universe.h"
 #include "algopt/rebalancer/solver/utils/ChangeSet.h"
 #include "algopt/rebalancer/solver/utils/IndexedAssignment.h"
 #include "algopt/rebalancer/solver/utils/ObjectStore.h"
+#include "algopt/rebalancer/solver/utils/Util.h"
 
+#include <folly/lang/Hint.h>
+
+#include <memory>
+#include <optional>
 #include <ranges>
+#include <utility>
+#include <vector>
 
 namespace facebook::rebalancer {
 

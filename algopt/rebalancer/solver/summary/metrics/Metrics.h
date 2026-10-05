@@ -14,8 +14,11 @@
 
 #pragma once
 
+#include "algopt/rebalancer/entities/Identifiers.h"
+#include "algopt/rebalancer/entities/Map.h"
 #include "algopt/rebalancer/entities/Universe.h"
 #include "algopt/rebalancer/interface/thrift/gen-cpp2/Metrics_types.h"
+#include "algopt/rebalancer/interface/thrift/gen-cpp2/ProblemSpecs_types.h"
 #include "algopt/rebalancer/materializer/utils/Descriptor.h"
 #include "algopt/rebalancer/solver/expressions/Expression.h"
 #include "algopt/rebalancer/solver/expressions/GroupRoutingRing.h"
@@ -23,6 +26,11 @@
 #include "algopt/rebalancer/solver/summary/metrics/MetricCollection.h"
 
 #include <folly/Synchronized.h>
+
+#include <atomic>
+#include <memory>
+#include <utility>
+#include <vector>
 
 namespace facebook::rebalancer {
 

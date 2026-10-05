@@ -13,9 +13,12 @@
 // limitations under the License.
 
 #pragma once
+
 #include <folly/container/F14Map.h>
 #include <folly/container/F14Set.h>
 #include <folly/Optional.h>
+
+#include <cstddef>
 
 namespace facebook::rebalancer {
 

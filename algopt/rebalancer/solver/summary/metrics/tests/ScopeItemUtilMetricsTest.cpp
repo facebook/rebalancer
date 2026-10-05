@@ -15,13 +15,33 @@
 #include "algopt/rebalancer/solver/summary/metrics/tests/ScopeItemUtilMetricsTest.h"
 
 #include "algopt/rebalancer/algopt_common/TestUtils.h"
+#include "algopt/rebalancer/entities/builders/AssignmentBuilder.h"
+#include "algopt/rebalancer/entities/builders/DimensionsBuilder.h"
+#include "algopt/rebalancer/entities/Containers.h"
+#include "algopt/rebalancer/entities/ObjectDimension.h"
+#include "algopt/rebalancer/entities/Universe.h"
+#include "algopt/rebalancer/interface/thrift/gen-cpp2/Metrics_types.h"
 #include "algopt/rebalancer/solver/expressions/Expression.h"
+#include "algopt/rebalancer/solver/expressions/ObjectPartition.h"
 #include "algopt/rebalancer/solver/expressions/Operators.h"
 #include "algopt/rebalancer/solver/summary/metrics/ScopeItemUtilMetrics.h"
+#include "algopt/rebalancer/solver/utils/Assignment.h"
+#include "algopt/rebalancer/solver/utils/Context.h"
+#include "algopt/rebalancer/solver/utils/Util.h"
 
+#include "multifeed/hash/QuickHashMap.h"
+
+#include "gmock/gmock.h"
+#include <folly/container/F14Map.h>
 #include <folly/container/irange.h>
 #include <folly/coro/GtestHelpers.h>
+#include <folly/lang/Assume.h>
+#include <folly/lang/Bits.h>
+#include <folly/lang/Hint.h>
 #include <gtest/gtest.h>
+#include <thrift/lib/cpp2/FieldRef.h>
+
+#include <ranges>
 
 using UtilMetric = facebook::rebalancer::materializer::UtilMetric;
 

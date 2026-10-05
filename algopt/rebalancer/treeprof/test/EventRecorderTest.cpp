@@ -16,7 +16,13 @@
 #include "algopt/rebalancer/treeprof/EventHolder.h"
 #include "algopt/rebalancer/treeprof/EventRecorder.h"
 
+#include <folly/io/async/Request.h>
 #include <gtest/gtest.h>
+
+#include <memory>
+#include <optional>
+#include <string>
+#include <vector>
 
 using namespace ::testing;
 using namespace facebook::algopt::treeprof;

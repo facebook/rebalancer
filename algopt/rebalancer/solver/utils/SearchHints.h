@@ -14,7 +14,9 @@
 
 #pragma once
 
+#include "algopt/rebalancer/solver/moves/MoveResult.h"
 #include "algopt/rebalancer/solver/moves/MovesEvaluator.h"
+#include "algopt/rebalancer/solver/utils/Problem.h"
 #include "algopt/rebalancer/solver/utils/Util.h"
 
 #include <folly/Optional.h>

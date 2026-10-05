@@ -16,6 +16,14 @@
 #include "algopt/rebalancer/solver/solvers/LocalSearchStageSolver.h"
 
 #include <gtest/gtest.h>
+#include <thrift/lib/cpp2/FieldRef.h>
+
+#include <new>
+#include <optional>
+#include <stddef.h>
+#include <string>
+#include <utility>
+#include <vector>
 
 using namespace facebook::rebalancer::interface;
 

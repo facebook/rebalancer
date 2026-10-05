@@ -14,12 +14,21 @@
 
 #include "algopt/rebalancer/solver/tests/MockExpression.h"
 
+#include "algopt/lp/generic/Expression.h"
+#include "algopt/rebalancer/entities/Universe.h"
 #include "algopt/rebalancer/interface/thrift/gen-cpp2/SolverSpecs_types.h"
 #include "algopt/rebalancer/solver/expressions/BottomToTopEvaluator.h"
+#include "algopt/rebalancer/solver/expressions/Expression.h"
 #include "algopt/rebalancer/solver/expressions/LpEvaluator.h"
 #include "algopt/rebalancer/solver/expressions/TopToBottomEvaluator.h"
+#include "algopt/rebalancer/solver/utils/AffectedByChangeInfo.h"
 
+#include <boost/iterator/iterator_facade.hpp>
+#include <folly/container/MapUtil.h>
 #include <gtest/gtest.h>
+
+#include <optional>
+#include <stdexcept>
 
 namespace facebook::rebalancer {
 

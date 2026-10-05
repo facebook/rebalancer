@@ -14,7 +14,15 @@
 
 #include "algopt/rebalancer/solver/utils/BoundConstraints.h"
 
+#include "algopt/rebalancer/entities/Identifiers.h"
+#include "algopt/rebalancer/solver/utils/Util.h"
+
+#include "multifeed/hash/HeterogeneousAccess.h"
+#include "multifeed/hash/QuickHashSet.h"
+
 #include <fmt/core.h>
+
+#include <stdexcept>
 
 namespace facebook::rebalancer {
 

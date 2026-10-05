@@ -14,9 +14,12 @@
 
 #include "algopt/rebalancer/solver/utils/Change.h"
 
+#include "algopt/rebalancer/entities/Identifiers.h"
+
 #include <fmt/core.h>
 
 #include <sstream>
+#include <stdexcept>
 
 namespace facebook::rebalancer {
 

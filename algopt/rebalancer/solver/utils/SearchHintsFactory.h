@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "algopt/rebalancer/interface/thrift/gen-cpp2/SolverSpecs_types.h"
 #include "algopt/rebalancer/solver/moves/MoveType.h"
 #include "algopt/rebalancer/solver/utils/SearchHints.h"
 

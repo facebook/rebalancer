@@ -15,10 +15,16 @@
 #include "algopt/rebalancer/treeprof/Profiler.h"
 
 #include "algopt/rebalancer/algopt_common/Timer.h"
+#include "algopt/rebalancer/treeprof/Event.h"
 #include "algopt/rebalancer/treeprof/EventHolder.h"
 #include "algopt/rebalancer/treeprof/ThreadMemoryMonitor.h"
 
+#include <folly/io/async/Request.h>
+
+#include <functional>
 #include <stdexcept>
+#include <stdint.h>
+#include <utility>
 
 namespace facebook::algopt::treeprof {
 

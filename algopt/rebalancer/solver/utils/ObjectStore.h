@@ -20,7 +20,18 @@
 #include "algopt/rebalancer/entities/ObjectValueTypes.h"
 #include "algopt/rebalancer/solver/utils/Util.h"
 
+#include <boost/iterator/iterator_facade.hpp>
+#include <folly/container/MapUtil.h>
+#include <folly/lang/Hint.h>
+
+#include <iterator>
+#include <list>
 #include <memory>
+#include <set>
+#include <stddef.h>
+#include <type_traits>
+#include <utility>
+#include <variant>
 
 namespace facebook::rebalancer {
 

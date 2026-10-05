@@ -12,18 +12,40 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "algopt/rebalancer/entities/Map.h"
 #include "algopt/rebalancer/entities/tests/UniverseBuilderTestUtils.h"
+#include "algopt/rebalancer/entities/Universe.h"
+#include "algopt/rebalancer/interface/thrift/gen-cpp2/Types_types.h"
 #include "algopt/rebalancer/solver/expressions/Operators.h"
 #include "algopt/rebalancer/solver/moves/MoveResult.h"
+#include "algopt/rebalancer/solver/moves/MoveSet.h"
 #include "algopt/rebalancer/solver/moves/MoveStatsAggregator.h"
+#include "algopt/rebalancer/solver/summary/LabeledExpressions.h"
 #include "algopt/rebalancer/solver/tests/ExprProblemCreation.h"
+#include "algopt/rebalancer/solver/utils/GlobalObjectiveValue.h"
 #include "algopt/rebalancer/solver/utils/MovesSummaryHelper.h"
+#include "algopt/rebalancer/solver/utils/Precision.h"
+#include "algopt/rebalancer/solver/utils/Problem.h"
 
+#include "multifeed/hash/HeterogeneousAccess.h"
+
+#include <boost/iterator/iterator_facade.hpp>
+#include <fmt/core.h>
 #include <fmt/format.h>
 #include <folly/container/irange.h>
+#include <folly/container/MapUtil.h>
+#include <folly/ExceptionWrapper.h>
+#include <folly/tracing/AsyncStack.h>
 #include <gtest/gtest.h>
+#include <thrift/lib/cpp2/FieldRef.h>
 
+#include <map>
 #include <memory>
+#include <optional>
+#include <ranges>
+#include <string>
+#include <utility>
+#include <vector>
 
 namespace facebook::rebalancer::packer::tests {
 namespace {

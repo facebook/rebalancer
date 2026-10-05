@@ -17,12 +17,19 @@
 #include "algopt/rebalancer/entities/Identifiers.h"
 #include "algopt/rebalancer/entities/Map.h"
 #include "algopt/rebalancer/entities/Set.h"
+#include "algopt/rebalancer/entities/Universe.h"
+#include "algopt/rebalancer/solver/expressions/Expression.h"
 #include "algopt/rebalancer/solver/moves/InvalidMoveFilter.h"
 #include "algopt/rebalancer/solver/summary/GlobalLabeledObjectives.h"
 #include "algopt/rebalancer/solver/summary/LabeledConstraints.h"
 #include "algopt/rebalancer/solver/summary/metrics/Metrics.h"
 #include "algopt/rebalancer/solver/utils/GlobalObjective.h"
 #include "algopt/rebalancer/solver/utils/GoalInfo.h"
+
+#include <memory>
+#include <optional>
+#include <utility>
+#include <vector>
 
 namespace facebook::rebalancer {
 

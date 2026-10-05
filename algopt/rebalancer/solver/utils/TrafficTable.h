@@ -15,9 +15,19 @@
 #pragma once
 
 #include "algopt/rebalancer/algopt_common/Precision.h"
+#include "algopt/rebalancer/entities/Map.h"
 #include "algopt/rebalancer/entities/Universe.h"
 
+#include <fmt/core.h>
+#include <folly/container/MapUtil.h>
+
+#include <functional>
+#include <limits>
+#include <map>
+#include <memory>
 #include <stdexcept>
+#include <string>
+#include <utility>
 
 namespace facebook::rebalancer {
 

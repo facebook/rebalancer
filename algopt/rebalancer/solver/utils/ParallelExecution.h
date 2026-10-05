@@ -15,17 +15,23 @@
 #pragma once
 
 #include <folly/container/irange.h>
+#include <folly/CPortability.h>
+#include <folly/ExceptionWrapper.h>
 #include <folly/executors/ThreadPoolExecutor.h>
 #include <folly/lang/Align.h>
+#include <folly/Likely.h>
 #include <folly/MPMCQueue.h>
+#include <folly/Optional.h>
 #include <folly/synchronization/Baton.h>
 #include <folly/Try.h>
 
 #include <algorithm>
 #include <atomic>
 #include <cstddef>
+#include <exception>
 #include <memory>
 #include <optional>
+#include <ranges>
 #include <stdexcept>
 #include <type_traits>
 #include <utility>

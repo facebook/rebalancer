@@ -18,6 +18,8 @@
 
 #include <memory>
 #include <optional>
+#include <stdint.h>
+#include <string>
 #include <vector>
 
 namespace facebook::algopt::treeprof {

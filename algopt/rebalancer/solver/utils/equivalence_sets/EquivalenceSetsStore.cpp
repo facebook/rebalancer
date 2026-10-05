@@ -15,11 +15,39 @@
 #include "algopt/rebalancer/solver/utils/equivalence_sets/EquivalenceSetsStore.h"
 
 #include "algopt/rebalancer/algopt_common/FilterAndTransformUtils.h"
+#include "algopt/rebalancer/algopt_common/thrift/gen-cpp2/Types_types.h"
 #include "algopt/rebalancer/algopt_common/Utils.h"
+#include "algopt/rebalancer/entities/Partition.h"
 #include "algopt/rebalancer/entities/Universe.h"
+#include "algopt/rebalancer/materializer/utils/Cache.h"
+#include "algopt/rebalancer/solver/expressions/Expression.h"
 #include "algopt/rebalancer/solver/expressions/Orchestrator.h"
+#include "algopt/rebalancer/solver/utils/AffectedByChangeInfo.h"
+#include "algopt/rebalancer/solver/utils/equivalence_sets/EquivalenceSets.h"
+#include "algopt/rebalancer/solver/utils/MaterializedProblem.h"
 #include "algopt/rebalancer/solver/utils/Problem.h"
+#include "algopt/rebalancer/solver/utils/Util.h"
+#include "algopt/rebalancer/treeprof/Event.h"
 #include "algopt/rebalancer/treeprof/EventRecorder.h"
+
+#include "multifeed/hash/QuickHashMap.h"
+
+#include <boost/iterator/iterator_facade.hpp>
+#include <fmt/core.h>
+#include <fmt/format.h>
+#include <folly/hash/Hash.h>
+#include <folly/lang/Hint.h>
+#include <folly/logging/LogStreamProcessor.h>
+#include <folly/logging/xlog.h>
+#include <folly/String.h>
+#include <thrift/lib/cpp2/FieldRef.h>
+
+#include <assert.h>
+#include <functional>
+#include <ostream>
+#include <ranges>
+#include <stdexcept>
+#include <utility>
 
 namespace facebook::rebalancer {
 

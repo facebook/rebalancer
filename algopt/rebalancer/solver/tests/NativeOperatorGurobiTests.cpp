@@ -19,19 +19,42 @@
 // is not available.
 
 #include "algopt/lp/environment/Environment.h"
+#include "algopt/lp/generic/Problem.h"
+#include "algopt/lp/generic/thrift/gen-cpp2/problem_types.h"
+#include "algopt/rebalancer/entities/Containers.h"
+#include "algopt/rebalancer/entities/Map.h"
 #include "algopt/rebalancer/entities/tests/UniverseBuilderTestUtils.h"
+#include "algopt/rebalancer/entities/Universe.h"
 #include "algopt/rebalancer/interface/thrift/gen-cpp2/SolverSpecs_types.h"
+#include "algopt/rebalancer/solver/expressions/Expression.h"
 #include "algopt/rebalancer/solver/expressions/Operators.h"
 #include "algopt/rebalancer/solver/expressions/Orchestrator.h"
+#include "algopt/rebalancer/solver/solvers/LPStore.h"
 #include "algopt/rebalancer/solver/solvers/OptimalSolver.h"
 #include "algopt/rebalancer/solver/tests/ExprProblemCreation.h"
 #include "algopt/rebalancer/solver/utils/Assignment.h"
 #include "algopt/rebalancer/solver/utils/Problem.h"
 #include "algopt/rebalancer/tests/SolverTestUtils.h"
 
+#include "multifeed/hash/HeterogeneousAccess.h"
+
+#include <boost/iterator/iterator_facade.hpp>
+#include <fmt/core.h>
 #include <folly/container/irange.h>
+#include <folly/container/MapUtil.h>
+#include <folly/ExceptionWrapper.h>
 #include <folly/ScopeGuard.h>
+#include <folly/tracing/AsyncStack.h>
 #include <gtest/gtest.h>
+#include <thrift/lib/cpp2/FieldRef.h>
+
+#include <initializer_list>
+#include <iterator>
+#include <memory>
+#include <ranges>
+#include <string>
+#include <utility>
+#include <vector>
 
 namespace algopt = facebook::algopt;
 

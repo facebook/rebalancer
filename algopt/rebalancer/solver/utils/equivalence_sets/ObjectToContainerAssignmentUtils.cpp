@@ -15,8 +15,24 @@
 #include "algopt/rebalancer/solver/utils/equivalence_sets/ObjectToContainerAssignmentUtils.h"
 
 #include "algopt/rebalancer/solver/utils/Assignment.h"
+#include "algopt/rebalancer/solver/utils/equivalence_sets/EquivalenceSets.h"
+#include "algopt/rebalancer/solver/utils/ObjectStore.h"
 
+#include "multifeed/hash/HeterogeneousAccess.h"
+#include "multifeed/hash/QuickHashMap.h"
+#include "multifeed/hash/QuickHashSet.h"
+
+#include <boost/iterator/iterator_facade.hpp>
+#include <fmt/core.h>
+#include <fmt/format.h>
+
+#include <algorithm>
+#include <iterator>
+#include <limits>
 #include <random>
+#include <ranges>
+#include <set>
+#include <stdexcept>
 
 namespace facebook::rebalancer {
 

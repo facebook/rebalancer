@@ -14,6 +14,16 @@
 
 #include "algopt/rebalancer/solver/summary/LabeledConstraints.h"
 
+#include "algopt/rebalancer/solver/expressions/Expression.h"
+#include "algopt/rebalancer/solver/summary/LabeledExpressions.h"
+
+#include <thrift/lib/cpp2/FieldRef.h>
+
+#include <memory>
+#include <string>
+#include <utility>
+#include <vector>
+
 namespace facebook::rebalancer {
 
 interface::ConstraintSummary LabeledConstraints::getSummary() const {

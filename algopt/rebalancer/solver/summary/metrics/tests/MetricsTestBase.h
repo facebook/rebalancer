@@ -13,12 +13,24 @@
 // limitations under the License.
 
 #pragma once
+
 #include "algopt/rebalancer/entities/builders/AsyncUniverseBuilder.h"
+#include "algopt/rebalancer/entities/builders/RoutingConfigsBuilder.h"
+#include "algopt/rebalancer/entities/Identifiers.h"
+#include "algopt/rebalancer/entities/Map.h"
 #include "algopt/rebalancer/entities/RoutingConfig.h"
+#include "algopt/rebalancer/entities/RoutingRing.h"
 #include "algopt/rebalancer/solver/expressions/tests/ExpressionTestsBase.h"
 
 #include <folly/coro/BlockingWait.h>
+#include <folly/coro/Task.h>
 #include <gtest/gtest.h>
+
+#include <coroutine>
+#include <memory>
+#include <string>
+#include <utility>
+#include <vector>
 
 namespace facebook::rebalancer::packer::tests {
 

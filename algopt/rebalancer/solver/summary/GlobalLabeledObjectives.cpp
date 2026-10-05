@@ -14,8 +14,14 @@
 
 #include "algopt/rebalancer/solver/summary/GlobalLabeledObjectives.h"
 
+#include "algopt/rebalancer/solver/summary/LabeledObjectives.h"
+#include "algopt/rebalancer/solver/utils/GlobalObjective.h"
+
 #include <fmt/core.h>
 #include <folly/container/irange.h>
+
+#include <ranges>
+#include <stdexcept>
 
 namespace facebook::rebalancer {
 

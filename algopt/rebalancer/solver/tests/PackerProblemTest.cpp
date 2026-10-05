@@ -15,20 +15,54 @@
 #include "algopt/rebalancer/interface/Constants.h"
 #include "algopt/rebalancer/interface/ProblemSolver.h"
 #include "algopt/rebalancer/interface/tests/utils.h"
+#include "algopt/rebalancer/interface/thrift/gen-cpp2/ProblemSolver_types.h"
 #include "algopt/rebalancer/interface/thrift/gen-cpp2/ProblemSpecs_types.h"
+#include "algopt/rebalancer/interface/thrift/gen-cpp2/SolverSpecs_types.h"
+#include "algopt/rebalancer/interface/thrift/gen-cpp2/Types_types.h"
 #include "algopt/rebalancer/tests/SolverTestUtils.h"
 
+#include <boost/iterator/iterator_facade.hpp>
+#include <fmt/core.h>
 #include <fmt/format.h>
+#include <folly/ConstexprMath.h>
+#include <folly/container/F14Map.h>
 #include <folly/container/irange.h>
+#include <folly/container/MapUtil.h>
+#include <folly/ExceptionWrapper.h>
 #include <folly/executors/CPUThreadPoolExecutor.h>
+#include <folly/lang/Assume.h>
+#include <folly/lang/Bits.h>
+#include <folly/lang/Hint.h>
 #include <folly/logging/Init.h>
+#include <folly/logging/LogStreamProcessor.h>
+#include <folly/logging/xlog.h>
+#include <folly/Range.h>
+#include <folly/tracing/AsyncStack.h>
+#include <folly/Traits.h>
+#include <folly/Utility.h>
 #include <gtest/gtest.h>
+#include <thrift/lib/cpp2/FieldRef.h>
+#include <thrift/lib/cpp2/op/Get.h>
 
+#include <algorithm>
+#include <exception>
 #include <filesystem>
+#include <initializer_list>
+#include <iterator>
+#include <map>
+#include <memory>
+#include <new>
 #include <optional>
+#include <ostream>
 #include <ranges>
+#include <stdint.h>
 #include <string>
 #include <tuple>
+#include <type_traits>
+#include <unordered_map>
+#include <unordered_set>
+#include <utility>
+#include <vector>
 
 /************
  * This file provides unit tests for complete problem definition

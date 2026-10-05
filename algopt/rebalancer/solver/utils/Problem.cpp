@@ -14,21 +14,68 @@
 
 #include "algopt/rebalancer/solver/utils/Problem.h"
 
+#include "algopt/lp/generic/Variable.h"
+#include "algopt/rebalancer/common/log/RebalancerLog.h"
+#include "algopt/rebalancer/entities/Containers.h"
 #include "algopt/rebalancer/entities/Identifiers.h"
+#include "algopt/rebalancer/entities/ObjectDimension.h"
+#include "algopt/rebalancer/entities/Objects.h"
+#include "algopt/rebalancer/entities/ObjectScalarDimension.h"
+#include "algopt/rebalancer/entities/Partition.h"
+#include "algopt/rebalancer/entities/Scope.h"
+#include "algopt/rebalancer/entities/Set.h"
+#include "algopt/rebalancer/entities/Universe.h"
 #include "algopt/rebalancer/interface/Constants.h"
+#include "algopt/rebalancer/solver/expressions/Expression.h"
 #include "algopt/rebalancer/solver/expressions/ObjectLookup.h"
+#include "algopt/rebalancer/solver/expressions/Orchestrator.h"
 #include "algopt/rebalancer/solver/moves/DestinationsToExploreGenerator.h"
+#include "algopt/rebalancer/solver/moves/InvalidMoveFilter.h"
+#include "algopt/rebalancer/solver/moves/MoveResult.h"
+#include "algopt/rebalancer/solver/moves/MoveSet.h"
+#include "algopt/rebalancer/solver/moves/MoveStatsAggregator.h"
 #include "algopt/rebalancer/solver/moves/ObjectsToExploreGenerator.h"
+#include "algopt/rebalancer/solver/solvers/LPStore.h"
+#include "algopt/rebalancer/solver/summary/GlobalLabeledObjectives.h"
+#include "algopt/rebalancer/solver/summary/LabeledConstraints.h"
+#include "algopt/rebalancer/solver/summary/LabeledExpressions.h"
+#include "algopt/rebalancer/solver/summary/LabeledObjectives.h"
+#include "algopt/rebalancer/solver/summary/metrics/Metrics.h"
+#include "algopt/rebalancer/solver/utils/AffectedByChangeInfo.h"
+#include "algopt/rebalancer/solver/utils/Assignment.h"
 #include "algopt/rebalancer/solver/utils/Change.h"
+#include "algopt/rebalancer/solver/utils/ChangeSet.h"
 #include "algopt/rebalancer/solver/utils/Context.h"
+#include "algopt/rebalancer/solver/utils/EntityAttributesStore.h"
 #include "algopt/rebalancer/solver/utils/equivalence_sets/EquivalenceSets.h"
 #include "algopt/rebalancer/solver/utils/equivalence_sets/EquivalenceSetsStore.h"
 #include "algopt/rebalancer/solver/utils/equivalence_sets/ObjectToContainerAssignmentUtils.h"
+#include "algopt/rebalancer/solver/utils/GlobalObjective.h"
+#include "algopt/rebalancer/solver/utils/GlobalObjectiveValue.h"
+#include "algopt/rebalancer/solver/utils/MaterializedProblem.h"
+#include "algopt/rebalancer/solver/utils/ObjectStore.h"
+#include "algopt/rebalancer/solver/utils/ProblemConfigs.h"
+#include "algopt/rebalancer/solver/utils/SimilarContainers.h"
+#include "algopt/rebalancer/solver/utils/Util.h"
 #include "algopt/rebalancer/treeprof/EventRecorder.h"
 
-#include <fmt/core.h>
-#include <folly/logging/xlog.h>
+#include "multifeed/hash/HeterogeneousAccess.h"
+#include "multifeed/hash/QuickHashMap.h"
+#include "multifeed/hash/QuickHashSet.h"
 
+#include <boost/iterator/iterator_facade.hpp>
+#include <fmt/core.h>
+#include <fmt/format.h>
+#include <folly/container/MapUtil.h>
+#include <folly/CppAttributes.h>
+#include <folly/executors/ThreadPoolExecutor.h>
+#include <folly/Function.h>
+#include <folly/logging/LogStreamProcessor.h>
+#include <folly/logging/xlog.h>
+#include <thrift/lib/cpp2/FieldRef.h>
+
+#include <ostream>
+#include <ranges>
 #include <stdexcept>
 
 namespace facebook::rebalancer {

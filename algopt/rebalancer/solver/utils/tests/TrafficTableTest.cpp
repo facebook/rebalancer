@@ -12,9 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "algopt/rebalancer/entities/Map.h"
 #include "algopt/rebalancer/solver/utils/TrafficTable.h"
 
+#include <boost/iterator/iterator_facade.hpp>
 #include <gtest/gtest.h>
+
+#include <map>
+#include <stdexcept>
+#include <string>
+#include <utility>
 
 namespace facebook::rebalancer::packer::tests {
 

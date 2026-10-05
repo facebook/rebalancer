@@ -20,6 +20,8 @@
 #include <folly/io/async/Request.h>
 
 #include <memory>
+#include <optional>
+#include <string>
 
 namespace facebook::algopt::treeprof {
 
