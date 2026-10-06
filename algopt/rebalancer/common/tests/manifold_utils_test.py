@@ -41,6 +41,7 @@ def get_mock_manifold_client() -> MagicMock:
     m.__enter__.return_value = m
     m.get = AsyncMagicMock()
     m.return_value = m
+    m.get_client.return_value = m
     return m
 
 
@@ -66,31 +67,21 @@ def get_mock_manifold_download(
 
 class ManifoldUtilsTest(BaseFacebookTestCase):
     def test_manifold_upload(self) -> None:
-        sync_put_name = (
-            "algopt.rebalancer.common.manifold_utils.ManifoldClient.sync_put"
-        )
-
-        def fake_sync_put(
-            # pyre-fixme[2]: Parameter must be annotated.
-            self,
-            # pyre-fixme[2]: Parameter must be annotated.
-            path,
-            ttl: int = 0,
-            parallelPrefixPath: str = "",
-        ) -> None:
-            pass
-
         with (
-            patch(sync_put_name, side_effect=fake_sync_put) as sync_put_fn,
+            patch(
+                "algopt.rebalancer.common.manifold_utils.ManifoldClient",
+                new_callable=get_mock_manifold_client,
+            ) as mock_ManifoldClient,
             patch("builtins.open", mock_open(read_data="data")) as mock_file,
         ):
             uploadToManifold("problem.json", "prefix", "uuid")
 
             mock_file.assert_called_with("problem.json", "rb")
 
-            sync_put_fn.assert_called_once()
+            mock_ManifoldClient.get_client.assert_called_once_with("rebalancer")
+            mock_ManifoldClient.sync_put.assert_called_once()
 
-            call_args = sync_put_fn.call_args
+            call_args = mock_ManifoldClient.sync_put.call_args
             # call_args[0] is positional args and [1] is kwargs
             # path
             self.assertEqual(call_args[0][0], "flat/prefix_uuid")
@@ -100,22 +91,18 @@ class ManifoldUtilsTest(BaseFacebookTestCase):
             )
 
     def test_manifold_download(self) -> None:
-        sync_get_name = (
-            "algopt.rebalancer.common.manifold_utils.ManifoldClient.sync_get"
-        )
-
-        # pyre-fixme[2]: Parameter must be annotated.
-        def fake_sync_get(path, file_stream) -> None:
-            pass
-
-        with patch(sync_get_name, side_effect=fake_sync_get) as sync_get_fn:
+        with patch(
+            "algopt.rebalancer.common.manifold_utils.ManifoldClient",
+            new_callable=get_mock_manifold_client,
+        ) as mock_ManifoldClient:
             file_stream = Mock()
 
             downloadFromManifold(file_stream, "prefix", "uuid")
 
-            sync_get_fn.assert_called_once()
+            mock_ManifoldClient.assert_called_once_with("rebalancer")
+            mock_ManifoldClient.sync_get.assert_called_once()
 
-            call_args = sync_get_fn.call_args
+            call_args = mock_ManifoldClient.sync_get.call_args
             # call_args[0] is positional args and [1] is kwargs
             # path
             self.assertEqual(call_args[0][0], "flat/prefix_uuid")
