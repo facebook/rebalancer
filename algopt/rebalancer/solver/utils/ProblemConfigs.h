@@ -47,6 +47,7 @@ struct ProblemConfigs {
   std::optional<std::string> decompositionScopeName;
   bool enableParallelizedLpBuilding = false;
   bool useDynamicObjectOrdering = false;
+  bool useIncrementalPriorityQueueV2 = false;
   bool validateAppliedMoves = false;
   bool enableParallelizedBoundsComputing = false;
   bool addMetricsExprsToOrchestrator = false;

@@ -15,12 +15,12 @@
 #pragma once
 
 #include "algopt/rebalancer/algopt_common/IncrementalPriorityQueue.h"
+#include "algopt/rebalancer/algopt_common/IncrementalPriorityQueueV2.h"
 #include "algopt/rebalancer/solver/expressions/Expression.h"
 #include "algopt/rebalancer/solver/iterators/ExpressionIterator.h"
 #include "algopt/rebalancer/solver/utils/GlobalObjective.h"
 
 #include <iterator>
-#include <queue>
 #include <vector>
 
 namespace facebook::rebalancer {
@@ -78,7 +78,6 @@ struct ContainerWithPriority {
 } // namespace facebook::rebalancer
 
 namespace std {
-// define std::hash for ContainerWithPriority so it can be used in hash tables
 template <>
 struct hash<facebook::rebalancer::ContainerWithPriority> {
   std::size_t operator()(const facebook::rebalancer::ContainerWithPriority&
@@ -88,8 +87,14 @@ struct hash<facebook::rebalancer::ContainerWithPriority> {
 
 namespace facebook::rebalancer {
 
+using ContainerPriorityQueueV1 =
+    facebook::algopt::IncrementalPriorityQueue<ContainerWithPriority>;
+using ContainerPriorityQueueV2 =
+    facebook::algopt::IncrementalPriorityQueueV2<ContainerWithPriority>;
+
 // Iterates efficiently over containers directly affected by expressions in the
 // order given by an ExpressionIterator, without repetitions.
+template <class Queue = ContainerPriorityQueueV1>
 class ExpressionContainersIterator
     : public std::iterator<std::input_iterator_tag, entities::ContainerId> {
  public:
@@ -116,19 +121,19 @@ class ExpressionContainersIterator
 
  private:
   expression_iterator_ranges ranges;
-  facebook::algopt::IncrementalPriorityQueue<ContainerWithPriority> queue;
+  Queue queue;
   size_t current_range_index_ = 0;
   bool skipOptimalExpressions_;
   PackerMap<entities::ContainerId, int> container_to_pos;
   uint64_t randomSeed_;
 };
 
+template <class Queue = ContainerPriorityQueueV1>
 class DescendingExpressionContainersTraversal {
  public:
   using value_type = entities::ContainerId;
-  using const_iterator = ExpressionContainersIterator;
+  using const_iterator = ExpressionContainersIterator<Queue>;
 
- public:
   explicit DescendingExpressionContainersTraversal(
       const GlobalObjective::View& objectiveView,
       bool skipOptimalExpressions = false,
@@ -136,8 +141,8 @@ class DescendingExpressionContainersTraversal {
           getDefaultTraversalConfig(),
       uint64_t randomSeed = 0);
 
-  ExpressionContainersIterator begin() const;
-  ExpressionContainersIterator end() const;
+  const_iterator begin() const;
+  const_iterator end() const;
 
  private:
   static const interface::HottestTraversalConfig& getDefaultTraversalConfig() {

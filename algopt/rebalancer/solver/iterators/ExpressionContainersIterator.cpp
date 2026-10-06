@@ -19,7 +19,6 @@
 #include <cassert>
 
 namespace std {
-// define std::hash for ContainerWithPriority so it can be used in hash tables
 std::size_t hash<facebook::rebalancer::ContainerWithPriority>::operator()(
     const facebook::rebalancer::ContainerWithPriority& containerWithPriority)
     const noexcept {
@@ -38,7 +37,8 @@ namespace facebook::rebalancer {
 // Optimization 2: do not expand a node v if all the containers affected by it
 // are fixed containers
 
-ExpressionContainersIterator::ExpressionContainersIterator(
+template <class Queue>
+ExpressionContainersIterator<Queue>::ExpressionContainersIterator(
     expression_iterator_ranges ranges,
     bool skipOptimalExpressions,
     uint64_t randomSeed)
@@ -48,34 +48,42 @@ ExpressionContainersIterator::ExpressionContainersIterator(
   feed_queue();
 }
 
-ExpressionContainersIterator& ExpressionContainersIterator::operator++() {
+template <class Queue>
+ExpressionContainersIterator<Queue>&
+ExpressionContainersIterator<Queue>::operator++() {
   assert(!queue.empty());
   queue.remove(queue.top());
   feed_queue();
   return *this;
 }
 
-bool ExpressionContainersIterator::operator==(
+template <class Queue>
+bool ExpressionContainersIterator<Queue>::operator==(
     const ExpressionContainersIterator& other) const {
   // Domain of equality: any pair of valid iterators from the same traversal
   // where at least one points to the end.
   return queue.empty() == other.queue.empty();
 }
 
-bool ExpressionContainersIterator::operator!=(
+template <class Queue>
+bool ExpressionContainersIterator<Queue>::operator!=(
     const ExpressionContainersIterator& other) const {
   return !(*this == other);
 }
 
-const entities::ContainerId& ExpressionContainersIterator::operator*() const {
+template <class Queue>
+const entities::ContainerId& ExpressionContainersIterator<Queue>::operator*()
+    const {
   return queue.top().containerId;
 }
 
-bool ExpressionContainersIterator::yields_unique_container() const {
+template <class Queue>
+bool ExpressionContainersIterator<Queue>::yields_unique_container() const {
   return !queue.empty() && queue.is_top_strict();
 }
 
-void ExpressionContainersIterator::feed_queue() {
+template <class Queue>
+void ExpressionContainersIterator<Queue>::feed_queue() {
   // 1: if current_range_index_ >= ranges.size() we exhausted all expressions in
   // global objective
   // 2: if yields_unique_container, nothing to do, we can return early
@@ -124,26 +132,29 @@ void ExpressionContainersIterator::feed_queue() {
   }
 }
 
-void ExpressionContainersIterator::addContainers(
+template <class Queue>
+void ExpressionContainersIterator<Queue>::addContainers(
     const PackerSet<entities::ContainerId>& containers,
     [[maybe_unused]] int objective_pos) {
   queue.update(randomizeContainers(containers));
 }
 
-ContainerWithPriority ExpressionContainersIterator::randomizeContainer(
-    entities::ContainerId containerId) const {
+template <class Queue>
+ContainerWithPriority ExpressionContainersIterator<Queue>::randomizeContainer(
+    const entities::ContainerId containerId) const {
   return ContainerWithPriority{
       .containerId = containerId,
       .priority = folly::hash::twang_32from64(
           (uint64_t(randomSeed_) << 32) | static_cast<size_t>(containerId))};
 }
 
+template <class Queue>
 std::vector<ContainerWithPriority>
-ExpressionContainersIterator::randomizeContainers(
+ExpressionContainersIterator<Queue>::randomizeContainers(
     const PackerSet<entities::ContainerId>& containerIds) const {
   std::vector<ContainerWithPriority> randomizedContainers;
   randomizedContainers.reserve(containerIds.size());
-  for (const entities::ContainerId containerId : containerIds) {
+  for (const auto containerId : containerIds) {
     randomizedContainers.push_back(randomizeContainer(containerId));
   }
   return randomizedContainers;
@@ -157,7 +168,8 @@ bool ContainerWithPriority::operator<(
   return containerId < other.containerId;
 }
 
-DescendingExpressionContainersTraversal::
+template <class Queue>
+DescendingExpressionContainersTraversal<Queue>::
     DescendingExpressionContainersTraversal(
         const GlobalObjective::View& objectiveView,
         bool skipOptimalExpressions,
@@ -170,7 +182,8 @@ DescendingExpressionContainersTraversal::
   initTraversal(objectiveView, effectiveTraversalConfig);
 }
 
-void DescendingExpressionContainersTraversal::initTraversal(
+template <class Queue>
+void DescendingExpressionContainersTraversal<Queue>::initTraversal(
     const GlobalObjective::View& objectiveView,
     const interface::HottestTraversalConfig& traversalConfig) {
   auto shouldExpand = [](Expression* node) {
@@ -211,18 +224,27 @@ void DescendingExpressionContainersTraversal::initTraversal(
   }
 }
 
-ExpressionContainersIterator DescendingExpressionContainersTraversal::begin()
-    const {
+template <class Queue>
+typename DescendingExpressionContainersTraversal<Queue>::const_iterator
+DescendingExpressionContainersTraversal<Queue>::begin() const {
   expression_iterator_ranges ranges;
   for (const auto& [traversal, objective_pos] : expression_traversals_) {
     ranges.emplace_back(traversal.begin(), traversal.end(), objective_pos);
   }
-  return ExpressionContainersIterator(
+  return const_iterator(
       std::move(ranges), skipOptimalExpressions_, randomSeed_);
 }
 
-ExpressionContainersIterator DescendingExpressionContainersTraversal::end()
-    const {
-  return ExpressionContainersIterator({}, false, randomSeed_);
+template <class Queue>
+typename DescendingExpressionContainersTraversal<Queue>::const_iterator
+DescendingExpressionContainersTraversal<Queue>::end() const {
+  return const_iterator({}, false, randomSeed_);
 }
+
+template class ExpressionContainersIterator<ContainerPriorityQueueV1>;
+template class ExpressionContainersIterator<ContainerPriorityQueueV2>;
+template class DescendingExpressionContainersTraversal<
+    ContainerPriorityQueueV1>;
+template class DescendingExpressionContainersTraversal<
+    ContainerPriorityQueueV2>;
 } // namespace facebook::rebalancer

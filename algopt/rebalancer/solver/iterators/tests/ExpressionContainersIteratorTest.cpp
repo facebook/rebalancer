@@ -89,11 +89,16 @@ TEST_F(ExpressionContainersIteratorTest, ExpressionContainersTraversal) {
   objectiveExpr->init_unconstrained_bounds(context);
 
   const DescendingExpressionContainersTraversal descending(objective.getView());
+  const DescendingExpressionContainersTraversal<ContainerPriorityQueueV2>
+      descendingV2(objective.getView());
   const std::vector<entities::ContainerId> descending_expected = {
       container(3), container(1), container(2)};
   const std::vector<entities::ContainerId> descending_actual(
       descending.begin(), descending.end());
+  const std::vector<entities::ContainerId> descendingV2Actual(
+      descendingV2.begin(), descendingV2.end());
   EXPECT_EQ(descending_expected, descending_actual);
+  EXPECT_EQ(descending_expected, descendingV2Actual);
 
   verifyIfNodesInSubgraphAffectSameContainers(
       {{a, true}, {b, true}, {c, true}, {d, false}, {e, false}});

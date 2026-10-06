@@ -23,6 +23,19 @@ namespace facebook::rebalancer {
 
 namespace {
 
+template <class ContainerQueue>
+auto makeExpressionContainerIterators(
+    const GlobalObjective::View& objectiveView,
+    const interface::HottestTraversalConfig& traversalConfig,
+    uint64_t randomSeed) {
+  return makeStlWrapperIterators(
+      DescendingExpressionContainersTraversal<ContainerQueue>(
+          objectiveView,
+          /*skipOptimalExpressions=*/true,
+          traversalConfig,
+          randomSeed));
+}
+
 /**
  * Retrieves containers with the worst objective values for optimization.
  *
@@ -45,7 +58,8 @@ resetHotContainerTraversal(
     uint64_t randomSeed,
     const Assignment& assignment,
     bool enableObjectPotentialSorting,
-    const interface::HottestTraversalConfig& traversalConfig) {
+    const interface::HottestTraversalConfig& traversalConfig,
+    bool useIncrementalPriorityQueueV2) {
   if (enableObjectPotentialSorting) {
     if (objectiveView.size() == 0) {
       return makeStlWrapperIterators(std::vector<entities::ContainerId>());
@@ -61,11 +75,11 @@ resetHotContainerTraversal(
         transform));
     return {container.begin(), container.end()};
   }
-  return makeStlWrapperIterators(DescendingExpressionContainersTraversal(
-      objectiveView,
-      /*skipOptimalExpressions=*/true,
-      traversalConfig,
-      randomSeed));
+  return useIncrementalPriorityQueueV2
+      ? makeExpressionContainerIterators<ContainerPriorityQueueV2>(
+            objectiveView, traversalConfig, randomSeed)
+      : makeExpressionContainerIterators<ContainerPriorityQueueV1>(
+            objectiveView, traversalConfig, randomSeed);
 }
 
 /**
@@ -166,7 +180,8 @@ void HotContainerSelector::reset() {
       randomSeed_,
       problem_.assignment,
       enableObjectPotentialSorting_,
-      traversalConfig_);
+      traversalConfig_,
+      problem_.configs.useIncrementalPriorityQueueV2);
   containersIterator_ = std::move(begin);
   containersIteratorEnd_ = std::move(end);
 
