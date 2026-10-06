@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include "algopt/rebalancer/algopt_common/IncrementalPriorityQueue.h"
+#include "algopt/rebalancer/algopt_common/IncrementalPriorityQueueV2.h"
 #include "algopt/rebalancer/algopt_common/TestUtils.h"
 
 #include <folly/container/irange.h>
@@ -23,13 +24,22 @@
 #include <random>
 #include <set>
 #include <string>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
 namespace facebook::algopt::tests {
 
-TEST(IncrementalPriorityQueueTest, Basic) {
-  IncrementalPriorityQueue<std::string> sorter;
+template <class Queue>
+class IncrementalPriorityQueueTest : public ::testing::Test {};
+
+using QueueTypes = ::testing::Types<
+    IncrementalPriorityQueue<std::string>,
+    IncrementalPriorityQueueV2<std::string>>;
+TYPED_TEST_SUITE(IncrementalPriorityQueueTest, QueueTypes);
+
+TYPED_TEST(IncrementalPriorityQueueTest, Basic) {
+  TypeParam sorter;
   ASSERT_EQ(0, sorter.size());
 
   sorter.update({"a", "b"});
@@ -54,8 +64,8 @@ TEST(IncrementalPriorityQueueTest, Basic) {
   EXPECT_EQ("c", sorter.top());
 }
 
-TEST(IncrementalPriorityQueueTest, Ties) {
-  IncrementalPriorityQueue<std::string> sorter;
+TYPED_TEST(IncrementalPriorityQueueTest, Ties) {
+  TypeParam sorter;
   ASSERT_EQ(0, sorter.size());
 
   sorter.update({"a", "b", "c"});
@@ -102,16 +112,20 @@ TEST(IncrementalPriorityQueueTest, Ties) {
   ASSERT_EQ(0, sorter.size());
 }
 
-TEST(IncrementalPriorityQueueTest, EmptyException) {
-  const IncrementalPriorityQueue<std::string> sorter;
-  REBALANCER_EXPECT_RUNTIME_ERROR(sorter.top(), "empty");
-  REBALANCER_EXPECT_RUNTIME_ERROR(sorter.is_top_strict(), "empty");
+TYPED_TEST(IncrementalPriorityQueueTest, EmptyException) {
+  const TypeParam sorter;
+  constexpr auto expectedMessage =
+      std::is_same_v<TypeParam, IncrementalPriorityQueueV2<std::string>>
+      ? "IncrementalPriorityQueueV2 is expected to be non-empty"
+      : "empty";
+  REBALANCER_EXPECT_RUNTIME_ERROR(sorter.top(), expectedMessage);
+  REBALANCER_EXPECT_RUNTIME_ERROR(sorter.is_top_strict(), expectedMessage);
 }
 
 // Listing an item twice in one update() counts twice. In the second update
 // "b" and "c" start out tied, and the repeat puts "b" ahead.
-TEST(IncrementalPriorityQueueTest, DuplicateWithinSingleUpdate) {
-  IncrementalPriorityQueue<std::string> sorter;
+TYPED_TEST(IncrementalPriorityQueueTest, DuplicateWithinSingleUpdate) {
+  TypeParam sorter;
   sorter.update({"a", "a", "b", "c"});
   ASSERT_EQ(3, sorter.size());
   EXPECT_TRUE(sorter.is_top_strict());
@@ -131,8 +145,8 @@ TEST(IncrementalPriorityQueueTest, DuplicateWithinSingleUpdate) {
   EXPECT_EQ("c", sorter.top());
 }
 
-TEST(IncrementalPriorityQueueTest, RemoveBeforeAddBansForever) {
-  IncrementalPriorityQueue<std::string> sorter;
+TYPED_TEST(IncrementalPriorityQueueTest, RemoveBeforeAddBansForever) {
+  TypeParam sorter;
   sorter.remove("ghost");
   sorter.update({"ghost", "real"});
   ASSERT_EQ(1, sorter.size());
@@ -140,16 +154,23 @@ TEST(IncrementalPriorityQueueTest, RemoveBeforeAddBansForever) {
   EXPECT_EQ("real", sorter.top());
 }
 
-TEST(IncrementalPriorityQueueTest, CopyPreservesState) {
-  IncrementalPriorityQueue<std::string> queue;
+TYPED_TEST(IncrementalPriorityQueueTest, CopyPreservesState) {
+  TypeParam queue;
   queue.update({"a", "b"});
   queue.update({"b", "c"});
+  // Removed items are absent from the groups but must remain removed after a
+  // copy.
+  queue.remove("removed");
 
-  const IncrementalPriorityQueue<std::string> copiedQueue = queue;
+  TypeParam copiedQueue = queue;
+  copiedQueue.update({"removed"});
+  EXPECT_EQ(3, copiedQueue.size());
   EXPECT_EQ("b", copiedQueue.top());
 
-  IncrementalPriorityQueue<std::string> assignedQueue;
+  TypeParam assignedQueue;
   assignedQueue = queue;
+  assignedQueue.update({"removed"});
+  EXPECT_EQ(3, assignedQueue.size());
   EXPECT_EQ("b", assignedQueue.top());
 }
 
@@ -229,12 +250,12 @@ class SimpleQueue {
 
 } // namespace
 
-TEST(IncrementalPriorityQueueTest, RandomUpdatesMatchSimpleQueue) {
+TYPED_TEST(IncrementalPriorityQueueTest, RandomUpdatesMatchSimpleQueue) {
   constexpr int kNumUpdates = 20;
   constexpr int kNumItems = 2'000;
   constexpr size_t kBatchSize = 200;
 
-  IncrementalPriorityQueue<std::string> queue;
+  TypeParam queue;
   SimpleQueue simpleQueue;
   std::mt19937 randomEngine(42);
   std::uniform_int_distribution<int> itemPicker(0, kNumItems - 1);

@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include "algopt/rebalancer/algopt_common/IncrementalPriorityQueue.h"
+#include "algopt/rebalancer/algopt_common/IncrementalPriorityQueueV2.h"
 
 #include <folly/Benchmark.h>
 #include <folly/container/irange.h>
@@ -138,9 +139,18 @@ BENCHMARK(FeedUntilTopStandsAloneThenPop) {
       /*numRounds=*/20'000, /*numItems=*/50'000);
 }
 
+BENCHMARK_RELATIVE(FeedUntilTopStandsAloneThenPopV2) {
+  runFeedUntilTopStandsAloneThenPop<IncrementalPriorityQueueV2<int>>(
+      /*numRounds=*/20'000, /*numItems=*/50'000);
+}
+
 // Measures the cost of building and completely draining one large tie.
 BENCHMARK(DrainManyTiedItems) {
   runDrainManyTiedItems<IncrementalPriorityQueue<int>>(/*numItems=*/30'000);
+}
+
+BENCHMARK_RELATIVE(DrainManyTiedItemsV2) {
+  runDrainManyTiedItems<IncrementalPriorityQueueV2<int>>(/*numItems=*/30'000);
 }
 
 // Measures the cost of building a large tie and removing its first item.
@@ -149,9 +159,18 @@ BENCHMARK(PopOneFromManyTiedItems) {
       /*numItems=*/30'000);
 }
 
+BENCHMARK_RELATIVE(PopOneFromManyTiedItemsV2) {
+  runPopOneFromManyTiedItems<IncrementalPriorityQueueV2<int>>(
+      /*numItems=*/30'000);
+}
+
 // Builds a shorter history by repeatedly updating the same items.
 BENCHMARK(RepeatSameItems2kTimes) {
   runRepeatSameItems<IncrementalPriorityQueue<int>>(/*numUpdates=*/2'000);
+}
+
+BENCHMARK_RELATIVE(RepeatSameItems2kTimesV2) {
+  runRepeatSameItems<IncrementalPriorityQueueV2<int>>(/*numUpdates=*/2'000);
 }
 
 // Builds a much longer history. Together, these two benchmarks show whether
@@ -160,9 +179,17 @@ BENCHMARK(RepeatSameItems20kTimes) {
   runRepeatSameItems<IncrementalPriorityQueue<int>>(/*numUpdates=*/20'000);
 }
 
+BENCHMARK_RELATIVE(RepeatSameItems20kTimesV2) {
+  runRepeatSameItems<IncrementalPriorityQueueV2<int>>(/*numUpdates=*/20'000);
+}
+
 // Measures the cost of checking a tie after every item has a long history.
 BENCHMARK(CheckTopAfterManyUpdates) {
   runCheckTopAfterManyUpdates<IncrementalPriorityQueue<int>>();
+}
+
+BENCHMARK_RELATIVE(CheckTopAfterManyUpdatesV2) {
+  runCheckTopAfterManyUpdates<IncrementalPriorityQueueV2<int>>();
 }
 
 } // namespace facebook::algopt::benchmarks
