@@ -37,6 +37,12 @@ class DrainCapacitySpecBuilder : public SpecBuilder {
   SpecParameters getSpecInfo() const override;
 
  private:
+  folly::coro::Task<std::vector<ExprPtr>> getUsagePerDimensionIndex(
+      ExpressionBuilder& expressionBuilder,
+      entities::DimensionId dimensionId,
+      entities::ScopeId scopeId,
+      entities::ScopeItemId scopeItemId) const;
+
   facebook::rebalancer::interface::DrainCapacitySpec spec_;
 };
 

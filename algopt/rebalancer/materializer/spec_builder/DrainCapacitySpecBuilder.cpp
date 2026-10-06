@@ -16,6 +16,8 @@
 
 #include "algopt/rebalancer/solver/expressions/Operators.h"
 
+#include <folly/container/irange.h>
+
 namespace facebook::rebalancer::materializer {
 
 DrainCapacitySpecBuilder::DrainCapacitySpecBuilder(
@@ -51,18 +53,26 @@ DrainCapacitySpecBuilder::constraints(
 
   for (auto& [srcItemName, proportions] : *spec_.spillDistribution()) {
     auto srcItemId = universe_->getScopeItemId(scopeId, srcItemName);
-    auto srcUsage = co_await expressionBuilder.getAbsoluteUtil(
-        UtilMetric::AFTER, dimensionId, scopeId, srcItemId);
+    auto srcUsages = co_await getUsagePerDimensionIndex(
+        expressionBuilder, dimensionId, scopeId, srcItemId);
 
     for (auto& [dstItemName, proportion] : proportions) {
       auto dstItemId = universe_->getScopeItemId(scopeId, dstItemName);
-      auto dstUsage = co_await expressionBuilder.getAbsoluteUtil(
-          UtilMetric::AFTER, dimensionId, scopeId, dstItemId);
+      auto dstUsages = co_await getUsagePerDimensionIndex(
+          expressionBuilder, dimensionId, scopeId, dstItemId);
       double dstCapacity = dimension.getValue(dstItemId);
 
-      // Constraint formula:
-      // {dst usage} + {proportion} * {src usage} <= {dst capacity}
-      auto expr = (dstUsage + proportion * srcUsage - dstCapacity) * normCoeff;
+      // Constraint formula, at the worst index of a vector dimension:
+      // max_i({dst usage}_i + {proportion} * {src usage}_i) <= {dst capacity}
+      std::vector<ExprPtr> drainUsages;
+      drainUsages.reserve(dstUsages.size());
+      for (const auto i : folly::irange(dstUsages.size())) {
+        drainUsages.push_back(dstUsages[i] + proportion * srcUsages[i]);
+      }
+      auto drainUsage = drainUsages.size() == 1 ? drainUsages.front()
+                                                : max(drainUsages, *universe_);
+
+      auto expr = (drainUsage - dstCapacity) * normCoeff;
       expr->description = fmt::format(
           "usage of {} + {} * usage of {} <= {}",
           dstItemName,
@@ -74,6 +84,36 @@ DrainCapacitySpecBuilder::constraints(
   }
 
   co_return result;
+}
+
+folly::coro::Task<std::vector<ExprPtr>>
+DrainCapacitySpecBuilder::getUsagePerDimensionIndex(
+    ExpressionBuilder& expressionBuilder,
+    entities::DimensionId dimensionId,
+    entities::ScopeId scopeId,
+    entities::ScopeItemId scopeItemId) const {
+  // Only the aggregated util registers the scope item's util in metrics.
+  auto aggregatedUsage = co_await expressionBuilder.getAbsoluteUtil(
+      UtilMetric::AFTER, dimensionId, scopeId, scopeItemId);
+
+  const int dimensionSize =
+      universe_->getObjects().getDimension(dimensionId).size();
+  if (dimensionSize == 1) {
+    co_return std::vector<ExprPtr>{std::move(aggregatedUsage)};
+  }
+
+  std::vector<ExprPtr> usages;
+  usages.reserve(dimensionSize);
+  for (const auto dimensionIndex : folly::irange(dimensionSize)) {
+    usages.push_back(
+        co_await expressionBuilder.getAbsoluteUtil(
+            UtilMetric::AFTER,
+            dimensionId,
+            scopeId,
+            scopeItemId,
+            dimensionIndex));
+  }
+  co_return usages;
 }
 
 std::string DrainCapacitySpecBuilder::description() const {

@@ -133,6 +133,22 @@ folly::coro::Task<ExprPtr> ExpressionBuilder::getRelativeUtil(
 
 folly::coro::Task<ExprPtr> ExpressionBuilder::getAbsoluteUtil(
     UtilMetric metric,
+    entities::DimensionId dimensionId,
+    entities::ScopeId scopeId,
+    entities::ScopeItemId scopeItemId,
+    int dimensionIndex) FOLLY_TS_REQUIRES(!applyfunc) {
+  co_return co_await getAbsoluteUtil(
+      metric,
+      {.dimensionId = dimensionId,
+       .scopeId = scopeId,
+       .scopeItemId = scopeItemId,
+       .partitionId = std::nullopt,
+       .groupId = std::nullopt},
+      dimensionIndex);
+}
+
+folly::coro::Task<ExprPtr> ExpressionBuilder::getAbsoluteUtil(
+    UtilMetric metric,
     const entities::ObjectScalarDimension& objectDimension,
     entities::ScopeId scopeId,
     entities::ScopeItemId scopeItemId) FOLLY_TS_REQUIRES(!applyfunc) {

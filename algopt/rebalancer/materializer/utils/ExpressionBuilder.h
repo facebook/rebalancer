@@ -147,6 +147,15 @@ class ExpressionBuilder {
       entities::PartitionId partitionId,
       entities::GroupId groupId);
 
+  // Absolute util at a single index of a vector object dimension, instead of
+  // the max over all indices.
+  folly::coro::Task<ExprPtr> getAbsoluteUtil(
+      UtilMetric metric,
+      entities::DimensionId dimensionId,
+      entities::ScopeId scopeId,
+      entities::ScopeItemId scopeItemId,
+      int dimensionIndex) FOLLY_TS_REQUIRES(!applyfunc);
+
   // Absolute util for a custom object dimension. Not cached.
   folly::coro::Task<ExprPtr> getAbsoluteUtil(
       UtilMetric metric,
