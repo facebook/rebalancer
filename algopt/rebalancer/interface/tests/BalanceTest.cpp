@@ -368,7 +368,9 @@ TEST_P(BalanceTest, IdealFormulaWithRelativeUtilBound) {
   spec.scope() = "host";
   spec.dimension() = "cpu";
   spec.formula() = BalanceSpecFormula::IDEAL;
-  spec.upperBound() = 0.7;
+  auto& upperBounds = spec.upperBounds().ensure();
+  upperBounds.type() = LimitType::ABSOLUTE;
+  upperBounds.globalLimit() = 0.7;
   spec.boundType() = BalanceSpecBoundType::RELATIVE_UTIL;
   solver->addGoal(spec);
 
@@ -1059,7 +1061,9 @@ TEST_P(BalanceTest, MaxFormulaSmallMoves) {
   balanceSpec.scope() = "host";
   balanceSpec.dimension() = "cpu";
   balanceSpec.formula() = BalanceSpecFormula::MAX;
-  balanceSpec.upperBound() = 0.2;
+  auto& upperBounds = balanceSpec.upperBounds().ensure();
+  upperBounds.type() = LimitType::ABSOLUTE;
+  upperBounds.globalLimit() = 0.2;
   balanceSpec.definition() = BalanceSpecDefinition::AFTER;
   balanceSpec.boundType() = BalanceSpecBoundType::ABSOLUTE;
 
@@ -1154,7 +1158,9 @@ TEST_P(BalanceTest, IdealWithRelativeUpperBoundTrickyScenario) {
   balanceSpec.dimension() = "cpu";
   balanceSpec.formula() = BalanceSpecFormula::IDEAL;
   balanceSpec.ignoreUpperBoundForIdealWithAbsOrRelBoundTypes() = false;
-  balanceSpec.upperBound() = 4;
+  auto& upperBounds = balanceSpec.upperBounds().ensure();
+  upperBounds.type() = LimitType::ABSOLUTE;
+  upperBounds.globalLimit() = 4;
 
   solver->addGoal(balanceSpec);
 
@@ -1225,7 +1231,9 @@ TEST_P(BalanceTest, IdealWithAbsoluteUpperBound) {
   spec.dimension() = "cpu";
   spec.formula() = BalanceSpecFormula::IDEAL;
   spec.boundType() = BalanceSpecBoundType::ABSOLUTE;
-  spec.upperBound() = 0.2;
+  auto& upperBounds = spec.upperBounds().ensure();
+  upperBounds.type() = LimitType::ABSOLUTE;
+  upperBounds.globalLimit() = 0.2;
   spec.ignoreUpperBoundForIdealWithAbsOrRelBoundTypes() = false;
   solver->addGoal(spec);
 
@@ -1342,7 +1350,9 @@ TEST_P(BalanceTest, TrickyScenarioWithRelativeUtilVariance) {
   balanceSpec.dimension() = "cpu";
   balanceSpec.formula() = BalanceSpecFormula::RELATIVE_UTIL_VARIANCE;
   balanceSpec.boundType() = BalanceSpecBoundType::RELATIVE_UTIL;
-  balanceSpec.upperBound() = 0;
+  auto& upperBounds = balanceSpec.upperBounds().ensure();
+  upperBounds.type() = LimitType::ABSOLUTE;
+  upperBounds.globalLimit() = 0;
   // Exclude ToFree'd host4 from variance; otherwise its relUtil=0 distorts
   // the average and prevents equalization.
   balanceSpec.filter()->itemsBlacklist() = {"host4"};
@@ -1510,7 +1520,9 @@ TEST_P(
   balanceSpec.dimension() = "cpu";
   balanceSpec.formula() = BalanceSpecFormula::IDEAL;
   balanceSpec.ignoreUpperBoundForIdealWithAbsOrRelBoundTypes() = false;
-  balanceSpec.upperBound() = 1.5;
+  auto& upperBounds = balanceSpec.upperBounds().ensure();
+  upperBounds.type() = LimitType::ABSOLUTE;
+  upperBounds.globalLimit() = 1.5;
   balanceSpec.fixAverageToInitial() = true;
   balanceSpec.filter()->itemsBlacklist() = {"host4"};
 
@@ -1615,7 +1627,9 @@ TEST_P(BalanceTest, RelativeUtilVarianceWithAbsoluteUpperBound) {
   spec.scope() = "host";
   spec.dimension() = "cpu";
   spec.formula() = BalanceSpecFormula::RELATIVE_UTIL_VARIANCE;
-  spec.upperBound() = 0.2;
+  auto& upperBounds = spec.upperBounds().ensure();
+  upperBounds.type() = LimitType::ABSOLUTE;
+  upperBounds.globalLimit() = 0.2;
   spec.boundType() = BalanceSpecBoundType::ABSOLUTE;
   solver->addGoal(spec);
 
