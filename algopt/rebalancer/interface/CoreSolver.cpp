@@ -430,6 +430,8 @@ ProblemConfigs CoreSolver::makeProblemConfig(
   problemConfig.runId.run_id = *problemSpec.runId();
   problemConfig.useDynamicObjectOrdering =
       *problemSpec.useDynamicObjectOrdering();
+  problemConfig.useIncrementalPriorityQueueV2 =
+      *problemSpec.rolloutConfig()->useIncrementalPriorityQueueV2();
   problemConfig.validateAppliedMoves = *problemSpec.validateAppliedMoves();
   problemConfig.rolloutPruneOptimalSubgraphs =
       *problemSpec.rolloutConfig()->pruneOptimalSubgraphs();

@@ -56,6 +56,9 @@ void fillMissingRolloutConfigValues(interface::RolloutConfig& config) {
   fillMissingValue(
       config.pruneOptimalSubgraphs(),
       interface::kPruneOptimalSubgraphsRolloutDefault);
+  fillMissingValue(
+      config.useIncrementalPriorityQueueV2(),
+      interface::kUseIncrementalPriorityQueueV2RolloutDefault);
 }
 #endif
 

@@ -43,6 +43,8 @@ struct RolloutConfig {
   // containers.
   3: bool pruneOptimalSubgraphs = false;
 
+  4: bool useIncrementalPriorityQueueV2 = false;
+
   // Temporary setting used to test saving, replaying, and logging a MetaConfig
   // value.
   32767: bool testOnlyConfig = false;
