@@ -268,10 +268,6 @@ void ProblemSolverBinding::enableStableAsMuchAsPossible() {
   solver_->enableStableAsMuchAsPossible();
 }
 
-void ProblemSolverBinding::setGroupBackedDynamicDimensions(bool enable) {
-  solver_->setGroupBackedDynamicDimensions(enable);
-}
-
 // Reading properties of solver
 
 int32_t ProblemSolverBinding::getCurrentGoalIndex() const {

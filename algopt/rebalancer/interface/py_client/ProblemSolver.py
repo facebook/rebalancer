@@ -341,10 +341,6 @@ class ProblemSolver:
         self._ps.enableStableAsMuchAsPossible()
         return self
 
-    def setGroupBackedDynamicDimensions(self, enable: bool) -> ProblemSolver:
-        self._ps.setGroupBackedDynamicDimensions(enable)
-        return self
-
     def setAssignment(self, containerToObjects: dict[str, list[str]]) -> ProblemSolver:
         self._ps.setAssignment(containerToObjects)
         return self
