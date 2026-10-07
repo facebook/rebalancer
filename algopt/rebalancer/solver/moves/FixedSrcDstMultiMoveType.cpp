@@ -14,6 +14,7 @@
 
 #include "algopt/rebalancer/solver/moves/FixedSrcDstMultiMoveType.h"
 
+#include "algopt/rebalancer/solver/moves/InvalidMoveFilter.h"
 #include "algopt/rebalancer/solver/moves/MoveHelper.h"
 #include "algopt/rebalancer/solver/utils/OneObjectPerGroup.h"
 
@@ -379,6 +380,7 @@ std::vector<ObjectBundle> FixedSrcDstMoveCandidateGenerator<MoveTypeSpecT>::
   auto& problem = evaluator.getProblem();
   const auto& universe = problem.getUniverse();
   const int maxSampleSizePerEquivSet = *spec_.maxSamplesPerEquivSet();
+  const auto* const invalidMoveFilter = problem.getInvalidMoveFilter();
 
   // 1. Get configured RAS bundle size for the reservation container (non
   // special)
@@ -479,7 +481,7 @@ std::vector<ObjectBundle> FixedSrcDstMoveCandidateGenerator<MoveTypeSpecT>::
       invalidEquivSets++;
       continue;
     }
-    int numServersAttempted = 0;
+    int numCandidatesSelected = 0;
     for (auto& [serverId, thisServerParts] : partsPerServer) {
       // 1. Skip forbidden servers
       if (forbiddenCandidateServers.contains(serverId)) {
@@ -518,13 +520,17 @@ std::vector<ObjectBundle> FixedSrcDstMoveCandidateGenerator<MoveTypeSpecT>::
 
       // 3. Build bundle
       if (objectBundleSelector->addObjects(thisServerParts, maxCount)) {
-        moveCandidates.emplace_back(objectBundleSelector->get());
-        ++numServersAttempted;
-        if (numServersAttempted >= maxSampleSizePerEquivSet) {
-          // we have considered enough representative servers for this equiv
-          // set
-          objectBundleSelector->reset();
-          break;
+        auto bundle = objectBundleSelector->get();
+        objectBundleSelector->reset();
+        // A bundle moves as a unit, so if any of its objects can never be valid
+        // at the destination the whole move is dead on arrival. Drop it during
+        // enumeration, before it is ever enqueued for evaluation.
+        if (!anyMoveInvalid(invalidMoveFilter, bundle, dstContainer)) {
+          moveCandidates.emplace_back(std::move(bundle));
+          ++numCandidatesSelected;
+          if (numCandidatesSelected >= maxSampleSizePerEquivSet) {
+            break;
+          }
         }
       }
       if (!formBundlesAtEquivSetGranularity) {

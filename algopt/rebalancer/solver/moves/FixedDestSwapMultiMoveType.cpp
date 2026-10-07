@@ -19,10 +19,12 @@
 #include "algopt/rebalancer/solver/moves/MoveHelper.h"
 #include "algopt/rebalancer/solver/moves/MoveTypeUtils.h"
 
+#include <folly/container/F14Map.h>
 #include <folly/container/irange.h>
 #include <folly/container/MapUtil.h>
 
-#include <optional>
+#include <bit>
+#include <cstdint>
 #include <utility>
 #include <vector>
 
@@ -47,66 +49,6 @@ std::vector<BundleIdx> getBundleIndices(
     bundleIds.resize(*maxSampleSize);
   }
   return bundleIds;
-}
-
-// Creates MultiObjectSelectionConfig for 1:k adaptive swap if conditions are
-// met
-std::optional<MultiObjectSelectionConfig> createSwapRatioConfig(
-    const interface::RasLocalSearchMetadata& rasMetadata,
-    const MovesEvaluator& evaluator,
-    entities::ObjectId hotObject,
-    entities::ContainerId hotContainer) {
-  if (!rasMetadata.swapRatioDimension().has_value() ||
-      !*rasMetadata.useAdaptiveAllotments()) {
-    return std::nullopt;
-  }
-
-  // Get the swap ratio dimension
-  const auto& swapRatioDimension = *rasMetadata.swapRatioDimension();
-  const auto& universe = evaluator.getProblem().getUniverse();
-
-  // Use folly::get_default as per team's common practice
-  const auto& containerName = universe.getEntityName(hotContainer);
-  const auto dimensionName = folly::get_default(
-      *swapRatioDimension.value(),
-      containerName,
-      *swapRatioDimension.defaultValue());
-
-  const auto swapRatioDimensionId = universe.getDimensionId(dimensionName);
-  const auto dimensionScopeItemId = getDimensionScopeItemIdForContainer(
-      universe, swapRatioDimensionId, hotContainer);
-
-  // Need to find the server partition ID to get objects from groupId
-  assert(rasMetadata.serverPartition().has_value());
-  auto serverPartitionId =
-      universe.getPartitionId(*rasMetadata.serverPartition());
-
-  // Create config with lambda that safely captures the universe reference.
-  // CRITICAL: Capture universe by reference - it refers to the problem's
-  // Universe, which is guaranteed to outlive the config usage since the caller
-  // (findBestMove) owns the evaluator/problem and uses the config immediately.
-  MultiObjectSelectionConfig config;
-  config.getBundleSizeForGroup =
-      [&universe,
-       hotObject,
-       swapRatioDimensionId,
-       serverPartitionId,
-       dimensionScopeItemId](entities::GroupId serverId) -> int {
-    // Get any object from this server/group to calculate the swap ratio
-    const auto& serverPartition = universe.getPartition(serverPartitionId);
-    const auto& objectsInGroup = serverPartition.getObjectIds(serverId);
-    assert(!objectsInGroup.empty());
-    const auto representativeColdObject = objectsInGroup[0];
-
-    return static_cast<int>(calculateSwapRatio(
-        universe,
-        hotObject,
-        representativeColdObject,
-        swapRatioDimensionId,
-        dimensionScopeItemId));
-  };
-
-  return config;
 }
 } // namespace
 
@@ -227,6 +169,14 @@ MoveResult FixedDestSwapMultiMoveType::findBestMoveWithSwapRatio(
     entities::ContainerId dstContainer,
     MoveStatsAggregator& stats,
     double timeLimit) {
+  const auto& rasMetadata = *spec_.rasLocalSearchMetadata();
+  auto bestResult = MoveResult::makeEmpty();
+  if (!rasMetadata.swapRatioDimension().has_value() ||
+      !*rasMetadata.useAdaptiveAllotments()) {
+    return bestResult;
+  } else {
+    assert(rasMetadata.serverPartition().has_value());
+  }
   // Generate source bundles (always needed)
   auto srcObjectBundles =
       srcContainerMoveGenerator_
@@ -255,36 +205,71 @@ MoveResult FixedDestSwapMultiMoveType::findBestMoveWithSwapRatio(
             return result;
           };
 
-  auto bestResult = MoveResult::makeEmpty();
-  const auto& precision = evaluator.getProblem().getUniverse().getPrecision();
+  const auto& universe = evaluator.getProblem().getUniverse();
+  const auto& precision = universe.getPrecision();
   const algopt::Timer timer(true);
-
-  // Must be greedy on src for swap ratio mode
-  assert(spec_.rasLocalSearchMetadata());
-  const auto& rasMetadata = *spec_.rasLocalSearchMetadata();
+  const auto& swapRatioDimension = *rasMetadata.swapRatioDimension();
+  const auto dimensionName = folly::get_default(
+      *swapRatioDimension.value(),
+      universe.getEntityName(hotContainer),
+      *swapRatioDimension.defaultValue());
+  const auto swapRatioDimensionId = universe.getDimensionId(dimensionName);
+  const auto dimensionScopeItemId = getDimensionScopeItemIdForContainer(
+      universe, swapRatioDimensionId, hotContainer);
+  const auto& objectDimension =
+      universe.getObjects().getDimension(swapRatioDimensionId).only();
+  // Within one findBestMove call, destination bundles depend on the hot object
+  // only through this dimension value. Cache by its exact representation so
+  // repeated shapes do not rebuild the same bundles for every source object.
+  folly::F14FastMap<double, std::vector<ObjectBundle>> hotValueToBundles;
 
   for (auto srcObjectBundleId : srcObjectBundleIds) {
     const auto& srcObjectBundle = srcObjectBundles.at(srcObjectBundleId);
     const auto hotObject = srcObjectBundle[0];
+    const auto hotValue =
+        objectDimension.getValue(hotObject, dimensionScopeItemId);
 
-    // Try to create swap ratio config for this specific hot object
-    if (const auto swapRatioConfig = createSwapRatioConfig(
-            rasMetadata, evaluator, hotObject, hotContainer)) {
-      // Generate dst bundles with swap ratio configuration (only when needed)
-      auto multiObjectBundle =
+    // Build the configuration from the same value used as the cache key.
+    auto [it, inserted] =
+        hotValueToBundles.try_emplace(hotValue, std::vector<ObjectBundle>{});
+    if (inserted) {
+      // Create config with lambda that safely captures the universe
+      // reference.
+      auto serverPartitionId =
+          universe.getPartitionId(*rasMetadata.serverPartition());
+      MultiObjectSelectionConfig swapRatioConfig;
+      swapRatioConfig.getBundleSizeForGroup =
+          [&universe,
+           hotObject,
+           swapRatioDimensionId,
+           serverPartitionId,
+           dimensionScopeItemId](entities::GroupId serverId) -> int {
+        // Get any object from this server/group to calculate the swap ratio
+        const auto& serverPartition = universe.getPartition(serverPartitionId);
+        const auto& objectsInGroup = serverPartition.getObjectIds(serverId);
+        assert(!objectsInGroup.empty());
+        const auto representativeColdObject = objectsInGroup[0];
+        return static_cast<int>(calculateSwapRatio(
+            universe,
+            hotObject,
+            representativeColdObject,
+            swapRatioDimensionId,
+            dimensionScopeItemId));
+      };
+      it->second =
           dstContainerMoveGenerator_
               .filterSourceObjectsByBundleSizeAndSearchSpacePartition(
-                  evaluator, dstContainer, hotContainer, *swapRatioConfig);
-
-      auto result = MoveHelper::findBest(
-          evaluator.getProblem().configs.threadPool.get(),
-          CartesianProduct(
-              std::vector<BundleIdx>({srcObjectBundleId}), multiObjectBundle),
-          evaluateWithMultiObjects,
-          timeLimit - timer.getSeconds(),
-          getParallelExecutionConfig());
-      bestResult.aggregate(std::move(result));
+                  evaluator, dstContainer, hotContainer, swapRatioConfig);
     }
+
+    auto result = MoveHelper::findBest(
+        evaluator.getProblem().configs.threadPool.get(),
+        CartesianProduct(
+            std::vector<BundleIdx>({srcObjectBundleId}), it->second),
+        evaluateWithMultiObjects,
+        timeLimit - timer.getSeconds(),
+        getParallelExecutionConfig());
+    bestResult.aggregate(std::move(result));
 
     if (bestResult.isBetter(precision)) {
       // stop search once we found a better move
