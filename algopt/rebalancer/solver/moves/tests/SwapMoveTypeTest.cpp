@@ -743,7 +743,7 @@ CO_TEST_F(SwapMoveTypeFilterTest, FilterReducesEvaluatedSwaps) {
 
   // With filter: block object1 from container2
   auto filter = std::make_unique<InvalidMoveFilter>(numObjects, numContainers);
-  filter->markInvalid(object(1), container(2));
+  filter->markInvalid({object(1)}, container(2));
   auto problemWithFilter = createTestProblem(
       universe,
       objectiveTuple,

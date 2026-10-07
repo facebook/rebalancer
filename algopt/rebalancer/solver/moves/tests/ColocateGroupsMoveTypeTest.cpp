@@ -517,7 +517,7 @@ CO_TEST_F(ColocateGroupsMoveTypeTest, InvalidMoveFilterPrunesDestinations) {
       getNumObjects(), getUniverse().getContainers().getContainerIds().size());
   for (const auto containerId :
        {container(12), container(22), container(32), container(42)}) {
-    invalidMoveFilter->markInvalid(object(1), containerId);
+    invalidMoveFilter->markInvalid({object(1)}, containerId);
   }
 
   createProblem(

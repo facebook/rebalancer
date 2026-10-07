@@ -73,14 +73,18 @@ void AvoidAssignmentsSpecBuilder::populateInvalidMoveFilter(
     InvalidMoveFilter& invalidMoveFilter) const {
   const auto scopeId = universe_->getScopeId(*spec_.scope());
   const auto& scope = universe_->getScope(scopeId);
+  Map<ScopeItemId, std::vector<ObjectId>> scopeItemToInvalidObjects;
   for (const auto& assignment : *spec_.assignments()) {
     const auto objectId = universe_->getObjectId(*assignment.object());
     for (const auto& scopeItemName : *assignment.scopeItems()) {
       const auto scopeItemId =
           universe_->getScopeItemId(scopeId, scopeItemName);
-      for (const auto& containerId : scope.getContainerIds(scopeItemId)) {
-        invalidMoveFilter.markInvalid(objectId, containerId);
-      }
+      scopeItemToInvalidObjects[scopeItemId].push_back(objectId);
+    }
+  }
+  for (const auto& [scopeItemId, invalidObjects] : scopeItemToInvalidObjects) {
+    for (const auto& containerId : scope.getContainerIds(scopeItemId)) {
+      invalidMoveFilter.markInvalid(invalidObjects, containerId);
     }
   }
 }

@@ -44,11 +44,30 @@ InvalidMoveFilter::InvalidMoveFilter(InvalidMoveFilter&& other) noexcept
       isEmpty_(other.isEmpty_.exchange(true, std::memory_order_relaxed)) {}
 
 void InvalidMoveFilter::markInvalid(
-    entities::ObjectId objectId,
+    const std::vector<entities::ObjectId>& objectIds,
     entities::ContainerId containerId) {
-  containerToInvalidObjects_.at(containerId.asIndex())
-      .try_emplace(numObjects_)
-      .atomicSet(objectId.asIndex());
+  if (objectIds.empty()) {
+    return;
+  }
+  auto& invalidObjects = containerToInvalidObjects_.at(containerId.asIndex())
+                             .try_emplace(numObjects_);
+  for (const auto objectId : objectIds) {
+    invalidObjects.atomicSet(objectId.asIndex());
+  }
+  if (isEmpty_.load(std::memory_order_relaxed)) {
+    isEmpty_.store(false, std::memory_order_relaxed);
+  }
+}
+
+void InvalidMoveFilter::markInvalid(
+    const algopt::DynamicBitSet& objectIds,
+    entities::ContainerId containerId) {
+  if (!objectIds.any()) {
+    return;
+  }
+  auto& invalidObjects = containerToInvalidObjects_.at(containerId.asIndex())
+                             .try_emplace(numObjects_);
+  invalidObjects.atomicOrFrom(objectIds);
   if (isEmpty_.load(std::memory_order_relaxed)) {
     isEmpty_.store(false, std::memory_order_relaxed);
   }

@@ -43,7 +43,7 @@ TEST(InvalidMoveFilterTest, EmptyZeroContainerFilterSkipsWithoutIndexing) {
 TEST(InvalidMoveFilterTest, MarkInvalid) {
   InvalidMoveFilter filter(/*numObjects=*/10, /*numContainers=*/5);
 
-  filter.markInvalid(ObjectId(3), ContainerId(2));
+  filter.markInvalid({ObjectId(3)}, ContainerId(2));
 
   EXPECT_FALSE(filter.empty());
   EXPECT_TRUE(filter.isMarkedInvalid(ObjectId(3), ContainerId(2)));
@@ -54,9 +54,9 @@ TEST(InvalidMoveFilterTest, MarkInvalid) {
 TEST(InvalidMoveFilterTest, MultiplePairs) {
   InvalidMoveFilter filter(/*numObjects=*/10, /*numContainers=*/5);
 
-  filter.markInvalid(ObjectId(0), ContainerId(0));
-  filter.markInvalid(ObjectId(9), ContainerId(4));
-  filter.markInvalid(ObjectId(5), ContainerId(2));
+  filter.markInvalid({ObjectId(0)}, ContainerId(0));
+  filter.markInvalid({ObjectId(9)}, ContainerId(4));
+  filter.markInvalid({ObjectId(5)}, ContainerId(2));
 
   EXPECT_TRUE(filter.isMarkedInvalid(ObjectId(0), ContainerId(0)));
   EXPECT_TRUE(filter.isMarkedInvalid(ObjectId(9), ContainerId(4)));
@@ -65,9 +65,31 @@ TEST(InvalidMoveFilterTest, MultiplePairs) {
   EXPECT_FALSE(filter.isMarkedInvalid(ObjectId(9), ContainerId(0)));
 }
 
+TEST(InvalidMoveFilterTest, MarkInvalidObjects) {
+  InvalidMoveFilter filter(/*numObjects=*/130, /*numContainers=*/3);
+
+  filter.markInvalid(
+      {ObjectId(0), ObjectId(5), ObjectId(64), ObjectId(127), ObjectId(129)},
+      ContainerId(2));
+
+  for (const auto objectId : {0, 5, 64, 127, 129}) {
+    EXPECT_TRUE(filter.isMarkedInvalid(ObjectId(objectId), ContainerId(2)));
+  }
+  EXPECT_FALSE(filter.isMarkedInvalid(ObjectId(63), ContainerId(2)));
+  EXPECT_FALSE(filter.isMarkedInvalid(ObjectId(64), ContainerId(1)));
+}
+
+TEST(InvalidMoveFilterTest, MarkNoObjectsIsNoOp) {
+  InvalidMoveFilter filter(/*numObjects=*/10, /*numContainers=*/1);
+
+  filter.markInvalid({}, ContainerId(0));
+
+  EXPECT_TRUE(filter.empty());
+}
+
 TEST(InvalidMoveFilterTest, AnyMarkedInvalidChecksOneDestinationRow) {
   InvalidMoveFilter filter(/*numObjects=*/5, /*numContainers=*/3);
-  filter.markInvalid(ObjectId(2), ContainerId(1));
+  filter.markInvalid({ObjectId(2)}, ContainerId(1));
 
   EXPECT_TRUE(filter.anyMarkedInvalid(
       {ObjectId(0), ObjectId(2), ObjectId(4)}, ContainerId(1)));
@@ -80,7 +102,7 @@ TEST(InvalidMoveFilterTest, OneObjectInvalidForAllContainers) {
   InvalidMoveFilter filter(/*numObjects=*/5, /*numContainers=*/10);
 
   for (const auto c : folly::irange(10)) {
-    filter.markInvalid(ObjectId(2), ContainerId(c));
+    filter.markInvalid({ObjectId(2)}, ContainerId(c));
   }
 
   for (const auto c : folly::irange(10)) {
@@ -92,9 +114,12 @@ TEST(InvalidMoveFilterTest, OneObjectInvalidForAllContainers) {
 TEST(InvalidMoveFilterTest, AllObjectsInvalidForOneContainer) {
   InvalidMoveFilter filter(/*numObjects=*/10, /*numContainers=*/3);
 
-  for (const auto o : folly::irange(10)) {
-    filter.markInvalid(ObjectId(o), ContainerId(1));
+  std::vector<ObjectId> objectIds;
+  objectIds.reserve(10);
+  for (const auto objectId : folly::irange(10)) {
+    objectIds.emplace_back(objectId);
   }
+  filter.markInvalid(objectIds, ContainerId(1));
 
   for (const auto o : folly::irange(10)) {
     EXPECT_TRUE(filter.isMarkedInvalid(ObjectId(o), ContainerId(1)));
@@ -102,23 +127,23 @@ TEST(InvalidMoveFilterTest, AllObjectsInvalidForOneContainer) {
   }
 }
 
-TEST(InvalidMoveFilterTest, DuplicateMarkIsIdempotent) {
+TEST(InvalidMoveFilterTest, DuplicateMarksAreIdempotent) {
   InvalidMoveFilter filter(/*numObjects=*/5, /*numContainers=*/5);
 
-  filter.markInvalid(ObjectId(1), ContainerId(3));
-  filter.markInvalid(ObjectId(1), ContainerId(3));
+  filter.markInvalid({ObjectId(1), ObjectId(1)}, ContainerId(3));
+  filter.markInvalid({ObjectId(1)}, ContainerId(3));
 
   EXPECT_TRUE(filter.isMarkedInvalid(ObjectId(1), ContainerId(3)));
 }
 
 TEST(InvalidMoveFilterTest, MergeFromUnionsBothFilters) {
   InvalidMoveFilter a(/*numObjects=*/5, /*numContainers=*/5);
-  a.markInvalid(ObjectId(1), ContainerId(2));
-  a.markInvalid(ObjectId(3), ContainerId(4)); // shared with b
+  a.markInvalid({ObjectId(1)}, ContainerId(2));
+  a.markInvalid({ObjectId(3)}, ContainerId(4)); // shared with b
 
   InvalidMoveFilter b(/*numObjects=*/5, /*numContainers=*/5);
-  b.markInvalid(ObjectId(0), ContainerId(0));
-  b.markInvalid(ObjectId(3), ContainerId(4)); // shared with a
+  b.markInvalid({ObjectId(0)}, ContainerId(0));
+  b.markInvalid({ObjectId(3)}, ContainerId(4)); // shared with a
 
   a.mergeFrom(b);
 
@@ -134,7 +159,7 @@ TEST(InvalidMoveFilterTest, MergeFromUnionsBothFilters) {
 
 TEST(InvalidMoveFilterTest, MergeFromEmptyIsNoOp) {
   InvalidMoveFilter a(/*numObjects=*/3, /*numContainers=*/3);
-  a.markInvalid(ObjectId(1), ContainerId(1));
+  a.markInvalid({ObjectId(1)}, ContainerId(1));
 
   const InvalidMoveFilter empty(/*numObjects=*/3, /*numContainers=*/3);
   a.mergeFrom(empty);
@@ -145,7 +170,7 @@ TEST(InvalidMoveFilterTest, MergeFromEmptyIsNoOp) {
 
 TEST(InvalidMoveFilterTest, MergeFromIntoEmptyFilterPopulatesIt) {
   InvalidMoveFilter populated(/*numObjects=*/5, /*numContainers=*/5);
-  populated.markInvalid(ObjectId(2), ContainerId(1));
+  populated.markInvalid({ObjectId(2)}, ContainerId(1));
 
   InvalidMoveFilter dst(/*numObjects=*/5, /*numContainers=*/5);
   EXPECT_TRUE(dst.empty());
@@ -163,23 +188,21 @@ TEST(InvalidMoveFilterTest, ConcurrentMarkingMarksEveryPair) {
 
   // Each thread owns a stride of objects but marks across every container, so
   // threads collide on the same rows and on the same 64-bit blocks.
-  const auto pairsFor = [](EntityIdType thread) {
-    std::vector<std::pair<EntityIdType, EntityIdType>> pairs;
+  const auto objectsFor = [](EntityIdType thread) {
+    std::vector<ObjectId> objects;
     for (EntityIdType o = thread; o < kNumObjects; o += kNumThreads) {
-      for (EntityIdType c = 0; c < kNumContainers; ++c) {
-        pairs.emplace_back(o, c);
-      }
+      objects.emplace_back(o);
     }
-    return pairs;
+    return objects;
   };
 
   InvalidMoveFilter actual(kNumObjects, kNumContainers);
   std::vector<std::thread> threads;
   threads.reserve(kNumThreads);
-  for (EntityIdType t = 0; t < kNumThreads; ++t) {
-    threads.emplace_back([&actual, pairs = pairsFor(t)] {
-      for (const auto& [o, c] : pairs) {
-        actual.markInvalid(ObjectId(o), ContainerId(c));
+  for (const auto t : folly::irange(kNumThreads)) {
+    threads.emplace_back([&actual, objects = objectsFor(t)] {
+      for (const auto c : folly::irange(kNumContainers)) {
+        actual.markInvalid(objects, ContainerId(c));
       }
     });
   }
@@ -204,11 +227,13 @@ TEST(InvalidMoveFilterTest, ConcurrentFirstTouchOfSameRowLosesNoBits) {
   InvalidMoveFilter filter(kNumObjects, /*numContainers=*/1);
   std::vector<std::thread> threads;
   threads.reserve(kNumThreads);
-  for (EntityIdType t = 0; t < kNumThreads; ++t) {
+  for (const auto t : folly::irange(kNumThreads)) {
     threads.emplace_back([&filter, t] {
+      std::vector<ObjectId> objects;
       for (EntityIdType o = t; o < kNumObjects; o += kNumThreads) {
-        filter.markInvalid(ObjectId(o), ContainerId(0));
+        objects.emplace_back(o);
       }
+      filter.markInvalid(objects, ContainerId(0));
     });
   }
   for (auto& thread : threads) {
@@ -221,13 +246,44 @@ TEST(InvalidMoveFilterTest, ConcurrentFirstTouchOfSameRowLosesNoBits) {
   }
 }
 
+TEST(InvalidMoveFilterTest, ConcurrentBitSetsLoseNoBits) {
+  constexpr EntityIdType kNumObjects = 2000;
+  constexpr EntityIdType kNumThreads = 16;
+
+  std::vector<algopt::DynamicBitSet> sources;
+  sources.reserve(kNumThreads);
+  for (const auto t : folly::irange(kNumThreads)) {
+    auto& source = sources.emplace_back(kNumObjects);
+    for (EntityIdType o = t; o < kNumObjects; o += kNumThreads) {
+      source.set(o);
+    }
+  }
+
+  InvalidMoveFilter filter(kNumObjects, /*numContainers=*/1);
+  std::vector<std::thread> threads;
+  threads.reserve(kNumThreads);
+  for (const auto t : folly::irange(kNumThreads)) {
+    threads.emplace_back([&filter, source = std::move(sources.at(t))]() {
+      filter.markInvalid(source, ContainerId(0));
+    });
+  }
+  for (auto& thread : threads) {
+    thread.join();
+  }
+
+  for (const auto o : folly::irange(kNumObjects)) {
+    ASSERT_TRUE(filter.isMarkedInvalid(ObjectId(o), ContainerId(0)))
+        << "object=" << o;
+  }
+}
+
 TEST(InvalidMoveFilterTest, CopyingPreservesRowsWithoutSharingThem) {
   InvalidMoveFilter original(/*numObjects=*/8, /*numContainers=*/4);
-  original.markInvalid(ObjectId(1), ContainerId(2));
+  original.markInvalid({ObjectId(1)}, ContainerId(2));
 
   InvalidMoveFilter copy = original;
-  copy.markInvalid(ObjectId(3), ContainerId(2));
-  copy.markInvalid(ObjectId(4), ContainerId(0));
+  copy.markInvalid({ObjectId(3)}, ContainerId(2));
+  copy.markInvalid({ObjectId(4)}, ContainerId(0));
 
   EXPECT_TRUE(copy.isMarkedInvalid(ObjectId(1), ContainerId(2)));
   EXPECT_TRUE(copy.isMarkedInvalid(ObjectId(3), ContainerId(2)));
@@ -238,7 +294,7 @@ TEST(InvalidMoveFilterTest, CopyingPreservesRowsWithoutSharingThem) {
 
 TEST(InvalidMoveFilterTest, MovingPreservesRows) {
   InvalidMoveFilter original(/*numObjects=*/8, /*numContainers=*/4);
-  original.markInvalid(ObjectId(1), ContainerId(2));
+  original.markInvalid({ObjectId(1)}, ContainerId(2));
 
   const InvalidMoveFilter moved = std::move(original);
 

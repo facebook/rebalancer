@@ -166,6 +166,30 @@ TEST(DynamicBitSetTest, MergeFromEmptyIsNoOp) {
   EXPECT_TRUE(a.isSet(3));
 }
 
+TEST(DynamicBitSetTest, ClearUnsetsOnlySelectedBit) {
+  DynamicBitSet bitSet(200);
+  bitSet.set(1);
+  bitSet.set(64);
+  bitSet.set(199);
+
+  bitSet.clear(64);
+
+  EXPECT_TRUE(bitSet.isSet(1));
+  EXPECT_FALSE(bitSet.isSet(64));
+  EXPECT_TRUE(bitSet.isSet(199));
+}
+
+TEST(DynamicBitSetTest, AnyReportsWhetherABitIsSet) {
+  DynamicBitSet bitSet(128);
+  EXPECT_FALSE(bitSet.any());
+
+  bitSet.set(65);
+  EXPECT_TRUE(bitSet.any());
+
+  bitSet.clear(65);
+  EXPECT_FALSE(bitSet.any());
+}
+
 TEST(DynamicBitSetTest, AtomicSetFromManyThreadsSetsEveryBit) {
   constexpr std::size_t kNumBits = 4096;
   constexpr std::size_t kNumThreads = 8;
@@ -188,6 +212,35 @@ TEST(DynamicBitSetTest, AtomicSetFromManyThreadsSetsEveryBit) {
 
   for (const auto i : folly::irange(kNumBits)) {
     ASSERT_TRUE(bitSet.isSet(i)) << "i=" << i;
+  }
+}
+
+TEST(DynamicBitSetTest, AtomicOrFromManyThreadsSetsEveryBit) {
+  constexpr std::size_t kNumBits = 4096;
+  constexpr std::size_t kNumThreads = 8;
+
+  std::vector<DynamicBitSet> sources;
+  sources.reserve(kNumThreads);
+  for (const auto t : folly::irange(kNumThreads)) {
+    auto& source = sources.emplace_back(kNumBits);
+    for (std::size_t i = t; i < kNumBits; i += kNumThreads) {
+      source.set(i);
+    }
+  }
+
+  DynamicBitSet merged(kNumBits);
+  std::vector<std::thread> threads;
+  threads.reserve(kNumThreads);
+  for (const auto t : folly::irange(kNumThreads)) {
+    threads.emplace_back(
+        [&merged, &sources, t] { merged.atomicOrFrom(sources.at(t)); });
+  }
+  for (auto& thread : threads) {
+    thread.join();
+  }
+
+  for (const auto i : folly::irange(kNumBits)) {
+    ASSERT_TRUE(merged.isSet(i)) << "i=" << i;
   }
 }
 

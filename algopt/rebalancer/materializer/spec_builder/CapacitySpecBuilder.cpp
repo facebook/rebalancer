@@ -14,6 +14,7 @@
 
 #include "algopt/rebalancer/materializer/spec_builder/CapacitySpecBuilder.h"
 
+#include "algopt/rebalancer/algopt_common/DynamicBitSet.h"
 #include "algopt/rebalancer/common/CoroUtils.h"
 #include "algopt/rebalancer/entities/Identifiers.h"
 #include "algopt/rebalancer/entities/ScopeDimension.h"
@@ -23,8 +24,12 @@
 #include "algopt/rebalancer/solver/expressions/Operators.h"
 #include "algopt/rebalancer/solver/moves/InvalidMoveFilter.h"
 
+#include <algorithm>
+#include <cstddef>
+#include <iterator>
 #include <optional>
 #include <stdexcept>
+#include <utility>
 #include <vector>
 
 using namespace facebook::rebalancer::entities;
@@ -512,15 +517,9 @@ void CapacitySpecBuilder::populateInvalidMoveFilter(
   // constraint during transit, so block all v > 0 (threshold = 0). Objects
   // initially assigned to the scope item are exempt: they can move within the
   // scope item's containers without changing the DURING util.
-  struct BlockedScopeItem {
-    double threshold;
-    ScopeItemId id;
-  };
-  std::vector<BlockedScopeItem> blockedScopeItems;
-  blockedScopeItems.reserve(scopeFilter_.getScopeItemIds().size());
-  // Objects won't be blocked for initially assigned scope item to allow
-  // moves within the scope item's containers.
-  Map<ObjectId, ScopeItemId> objectToInitialScopeItemId;
+  const auto objectIds = universe_->getObjects().getObjectIds();
+  Map<double, std::vector<ScopeItemId>> thresholdToBlockedScopeItems;
+  Map<ScopeItemId, std::vector<ObjectId>> scopeItemToInitialObjects;
   for (const auto& scopeItemId : scopeFilter_.getScopeItemIds()) {
     auto limit = limits_.getLimit(scopeItemId);
     if (isRelative) {
@@ -537,34 +536,38 @@ void CapacitySpecBuilder::populateInvalidMoveFilter(
         initialUtil += value;
         // Zero-valued objects won't be blocked anyway.
         if (value != 0.0) {
-          objectToInitialScopeItemId.emplace(objectId, scopeItemId);
+          scopeItemToInitialObjects[scopeItemId].push_back(objectId);
         }
       }
     }
-    blockedScopeItems.push_back({isAfter ? initialUtil : 0.0, scopeItemId});
+    const double threshold = isAfter ? initialUtil : 0.0;
+    thresholdToBlockedScopeItems[threshold].push_back(scopeItemId);
   }
 
-  if (blockedScopeItems.empty()) {
+  if (thresholdToBlockedScopeItems.empty()) {
     return;
   }
 
-  for (const auto objectId : universe_->getObjects().getObjectIds()) {
-    const auto value = scalarDim.getValue(objectId);
-    // Zero-valued object doesn't impact util so skipped.
-    if (value == 0.0) {
-      continue;
-    }
-    const auto initScopeItemPtr =
-        folly::get_ptr(objectToInitialScopeItemId, objectId);
-    for (const auto& blockedScopeItem : blockedScopeItems) {
-      // Skip the scope item the object is initially assigned to (it can move
-      // within that scope item's containers without worsening the constraint).
-      if ((initScopeItemPtr && *initScopeItemPtr == blockedScopeItem.id) ||
-          value <= blockedScopeItem.threshold) {
-        continue;
+  for (const auto& [threshold, blockedScopeItemIds] :
+       thresholdToBlockedScopeItems) {
+    algopt::DynamicBitSet invalidObjectsForThreshold(objectIds.size());
+    for (const auto objectId : objectIds) {
+      const auto value = scalarDim.getValue(objectId);
+      if (value > threshold) {
+        invalidObjectsForThreshold.set(objectId.asIndex());
       }
-      for (const auto& cid : scope.getContainerIds(blockedScopeItem.id)) {
-        invalidMoveFilter.markInvalid(objectId, cid);
+    }
+
+    for (const auto scopeItemId : blockedScopeItemIds) {
+      auto invalidObjects = invalidObjectsForThreshold;
+      if (const auto* initialObjects =
+              folly::get_ptr(scopeItemToInitialObjects, scopeItemId)) {
+        for (const auto objectId : *initialObjects) {
+          invalidObjects.clear(objectId.asIndex());
+        }
+      }
+      for (const auto containerId : scope.getContainerIds(scopeItemId)) {
+        invalidMoveFilter.markInvalid(invalidObjects, containerId);
       }
     }
   }

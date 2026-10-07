@@ -35,9 +35,14 @@ class InvalidMoveFilter {
   ~InvalidMoveFilter() = default;
 
   // Safe to call concurrently. Reads, copies, and merges require caller
-  // synchronization after all markInvalid() calls have finished.
+  // synchronization after all marking calls have finished. `objectIds` need
+  // not be sorted or unique.
   void markInvalid(
-      entities::ObjectId objectId,
+      const std::vector<entities::ObjectId>& objectIds,
+      entities::ContainerId containerId);
+
+  void markInvalid(
+      const algopt::DynamicBitSet& objectIds,
       entities::ContainerId containerId);
 
   // Union `other` into this filter: afterwards a pair is invalid if it was

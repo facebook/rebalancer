@@ -31,13 +31,14 @@ to be known at compile time. Internally it stores 64-bit blocks
 zero-initialized and turned on with `set(i)`.
 
 Complexity, with `N` total bits, `B = ceil(N / 64)` blocks, and `K` set bits:
-- `set(i)`, `atomicSet(i)`, `isSet(i)`: `O(1)`.
-- `mergeFrom(other)`: `O(B)`.
+- `set(i)`, `clear(i)`, `atomicSet(i)`, `isSet(i)`: `O(1)`.
+- `any()`, `mergeFrom(other)`, `atomicOrFrom(other)`: `O(B)`.
 - `forEachSetBit(fn)`: `O(B + K)`.
 
-Thread safety: `atomicSet()` calls may run concurrently with one another. No
-other operation may overlap a mutation; callers must synchronize after the
-last `atomicSet()` before reading or using a non-atomic mutation method.
+Thread safety: `atomicSet()` and `atomicOrFrom()` calls may run concurrently
+with one another. No other operation may overlap a mutation; callers must
+synchronize after the last atomic mutation before reading or using a
+non-atomic mutation method.
 */
 class DynamicBitSet {
  public:
@@ -85,6 +86,37 @@ class DynamicBitSet {
     block.fetch_or(singleBitMask, std::memory_order_relaxed);
   }
 
+  void clear(std::size_t i) noexcept {
+    FOLLY_SAFE_CHECK(
+        i < numBits_, "DynamicBitSet::clear: bit index out of range: ", i);
+    const auto blockIndex = i / kBitsPerBlock;
+    const auto bitInBlock = i % kBitsPerBlock;
+    blocks_[blockIndex] &= ~(block_type{1} << bitInBlock);
+  }
+
+  // Atomically merges `other` into this bitset. Returns true if `other`
+  // contains at least one set bit.
+  void atomicOrFrom(const DynamicBitSet& other) noexcept {
+    FOLLY_SAFE_CHECK(
+        numBits_ == other.numBits_,
+        "DynamicBitSet::atomicOrFrom: size mismatch: ",
+        numBits_,
+        " vs ",
+        other.numBits_);
+    for (std::size_t b = 0; b < blocks_.size(); ++b) {
+      const auto sourceBlock = other.blocks_[b];
+      if (sourceBlock == 0) {
+        continue;
+      }
+      const std::atomic_ref<block_type> block(blocks_[b]);
+      if ((block.load(std::memory_order_relaxed) & sourceBlock) ==
+          sourceBlock) {
+        continue;
+      }
+      block.fetch_or(sourceBlock, std::memory_order_relaxed);
+    }
+  }
+
   // Sets every bit that is set in `other`, which must have the same size.
   // O(numBlocks) regardless of density.
   void mergeFrom(const DynamicBitSet& other) noexcept {
@@ -114,6 +146,12 @@ class DynamicBitSet {
 
   [[nodiscard]] bool empty() const noexcept {
     return numBits_ == 0;
+  }
+
+  [[nodiscard]] bool any() const noexcept {
+    return std::any_of(blocks_.begin(), blocks_.end(), [](const auto block) {
+      return block != 0;
+    });
   }
 
   [[nodiscard]] std::size_t numBlocks() const noexcept {

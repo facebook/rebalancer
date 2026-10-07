@@ -39,8 +39,11 @@ struct Inputs {
   std::map<std::string, double> zeroLimitScopeItems;
 };
 
-Inputs
-makeInputs(int numScopeItems, int objectsPerScopeItem, int pctZeroObjects) {
+Inputs makeInputs(
+    int numScopeItems,
+    int objectsPerScopeItem,
+    int pctZeroObjects,
+    int numEmptyScopeItems = 0) {
   Inputs in;
   int objectIdx = 0;
   for (const auto i : folly::irange(numScopeItems)) {
@@ -49,6 +52,10 @@ makeInputs(int numScopeItems, int objectsPerScopeItem, int pctZeroObjects) {
     in.containerToScopeItem[host] = scopeItem;
     in.zeroLimitScopeItems[scopeItem] = 0.0;
     std::vector<std::string> objects;
+    if (i < numEmptyScopeItems) {
+      in.containerToObjects[host] = std::move(objects);
+      continue;
+    }
     objects.reserve(objectsPerScopeItem);
     for ([[maybe_unused]] const auto j : folly::irange(objectsPerScopeItem)) {
       const auto object = fmt::format("task{}", objectIdx);
@@ -66,27 +73,31 @@ makeInputs(int numScopeItems, int objectsPerScopeItem, int pctZeroObjects) {
 }
 
 interface::CapacitySpec makeCapacitySpec(
-    const std::map<std::string, double>& zeroLimitScopeItems) {
+    const std::map<std::string, double>& zeroLimitScopeItems,
+    interface::CapacitySpecDefinition definition) {
   interface::CapacitySpec spec;
   spec.name() = "zero_capacity";
   spec.scope() = "rack";
   spec.dimension() = "d";
   spec.bound() = interface::CapacitySpecBound::MAX;
-  spec.definition() = interface::CapacitySpecDefinition::DURING;
+  spec.definition() = definition;
   spec.limit()->type() = interface::LimitType::ABSOLUTE;
   spec.limit()->globalLimit() = kUnboundedLimit;
   spec.limit()->scopeItemLimits() = zeroLimitScopeItems;
   return spec;
 }
 
-void run(
+void runImpl(
     int benchmarkIters,
     int numScopeItems,
     int objectsPerScopeItem,
-    int pctZeroObjects) {
+    int pctZeroObjects,
+    int numEmptyScopeItems,
+    interface::CapacitySpecDefinition definition) {
   Inputs inputs;
   BENCHMARK_SUSPEND {
-    inputs = makeInputs(numScopeItems, objectsPerScopeItem, pctZeroObjects);
+    inputs = makeInputs(
+        numScopeItems, objectsPerScopeItem, pctZeroObjects, numEmptyScopeItems);
   }
 
   for ([[maybe_unused]] const auto _ : folly::irange(benchmarkIters)) {
@@ -97,7 +108,8 @@ void run(
     solver->setAssignment(inputs.containerToObjects);
     solver->addObjectDimension("d", inputs.objectToValue, /*defaultValue=*/0.0);
     solver->addScope("rack", inputs.containerToScopeItem);
-    solver->addConstraint(makeCapacitySpec(inputs.zeroLimitScopeItems));
+    solver->addConstraint(
+        makeCapacitySpec(inputs.zeroLimitScopeItems, definition));
     solver->enableInvalidMoveFilter(true);
 
     interface::LocalSearchSolverSpec solverSpec;
@@ -111,6 +123,34 @@ void run(
   }
 }
 
+void run(
+    int benchmarkIters,
+    int numScopeItems,
+    int objectsPerScopeItem,
+    int pctZeroObjects) {
+  runImpl(
+      benchmarkIters,
+      numScopeItems,
+      objectsPerScopeItem,
+      pctZeroObjects,
+      /*numEmptyScopeItems=*/0,
+      interface::CapacitySpecDefinition::DURING);
+}
+
+void runAfter(
+    int benchmarkIters,
+    int numScopeItems,
+    int objectsPerOccupiedScopeItem,
+    int pctZeroObjects) {
+  runImpl(
+      benchmarkIters,
+      numScopeItems,
+      objectsPerOccupiedScopeItem,
+      pctZeroObjects,
+      /*numEmptyScopeItems=*/numScopeItems / 2,
+      interface::CapacitySpecDefinition::AFTER);
+}
+
 } // namespace
 
 BENCHMARK_NAMED_PARAM(
@@ -118,6 +158,13 @@ BENCHMARK_NAMED_PARAM(
     capacity_1500si_6Mobj,
     /*numScopeItems=*/1500,
     /*objectsPerScopeItem=*/4000,
+    /*pctZeroObjects=*/50)
+
+BENCHMARK_NAMED_PARAM(
+    runAfter,
+    capacity_1500si_6Mobj_750empty,
+    /*numScopeItems=*/1500,
+    /*objectsPerOccupiedScopeItem=*/8000,
     /*pctZeroObjects=*/50)
 
 int main(int argc, char** argv) {

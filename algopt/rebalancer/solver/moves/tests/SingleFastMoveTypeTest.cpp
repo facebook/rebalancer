@@ -452,10 +452,8 @@ CO_TEST_F(SingleFastMoveTypeTest, FilterReducesEvaluatedMoves) {
 
   // With filter: block all objects in container3 from container1
   auto filter = std::make_unique<InvalidMoveFilter>(numObjects, numContainers);
-  filter->markInvalid(object(3), container(1));
-  filter->markInvalid(object(5), container(1));
-  filter->markInvalid(object(6), container(1));
-  filter->markInvalid(object(7), container(1));
+  filter->markInvalid(
+      {object(3), object(5), object(6), object(7)}, container(1));
   auto problemWithFilter = createTestProblem(
       universe,
       objectiveTuple,

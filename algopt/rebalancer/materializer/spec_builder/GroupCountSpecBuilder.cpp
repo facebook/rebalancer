@@ -562,8 +562,10 @@ void GroupCountSpecBuilder::populateInvalidMoveFilter(
   // For DURING / DURING_AND_AFTER: any positive incoming value worsens
   //   the constraint during transit, so block all v > 0 (threshold = 0).
   std::vector<GroupId> zeroLimitGroups;
+  std::vector<ObjectId> invalidObjects;
   for (const auto& scopeItemId : scopeFilter_.getScopeItemIds()) {
     zeroLimitGroups.clear();
+    invalidObjects.clear();
     for (const auto& groupId : partition_.getGroupIds()) {
       if (limits_.getLimit(scopeItemId, groupId) == 0.0) {
         zeroLimitGroups.push_back(groupId);
@@ -586,10 +588,11 @@ void GroupCountSpecBuilder::populateInvalidMoveFilter(
         if (scalarDim.getValue(objectId) <= threshold) {
           continue;
         }
-        for (const auto& containerId : containerIds) {
-          invalidMoveFilter.markInvalid(objectId, containerId);
-        }
+        invalidObjects.push_back(objectId);
       }
+    }
+    for (const auto& containerId : containerIds) {
+      invalidMoveFilter.markInvalid(invalidObjects, containerId);
     }
   }
 }
