@@ -24,6 +24,8 @@
 #include <gtest/gtest.h>
 #include <thrift/lib/cpp/util/EnumUtils.h>
 
+#include <set>
+
 namespace facebook::rebalancer::materializer::tests {
 
 namespace entities = facebook::rebalancer::entities;
@@ -63,6 +65,20 @@ class CapacitySpecBuilderTest : public SpecBuilderTestBase<> {
 
   entities::ObjectId task(int index) const {
     return objectId(fmt::format("task{}", index));
+  }
+
+  std::set<InvalidPair> collectInvalidPairsFor(
+      const interface::CapacitySpec& spec) {
+    if (!universe_) {
+      buildUniverse();
+    }
+    const auto& universe = universe_;
+    const CapacitySpecBuilder specBuilder(universe, spec);
+    InvalidMoveFilter filter(
+        universe->getObjects().getObjectIds().size(),
+        universe->getContainers().getContainerIds().size());
+    specBuilder.populateInvalidMoveFilter(filter);
+    return collectInvalidPairs(filter);
   }
 
   folly::coro::Task<ExprPtr> buildGoalForDefinitionTestCoro(
@@ -736,21 +752,20 @@ TEST_F(CapacitySpecBuilderTest, FilterWorksForDuringDefinitions) {
   const auto numContainers =
       universe_->getContainers().getContainerIds().size();
 
-  // ABSOLUTE limit 0 means every host is at or above its DURING limit. A
-  // non-zero task is blocked from every host it is NOT initially on (an
-  // object initially assigned there may move within its scope item); task0 (cpu
-  // 0) is never blocked.
+  // ABSOLUTE limit 0: every host is already at or above its DURING limit, so
+  // each non-zero task is blocked from every host it is not already on. task0
+  // (cpu 0) is never blocked. DURING and DURING_AND_AFTER share the filter.
   std::set<InvalidPair> expectedInvalidPairs;
-  for (const auto i : {2, 3, 4, 5}) {
+  for (const auto i : {2, 3, 4, 5}) { // host0 initially holds task0, task1
     expectedInvalidPairs.emplace(task(i), containerId("host0"));
   }
-  for (const auto i : {1, 3, 4, 5}) {
+  for (const auto i : {1, 3, 4, 5}) { // host1 initially holds task2
     expectedInvalidPairs.emplace(task(i), containerId("host1"));
   }
-  for (const auto i : {1, 2, 3, 4, 5}) {
+  for (const auto i : {1, 2, 3, 4, 5}) { // host2 is initially empty
     expectedInvalidPairs.emplace(task(i), containerId("host2"));
   }
-  for (const auto i : {1, 2}) {
+  for (const auto i : {1, 2}) { // host3 initially holds task3, task4, task5
     expectedInvalidPairs.emplace(task(i), containerId("host3"));
   }
 
@@ -784,25 +799,19 @@ TEST_F(CapacitySpecBuilderTest, PreFilterBlocksRelativeLimitWithZeroCapacity) {
   spec.limit()->type() = interface::LimitType::RELATIVE;
   spec.limit()->globalLimit() = 1.0;
 
-  const CapacitySpecBuilder specBuilder(buildUniverse(), spec);
-  const auto numObjects = universe_->getObjects().getObjectIds().size();
-  const auto numContainers =
-      universe_->getContainers().getContainerIds().size();
-  InvalidMoveFilter filter(numObjects, numContainers);
-
-  specBuilder.populateInvalidMoveFilter(filter);
-
-  // host0 has capacity 0, relative limit 1.0 * 0 = 0. AFTER definition.
-  // Initial util at host0 = 0.1 (task1). Threshold = 0.1.
-  // Objects with cpu > 0.1 blocked from host0: task2-5.
+  // AFTER's threshold to block is max(limit, initialUtil). host0:
+  // limit 1.0*0=0, util 0.1 => bound 0.1, blocks task2-5. host1: limit 1.0*1=1,
+  // util 0.2 => bound 1, blocks task5 (cpu 1.6). host2/host3 bounds (2, 4)
+  // exceed every object.
   std::set<InvalidPair> expectedInvalidPairs;
   for (const auto i : folly::irange(2, 6)) {
     expectedInvalidPairs.emplace(task(i), containerId("host0"));
   }
-  EXPECT_EQ(expectedInvalidPairs, collectInvalidPairs(filter));
+  expectedInvalidPairs.emplace(task(5), containerId("host1"));
+  EXPECT_EQ(expectedInvalidPairs, collectInvalidPairsFor(spec));
 }
 
-TEST_F(CapacitySpecBuilderTest, FilterSkipsBrokenContainersForAfterOnly) {
+TEST_F(CapacitySpecBuilderTest, FilterAfterUsesInitialUtilForBrokenScopeItem) {
   interface::CapacitySpec spec;
   spec.scope() = "host";
   spec.dimension() = "cpu";
@@ -831,19 +840,11 @@ TEST_F(CapacitySpecBuilderTest, FilterSkipsBrokenContainersForAfterOnly) {
   EXPECT_EQ(expectedInvalidPairs, collectInvalidPairs(filter));
 }
 
-CO_TEST_F(
-    CapacitySpecBuilderTest,
-    FilterDuringExemptsInitiallyAssignedInZeroLimitRack) {
-  // rack0 spans host0+host2. With a DURING zero limit, task1 (initially
-  // assigned to rack0 via host0) must NOT be blocked from rack0's containers --
-  // moving it within the rack (host0 <-> host2) does not change DURING util.
-  // Every other non-zero task is blocked from all containers of a rack it is
-  // not in.
+CO_TEST_F(CapacitySpecBuilderTest, FilterDuringRackWithPerScopeItemLimits) {
+  // Two multi-container racks in one DURING pass, mixing a non-zero and a zero
+  // limit via a scopeItemLimits override.
   co_await addScope(
-      "rack",
-      {{"rack0", {"host0", "host2"}},
-       {"rack1", {"host1"}},
-       {"rack2", {"host3"}}});
+      "rack", {{"rack0", {"host0", "host2"}}, {"rack1", {"host1", "host3"}}});
 
   interface::CapacitySpec spec;
   spec.scope() = "rack";
@@ -851,33 +852,116 @@ CO_TEST_F(
   spec.bound() = interface::CapacitySpecBound::MAX;
   spec.definition() = interface::CapacitySpecDefinition::DURING;
   spec.limit()->type() = interface::LimitType::ABSOLUTE;
-  spec.limit()->globalLimit() = 0;
+  spec.limit()->globalLimit() = 0.5;
+  spec.limit()->scopeItemLimits() = {{"rack1", 0}};
 
-  const CapacitySpecBuilder specBuilder(buildUniverse(), spec);
-  const auto numObjects = universe_->getObjects().getObjectIds().size();
-  const auto numContainers =
-      universe_->getContainers().getContainerIds().size();
-  InvalidMoveFilter filter(numObjects, numContainers);
-  specBuilder.populateInvalidMoveFilter(filter);
-
-  // Initially assigned: rack0={task1}, rack1={task2}, rack2={task3,4,5}; task0
-  // has cpu 0. Each non-zero task not initially assigned there is blocked from
-  // all of a rack's containers.
+  // rack0 has initial util 0.1 and headroom 0.4, so task4 and task5 exceed it.
+  // rack1's zero limit blocks its only external non-zero object, task1.
+  // Objects initially in a rack are exempt.
   std::set<InvalidPair> expected;
-  for (const auto t : {2, 3, 4, 5}) { // not initially assigned to rack0
+  for (const auto t : {4, 5}) {
     expected.emplace(task(t), containerId("host0"));
     expected.emplace(task(t), containerId("host2"));
   }
-  for (const auto t : {1, 3, 4, 5}) { // not initially assigned to rack1
-    expected.emplace(task(t), containerId("host1"));
-  }
-  for (const auto t : {1, 2}) { // not initially assigned to rack2
-    expected.emplace(task(t), containerId("host3"));
-  }
-  EXPECT_EQ(expected, collectInvalidPairs(filter));
+  expected.emplace(task(1), containerId("host1")); // rack1 zero limit
+  expected.emplace(task(1), containerId("host3"));
+  EXPECT_EQ(expected, collectInvalidPairsFor(spec));
 }
 
-TEST_F(CapacitySpecBuilderTest, FilterNoOpForNonZeroAbsoluteNoOverrides) {
+TEST_F(CapacitySpecBuilderTest, FilterDuringNonZeroAbsoluteLimit) {
+  // With limit 0.5, the remaining headroom is host0=0.4, host1=0.3,
+  // host2=0.5, and host3=0. Existing objects are exempt on their initial host.
+  interface::CapacitySpec spec;
+  spec.scope() = "host";
+  spec.dimension() = "cpu";
+  spec.bound() = interface::CapacitySpecBound::MAX;
+  spec.definition() = interface::CapacitySpecDefinition::DURING;
+  spec.limit()->type() = interface::LimitType::ABSOLUTE;
+  spec.limit()->globalLimit() = 0.5;
+
+  std::set<InvalidPair> expected;
+  for (const auto t : {4, 5}) {
+    expected.emplace(task(t), containerId("host0"));
+  }
+  for (const auto t : {3, 4, 5}) {
+    expected.emplace(task(t), containerId("host1"));
+  }
+  for (const auto t : {4, 5}) {
+    expected.emplace(task(t), containerId("host2"));
+  }
+  for (const auto t : {1, 2}) {
+    expected.emplace(task(t), containerId("host3"));
+  }
+  EXPECT_EQ(expected, collectInvalidPairsFor(spec));
+}
+
+TEST_F(CapacitySpecBuilderTest, FilterDuringNegativeLimitClampsToZero) {
+  interface::CapacitySpec spec;
+  spec.scope() = "host";
+  spec.dimension() = "cpu";
+  spec.bound() = interface::CapacitySpecBound::MAX;
+  spec.definition() = interface::CapacitySpecDefinition::DURING;
+  spec.limit()->type() = interface::LimitType::ABSOLUTE;
+  spec.limit()->globalLimit() = -0.5;
+  spec.filter()->itemsWhitelist() = {"host2"};
+
+  std::set<InvalidPair> expected;
+  for (const auto t : folly::irange(1, 6)) {
+    expected.emplace(task(t), containerId("host2"));
+  }
+  EXPECT_EQ(expected, collectInvalidPairsFor(spec));
+}
+
+TEST_F(CapacitySpecBuilderTest, FilterDuringRelativeLimit) {
+  interface::CapacitySpec spec;
+  spec.scope() = "host";
+  spec.dimension() = "cpu";
+  spec.bound() = interface::CapacitySpecBound::MAX;
+  spec.definition() = interface::CapacitySpecDefinition::DURING;
+  spec.limit()->type() = interface::LimitType::RELATIVE;
+  spec.limit()->globalLimit() = 0.5;
+
+  // RELATIVE limit 0.5 gives headroom host0=0, host1=0.3, host2=1.0,
+  // and host3=0 after accounting for initial utilization.
+  std::set<InvalidPair> expected;
+  for (const auto t : {2, 3, 4, 5}) {
+    expected.emplace(task(t), containerId("host0"));
+  }
+  for (const auto t : {3, 4, 5}) {
+    expected.emplace(task(t), containerId("host1"));
+  }
+  for (const auto t : {5}) {
+    expected.emplace(task(t), containerId("host2"));
+  }
+  for (const auto t : {1, 2}) {
+    expected.emplace(task(t), containerId("host3"));
+  }
+  EXPECT_EQ(expected, collectInvalidPairsFor(spec));
+}
+
+TEST_F(CapacitySpecBuilderTest, FilterAfterNonZeroAbsoluteLimit) {
+  // AFTER blocks an object only when it alone exceeds a scope item's bound
+  // max(limit, initialUtil); everything else can move out. With ABSOLUTE limit
+  // 0.5 only task4 (0.8) and task5 (1.6) exceed it, and only on hosts where
+  // they are not already assigned. host3's initial util 2.8 raises its bound
+  // above every object, so nothing is blocked there.
+  interface::CapacitySpec spec;
+  spec.scope() = "host";
+  spec.dimension() = "cpu";
+  spec.bound() = interface::CapacitySpecBound::MAX;
+  spec.definition() = interface::CapacitySpecDefinition::AFTER;
+  spec.limit()->type() = interface::LimitType::ABSOLUTE;
+  spec.limit()->globalLimit() = 0.5;
+
+  std::set<InvalidPair> expected;
+  for (const auto& host : {"host0", "host1", "host2"}) {
+    expected.emplace(task(4), containerId(host));
+    expected.emplace(task(5), containerId(host));
+  }
+  EXPECT_EQ(expected, collectInvalidPairsFor(spec));
+}
+
+TEST_F(CapacitySpecBuilderTest, FilterAfterNoOpWhenGlobalLimitFitsAllObjects) {
   interface::CapacitySpec spec;
   spec.scope() = "host";
   spec.dimension() = "cpu";
@@ -886,16 +970,7 @@ TEST_F(CapacitySpecBuilderTest, FilterNoOpForNonZeroAbsoluteNoOverrides) {
   spec.limit()->type() = interface::LimitType::ABSOLUTE;
   spec.limit()->globalLimit() = 10;
 
-  const CapacitySpecBuilder specBuilder(buildUniverse(), spec);
-  const auto numObjects = universe_->getObjects().getObjectIds().size();
-  const auto numContainers =
-      universe_->getContainers().getContainerIds().size();
-  InvalidMoveFilter filter(numObjects, numContainers);
-
-  specBuilder.populateInvalidMoveFilter(filter);
-
-  // ABSOLUTE non-zero global limit with no overrides → fast path
-  EXPECT_TRUE(filter.empty());
+  EXPECT_TRUE(collectInvalidPairsFor(spec).empty());
 }
 
 CO_TEST_F(CapacitySpecBuilderTest, FilterNoOpForNegativeDimensions) {

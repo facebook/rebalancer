@@ -497,36 +497,40 @@ void CapacitySpecBuilder::populateInvalidMoveFilter(
   const auto& scope = universe_->getScope(scopeId_);
   const auto& scalarDim = objDim.only();
   const auto& containers = universe_->getContainers();
-
-  // Fast path for ABSOLUTE limits: non-zero global limit with no overrides
-  // means no scope item can have a zero threshold.
-  if (limits_.getType() == LimitType::ABSOLUTE &&
-      limits_.onlyHasGlobalLimit() && limits_.getGlobalLimit() != 0.0) {
+  const auto scopeItemIds = scopeFilter_.getScopeItemIds();
+  if (scopeItemIds.empty()) {
     return;
   }
 
   const auto isRelative = limits_.getType() == LimitType::RELATIVE;
-  const auto* scopeDimension =
-      isRelative ? &scope.getDimension(dimensionId_) : nullptr;
+  const auto& scopeDimension = scope.getDimension(dimensionId_);
   const auto isAfter = def == CapacitySpecDefinition::AFTER;
+  const auto maxObjValue = scalarDim.getMaximumValue();
 
-  // For AFTER: threshold = the scope item's initial util L. An incoming object
-  // with v <= L can be offset by moving existing objects out, so block only
-  // v > L.
-  // For DURING / DURING_AND_AFTER: any positive incoming value worsens the
-  // constraint during transit, so block all v > 0 (threshold = 0). Objects
-  // initially assigned to the scope item are exempt: they can move within the
-  // scope item's containers without changing the DURING util.
+  // Block (object, container) pairs that can never be valid: an object is
+  // blocked from a scope item's containers when it cannot fit within that scope
+  // item's threshold, which in turn depends on the definition:
+  // + AFTER considers only the final assignment; so, an object fits unless its
+  // own value exceeds max(limit, initialUtil), since other objects can move
+  // out.
+  // + DURING keeps the initial objects in the utilization while adding incoming
+  // objects, so an object fits only within max(limit - initialUtil, 0). Objects
+  // already in the scope item are exempt because moving them within it never
+  // raises util.
+
+  // AFTER can skip per-scope processing when every object fits by itself.
+  if (isAfter && limits_.getType() == LimitType::ABSOLUTE &&
+      limits_.onlyHasGlobalLimit() && limits_.getGlobalLimit() >= maxObjValue) {
+    return;
+  }
+
   const auto objectIds = universe_->getObjects().getObjectIds();
   Map<double, std::vector<ScopeItemId>> thresholdToBlockedScopeItems;
   Map<ScopeItemId, std::vector<ObjectId>> scopeItemToInitialObjects;
-  for (const auto& scopeItemId : scopeFilter_.getScopeItemIds()) {
+  for (const auto scopeItemId : scopeItemIds) {
     auto limit = limits_.getLimit(scopeItemId);
     if (isRelative) {
-      limit *= scopeDimension->getValue(scopeItemId);
-    }
-    if (limit != 0.0) {
-      continue;
+      limit *= scopeDimension.getValue(scopeItemId);
     }
 
     double initialUtil = 0.0;
@@ -540,7 +544,12 @@ void CapacitySpecBuilder::populateInvalidMoveFilter(
         }
       }
     }
-    const double threshold = isAfter ? initialUtil : 0.0;
+    const auto threshold = isAfter ? std::max(limit, initialUtil)
+                                   : std::max(limit - initialUtil, 0.0);
+    if (maxObjValue <= threshold) {
+      // No object exceeds this scope item's bound; nothing to block.
+      continue;
+    }
     thresholdToBlockedScopeItems[threshold].push_back(scopeItemId);
   }
 
