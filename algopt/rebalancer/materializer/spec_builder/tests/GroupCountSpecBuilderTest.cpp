@@ -479,7 +479,8 @@ TEST_F(GroupCountSpecBuilderTest, PreFilterBlocksZeroLimitPairs) {
       universe_->getContainers().getContainerIds().size();
   InvalidMoveFilter filter(numObjects, numContainers);
 
-  specBuilder.populateInvalidMoveFilter(filter);
+  specBuilder.populateInvalidMoveFilter(
+      filter, expressionBuilder().getUpdatedInitialAssignment());
 
   EXPECT_FALSE(filter.empty());
   // job1 tasks (task0-4) are blocked from host1
@@ -512,7 +513,8 @@ TEST_F(GroupCountSpecBuilderTest, PreFilterNoOpForNonZeroLimits) {
       universe_->getContainers().getContainerIds().size();
   InvalidMoveFilter filter(numObjects, numContainers);
 
-  specBuilder.populateInvalidMoveFilter(filter);
+  specBuilder.populateInvalidMoveFilter(
+      filter, expressionBuilder().getUpdatedInitialAssignment());
 
   EXPECT_TRUE(filter.empty());
 }
@@ -535,7 +537,8 @@ TEST_F(GroupCountSpecBuilderTest, PreFilterNoOpForMinBound) {
       universe_->getContainers().getContainerIds().size();
   InvalidMoveFilter filter(numObjects, numContainers);
 
-  specBuilder.populateInvalidMoveFilter(filter);
+  specBuilder.populateInvalidMoveFilter(
+      filter, expressionBuilder().getUpdatedInitialAssignment());
 
   EXPECT_TRUE(filter.empty());
 }
@@ -559,7 +562,8 @@ TEST_F(GroupCountSpecBuilderTest, FilterBlocksZeroLimitPairsForExactBound) {
       universe_->getContainers().getContainerIds().size();
   InvalidMoveFilter filter(numObjects, numContainers);
 
-  specBuilder.populateInvalidMoveFilter(filter);
+  specBuilder.populateInvalidMoveFilter(
+      filter, expressionBuilder().getUpdatedInitialAssignment());
 
   std::set<InvalidPair> expectedInvalidPairs;
   for (const auto i : folly::irange(0, 5)) {
@@ -588,13 +592,139 @@ TEST_F(GroupCountSpecBuilderTest, FilterWorksForDuringDefinition) {
       universe_->getContainers().getContainerIds().size();
   InvalidMoveFilter filter(numObjects, numContainers);
 
-  specBuilder.populateInvalidMoveFilter(filter);
+  specBuilder.populateInvalidMoveFilter(
+      filter, expressionBuilder().getUpdatedInitialAssignment());
 
   std::set<InvalidPair> expectedInvalidPairs;
   for (const auto i : folly::irange(5, 9)) {
     expectedInvalidPairs.emplace(task(i), containerId("host0"));
   }
   EXPECT_EQ(expectedInvalidPairs, collectInvalidPairs(filter));
+}
+
+TEST_F(
+    GroupCountSpecBuilderTest,
+    FilterDuringExemptsOriginalAndUpdatedScopeMembers) {
+  interface::GroupCountSpec spec;
+  spec.scope() = "host";
+  spec.partitionName() = "job";
+  spec.dimension() = "task_count";
+  spec.bound() = interface::GroupCountSpecBound::MAX;
+  spec.definition() = interface::GroupCountSpecDefinition::DURING;
+
+  interface::Limit limit;
+  limit.type() = interface::LimitType::ABSOLUTE;
+  limit.scopeItemToGroupLimits() = {{"host0", {{"job1", 0}, {"job2", 0}}}};
+  limit.isDefaultLimitUnbounded() = true;
+  spec.limit() = limit;
+
+  const GroupCountSpecBuilder specBuilder(buildUniverse(), spec);
+  InvalidMoveFilter filter(
+      universe_->getObjects().getObjectIds().size(),
+      universe_->getContainers().getContainerIds().size());
+  const Assignment updatedInitialAssignment(
+      deltaFromInitial({{"task5", "host0"}}));
+  specBuilder.populateInvalidMoveFilter(filter, updatedInitialAssignment);
+
+  const std::set<InvalidPair> expected{
+      {task(6), containerId("host0")},
+      {task(7), containerId("host0")},
+      {task(8), containerId("host0")},
+  };
+  EXPECT_EQ(expected, collectInvalidPairs(filter));
+}
+
+CO_TEST_F(GroupCountSpecBuilderTest, FilterHonorsFeasibilityTolerance) {
+  co_await addObjectDimension(
+      "near_zero", {{task(0), 0.00000000001}, {task(1), 0.00000000015}}, 0);
+
+  interface::GroupCountSpec spec;
+  spec.scope() = "host";
+  spec.partitionName() = "job";
+  spec.dimension() = "near_zero";
+  spec.bound() = interface::GroupCountSpecBound::MAX;
+  spec.definition() = interface::GroupCountSpecDefinition::DURING;
+
+  interface::Limit limit;
+  limit.type() = interface::LimitType::ABSOLUTE;
+  limit.scopeItemToGroupLimits() = {{"host1", {{"job1", 0}}}};
+  limit.isDefaultLimitUnbounded() = true;
+  spec.limit() = limit;
+
+  const GroupCountSpecBuilder specBuilder(buildUniverse(), spec);
+  InvalidMoveFilter filter(
+      universe_->getObjects().getObjectIds().size(),
+      universe_->getContainers().getContainerIds().size());
+  specBuilder.populateInvalidMoveFilter(
+      filter, expressionBuilder().getUpdatedInitialAssignment());
+
+  const std::set<InvalidPair> expected{{task(1), containerId("host1")}};
+  EXPECT_EQ(expected, collectInvalidPairs(filter));
+}
+
+CO_TEST_F(
+    GroupCountSpecBuilderTest,
+    FilterSquaresUsesNormalizedSquaredPenalty) {
+  co_await addObjectDimension(
+      "near_zero", {{task(0), 0.00001}, {task(1), 0.0001}}, 0);
+
+  interface::GroupCountSpec spec;
+  spec.scope() = "host";
+  spec.partitionName() = "job";
+  spec.dimension() = "near_zero";
+  spec.bound() = interface::GroupCountSpecBound::MAX;
+  spec.definition() = interface::GroupCountSpecDefinition::DURING;
+  spec.squares() = true;
+
+  interface::Limit limit;
+  limit.type() = interface::LimitType::ABSOLUTE;
+  limit.scopeItemToGroupLimits() = {{"host1", {{"job1", 0}}}};
+  limit.isDefaultLimitUnbounded() = true;
+  spec.limit() = limit;
+
+  const GroupCountSpecBuilder specBuilder(buildUniverse(), spec);
+  InvalidMoveFilter filter(
+      universe_->getObjects().getObjectIds().size(),
+      universe_->getContainers().getContainerIds().size());
+  specBuilder.populateInvalidMoveFilter(
+      filter, expressionBuilder().getUpdatedInitialAssignment());
+
+  const std::set<InvalidPair> expected{{task(1), containerId("host1")}};
+  EXPECT_EQ(expected, collectInvalidPairs(filter));
+}
+
+CO_TEST_F(
+    GroupCountSpecBuilderTest,
+    FilterSquaresUsesUpdatedInitialPenaltyForAfter) {
+  co_await addObjectDimension(
+      "near_threshold",
+      {{task(0), 1.0}, {task(1), 1.00000000015}, {task(2), 1.000000002}},
+      0);
+
+  interface::GroupCountSpec spec;
+  spec.scope() = "host";
+  spec.partitionName() = "job";
+  spec.dimension() = "near_threshold";
+  spec.bound() = interface::GroupCountSpecBound::MAX;
+  spec.definition() = interface::GroupCountSpecDefinition::AFTER;
+  spec.squares() = true;
+
+  interface::Limit limit;
+  limit.type() = interface::LimitType::ABSOLUTE;
+  limit.scopeItemToGroupLimits() = {{"host1", {{"job1", 0}}}};
+  limit.isDefaultLimitUnbounded() = true;
+  spec.limit() = limit;
+
+  const GroupCountSpecBuilder specBuilder(buildUniverse(), spec);
+  InvalidMoveFilter filter(
+      universe_->getObjects().getObjectIds().size(),
+      universe_->getContainers().getContainerIds().size());
+  const Assignment updatedInitialAssignment(
+      deltaFromInitial({{"task0", "host1"}}));
+  specBuilder.populateInvalidMoveFilter(filter, updatedInitialAssignment);
+
+  const std::set<InvalidPair> expected{{task(2), containerId("host1")}};
+  EXPECT_EQ(expected, collectInvalidPairs(filter));
 }
 
 TEST_F(GroupCountSpecBuilderTest, FilterNoOpForStayedDefinition) {
@@ -617,7 +747,8 @@ TEST_F(GroupCountSpecBuilderTest, FilterNoOpForStayedDefinition) {
       universe_->getContainers().getContainerIds().size();
   InvalidMoveFilter filter(numObjects, numContainers);
 
-  specBuilder.populateInvalidMoveFilter(filter);
+  specBuilder.populateInvalidMoveFilter(
+      filter, expressionBuilder().getUpdatedInitialAssignment());
 
   EXPECT_TRUE(filter.empty());
 }
@@ -641,7 +772,8 @@ TEST_F(GroupCountSpecBuilderTest, FilterSkipsInitiallyBrokenPairsForAfter) {
       universe_->getContainers().getContainerIds().size();
   InvalidMoveFilter filter(numObjects, numContainers);
 
-  specBuilder.populateInvalidMoveFilter(filter);
+  specBuilder.populateInvalidMoveFilter(
+      filter, expressionBuilder().getUpdatedInitialAssignment());
 
   // globalLimit=0 with AFTER definition:
   // (job1, host0): initial util L=5 (task0-4), threshold=5, all tasks have v=1
@@ -677,7 +809,8 @@ TEST_F(GroupCountSpecBuilderTest, FilterNoOpForNonZeroGlobalNoOverrides) {
       universe_->getContainers().getContainerIds().size();
   InvalidMoveFilter filter(numObjects, numContainers);
 
-  specBuilder.populateInvalidMoveFilter(filter);
+  specBuilder.populateInvalidMoveFilter(
+      filter, expressionBuilder().getUpdatedInitialAssignment());
 
   // Non-zero global limit with no overrides → hasOverride() fast path
   EXPECT_TRUE(filter.empty());
@@ -704,7 +837,8 @@ CO_TEST_F(GroupCountSpecBuilderTest, FilterNoOpForNegativeDimensions) {
       universe_->getContainers().getContainerIds().size();
   InvalidMoveFilter filter(numObjects, numContainers);
 
-  specBuilder.populateInvalidMoveFilter(filter);
+  specBuilder.populateInvalidMoveFilter(
+      filter, expressionBuilder().getUpdatedInitialAssignment());
 
   // Dimension has negative values → filter is skipped entirely
   EXPECT_TRUE(filter.empty());

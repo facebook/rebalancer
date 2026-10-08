@@ -497,18 +497,18 @@ SpecParameters GroupCountSpecBuilder::getSpecInfo() const {
 
 namespace {
 
-// Compute initial utilization per group for a set of containers within
+// Compute updated initial utilization per group for a set of containers within
 // a scope item. Only groups with non-zero utilization are included.
-Map<GroupId, double> getInitialUtilsPerGroupInScopeItem(
-    const Universe& universe,
+Map<GroupId, double> getUpdatedInitialUtilsPerGroupInScopeItem(
+    const Assignment& updatedInitialAssignment,
     const Partition& partition,
     const ObjectScalarDimension& scalarDim,
     const Set<ContainerId>& containerIds) {
   Map<GroupId, double> utils;
-  const auto& containers = universe.getContainers();
   const auto& objectToGroups = partition.getObjectIdToGroupIds();
   for (const auto& containerId : containerIds) {
-    for (const auto& objectId : containers.getInitialObjectIds(containerId)) {
+    for (const auto objectId :
+         updatedInitialAssignment.getObjects(containerId)) {
       const auto& value = scalarDim.getValue(objectId);
       if (value == 0.0) {
         continue;
@@ -528,7 +528,8 @@ Map<GroupId, double> getInitialUtilsPerGroupInScopeItem(
 } // namespace
 
 void GroupCountSpecBuilder::populateInvalidMoveFilter(
-    InvalidMoveFilter& invalidMoveFilter) const {
+    InvalidMoveFilter& invalidMoveFilter,
+    const Assignment& updatedInitialAssignment) const {
   const auto& bound = *spec_.bound();
   const auto& definition = *spec_.definition();
   if ((bound != GroupCountSpecBound::MAX &&
@@ -555,12 +556,11 @@ void GroupCountSpecBuilder::populateInvalidMoveFilter(
   const auto& scalarDim = objDim.only();
   const auto& scope = universe_->getScope(scopeId_);
   const auto isAfter = definition == GroupCountSpecDefinition::AFTER;
+  const auto& precision = universe_->getPrecision();
 
-  // For AFTER: threshold = initial util L at this (scopeItem, group).
-  //   An incoming object with v <= L can be matched by moving existing
-  //   objects out, so only block v > L.
-  // For DURING / DURING_AND_AFTER: any positive incoming value worsens
-  //   the constraint during transit, so block all v > 0 (threshold = 0).
+  // AFTER uses the updated initial utilization as the threshold. DURING also
+  // accounts for the Universe's original placement, so objects present in
+  // either assignment are exempt from moves within or back to the scope item.
   std::vector<GroupId> zeroLimitGroups;
   std::vector<ObjectId> invalidObjects;
   for (const auto& scopeItemId : scopeFilter_.getScopeItemIds()) {
@@ -576,16 +576,36 @@ void GroupCountSpecBuilder::populateInvalidMoveFilter(
     }
 
     const auto& containerIds = scope.getContainerIds(scopeItemId);
-    const Map<GroupId, double> initialUtilByGroup = isAfter
-        ? getInitialUtilsPerGroupInScopeItem(
-              *universe_, partition_, scalarDim, containerIds)
+    const Map<GroupId, double> updatedInitialUtilByGroup = isAfter
+        ? getUpdatedInitialUtilsPerGroupInScopeItem(
+              updatedInitialAssignment, partition_, scalarDim, containerIds)
         : Map<GroupId, double>{};
+    Set<ObjectId> duringExemptObjects;
+    if (!isAfter) {
+      for (const auto containerId : containerIds) {
+        const auto& originalObjects =
+            universe_->getContainers().getInitialObjectIds(containerId);
+        duringExemptObjects.insert(
+            originalObjects.begin(), originalObjects.end());
+        const auto& updatedObjects =
+            updatedInitialAssignment.getObjects(containerId);
+        duringExemptObjects.insert(
+            updatedObjects.begin(), updatedObjects.end());
+      }
+    }
 
     for (const auto& groupId : zeroLimitGroups) {
       const auto& threshold =
-          folly::get_default(initialUtilByGroup, groupId, 0.0);
+          folly::get_default(updatedInitialUtilByGroup, groupId, 0.0);
+      const auto groupSize =
+          static_cast<double>(partition_.getObjectIds(groupId).size());
       for (const auto& objectId : partition_.getObjectIds(groupId)) {
-        if (scalarDim.getValue(objectId) <= threshold) {
+        const auto value = scalarDim.getValue(objectId);
+        const auto penaltyIncrease = *spec_.squares()
+            ? (value * value - threshold * threshold) / (groupSize * groupSize)
+            : value - threshold;
+        if (duringExemptObjects.contains(objectId) ||
+            !precision.isStrictlyGtZero(penaltyIncrease)) {
           continue;
         }
         invalidObjects.push_back(objectId);

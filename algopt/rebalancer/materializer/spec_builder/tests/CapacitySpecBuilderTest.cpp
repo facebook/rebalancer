@@ -77,7 +77,8 @@ class CapacitySpecBuilderTest : public SpecBuilderTestBase<> {
     InvalidMoveFilter filter(
         universe->getObjects().getObjectIds().size(),
         universe->getContainers().getContainerIds().size());
-    specBuilder.populateInvalidMoveFilter(filter);
+    specBuilder.populateInvalidMoveFilter(
+        filter, expressionBuilder().getUpdatedInitialAssignment());
     return collectInvalidPairs(filter);
   }
 
@@ -685,7 +686,8 @@ TEST_F(CapacitySpecBuilderTest, PreFilterBlocksZeroLimitContainers) {
       universe_->getContainers().getContainerIds().size();
   InvalidMoveFilter filter(numObjects, numContainers);
 
-  specBuilder.populateInvalidMoveFilter(filter);
+  specBuilder.populateInvalidMoveFilter(
+      filter, expressionBuilder().getUpdatedInitialAssignment());
 
   // host0 has limit=0, AFTER definition. Initial util at host0 = 0.1 (task1).
   // Threshold = 0.1: objects with cpu > 0.1 are blocked from host0.
@@ -714,7 +716,8 @@ TEST_F(CapacitySpecBuilderTest, PreFilterNoOpForMinBound) {
       universe_->getContainers().getContainerIds().size();
   InvalidMoveFilter filter(numObjects, numContainers);
 
-  specBuilder.populateInvalidMoveFilter(filter);
+  specBuilder.populateInvalidMoveFilter(
+      filter, expressionBuilder().getUpdatedInitialAssignment());
 
   EXPECT_TRUE(filter.empty());
 }
@@ -739,7 +742,8 @@ TEST_F(CapacitySpecBuilderTest, FilterNoOpForContextDependentDefinitions) {
 
     const CapacitySpecBuilder specBuilder(universe, spec);
     InvalidMoveFilter filter(numObjects, numContainers);
-    specBuilder.populateInvalidMoveFilter(filter);
+    specBuilder.populateInvalidMoveFilter(
+        filter, expressionBuilder().getUpdatedInitialAssignment());
 
     EXPECT_TRUE(filter.empty()) << "Expected no-op for definition "
                                 << apache::thrift::util::enumNameSafe(def);
@@ -782,12 +786,176 @@ TEST_F(CapacitySpecBuilderTest, FilterWorksForDuringDefinitions) {
 
     const CapacitySpecBuilder specBuilder(universe, spec);
     InvalidMoveFilter filter(numObjects, numContainers);
-    specBuilder.populateInvalidMoveFilter(filter);
+    specBuilder.populateInvalidMoveFilter(
+        filter, expressionBuilder().getUpdatedInitialAssignment());
 
     EXPECT_EQ(expectedInvalidPairs, collectInvalidPairs(filter))
         << "Unexpected filter pairs for definition "
         << apache::thrift::util::enumNameSafe(def);
   }
+}
+
+CO_TEST_F(
+    CapacitySpecBuilderTest,
+    FilterDuringZeroLimitHonorsFeasibilityTolerance) {
+  co_await addObjectDimension(
+      "near_zero",
+      {{task(1), 0.00000000001}, {task(2), 0.2}, {task(3), 0.00000000015}},
+      0);
+  co_await addScopeDimension(
+      "near_zero",
+      scopeId("host"),
+      {{"host0", 1}, {"host1", 1}, {"host2", 1}, {"host3", 1}},
+      0);
+
+  interface::CapacitySpec spec;
+  spec.scope() = "host";
+  spec.dimension() = "near_zero";
+  spec.bound() = interface::CapacitySpecBound::MAX;
+  spec.definition() = interface::CapacitySpecDefinition::DURING;
+  spec.limit()->type() = interface::LimitType::ABSOLUTE;
+  spec.limit()->globalLimit() = 0;
+  spec.filter()->itemsWhitelist() = {"host2"};
+
+  const CapacitySpecBuilder specBuilder(buildUniverse(), spec);
+  InvalidMoveFilter filter(
+      universe_->getObjects().getObjectIds().size(),
+      universe_->getContainers().getContainerIds().size());
+  specBuilder.populateInvalidMoveFilter(
+      filter, expressionBuilder().getUpdatedInitialAssignment());
+
+  const std::set<InvalidPair> expected{
+      {task(2), containerId("host2")},
+      {task(3), containerId("host2")},
+  };
+  EXPECT_EQ(expected, collectInvalidPairs(filter));
+}
+
+TEST_F(CapacitySpecBuilderTest, FilterSkipsLegacyZeroCapacityScopeItem) {
+  interface::CapacitySpec spec;
+  spec.scope() = "host";
+  spec.dimension() = "cpu";
+  spec.bound() = interface::CapacitySpecBound::MAX;
+  spec.definition() = interface::CapacitySpecDefinition::DURING;
+  spec.limit()->type() = interface::LimitType::ABSOLUTE;
+  spec.limit()->globalLimit() = 0;
+  spec.filter()->itemsWhitelist() = {"host0"};
+  spec.useLegacyFormula() = true;
+
+  const CapacitySpecBuilder specBuilder(buildUniverse(), spec);
+  InvalidMoveFilter filter(
+      universe_->getObjects().getObjectIds().size(),
+      universe_->getContainers().getContainerIds().size());
+  specBuilder.populateInvalidMoveFilter(
+      filter, expressionBuilder().getUpdatedInitialAssignment());
+
+  EXPECT_TRUE(filter.empty());
+}
+
+CO_TEST_F(
+    CapacitySpecBuilderTest,
+    FilterLegacyNormalizationAffectsFeasibilityTolerance) {
+  co_await addObjectDimension("tiny_capacity", {{task(1), 0.000000001}}, 0);
+  co_await addScopeDimension(
+      "tiny_capacity",
+      scopeId("host"),
+      {{"host0", 0.000001},
+       {"host1", 0.000001},
+       {"host2", 0.000001},
+       {"host3", 0.000001}},
+      0);
+
+  interface::CapacitySpec spec;
+  spec.scope() = "host";
+  spec.dimension() = "tiny_capacity";
+  spec.bound() = interface::CapacitySpecBound::MAX;
+  spec.definition() = interface::CapacitySpecDefinition::DURING;
+  spec.limit()->type() = interface::LimitType::ABSOLUTE;
+  spec.limit()->globalLimit() = 0;
+  spec.filter()->itemsWhitelist() = {"host2"};
+  spec.useLegacyFormula() = true;
+
+  const CapacitySpecBuilder specBuilder(buildUniverse(), spec);
+  InvalidMoveFilter filter(
+      universe_->getObjects().getObjectIds().size(),
+      universe_->getContainers().getContainerIds().size());
+  specBuilder.populateInvalidMoveFilter(
+      filter, expressionBuilder().getUpdatedInitialAssignment());
+
+  const std::set<InvalidPair> expected{{task(1), containerId("host2")}};
+  EXPECT_EQ(expected, collectInvalidPairs(filter));
+}
+
+TEST_F(CapacitySpecBuilderTest, FilterAfterUsesUpdatedInitialAssignment) {
+  interface::CapacitySpec spec;
+  spec.scope() = "host";
+  spec.dimension() = "cpu";
+  spec.bound() = interface::CapacitySpecBound::MAX;
+  spec.definition() = interface::CapacitySpecDefinition::AFTER;
+  spec.limit()->type() = interface::LimitType::ABSOLUTE;
+  spec.limit()->globalLimit() = 10;
+  spec.limit()->scopeItemLimits() = {{"host0", 0}};
+
+  const auto universe = buildUniverse();
+  const CapacitySpecBuilder specBuilder(universe, spec);
+  const auto numObjects = universe->getObjects().getObjectIds().size();
+  const auto numContainers = universe->getContainers().getContainerIds().size();
+
+  InvalidMoveFilter originalFilter(numObjects, numContainers);
+  specBuilder.populateInvalidMoveFilter(
+      originalFilter, expressionBuilder().getUpdatedInitialAssignment());
+  const std::set<InvalidPair> expectedOriginal{
+      {task(2), containerId("host0")},
+      {task(3), containerId("host0")},
+      {task(4), containerId("host0")},
+      {task(5), containerId("host0")},
+  };
+  EXPECT_EQ(expectedOriginal, collectInvalidPairs(originalFilter));
+
+  InvalidMoveFilter updatedFilter(numObjects, numContainers);
+  const Assignment updatedInitialAssignment(
+      deltaFromInitial({{"task5", "host0"}}));
+  specBuilder.populateInvalidMoveFilter(
+      updatedFilter, updatedInitialAssignment);
+  EXPECT_TRUE(updatedFilter.empty());
+}
+
+CO_TEST_F(
+    CapacitySpecBuilderTest,
+    FilterDuringExemptsOriginalAndUpdatedScopeMembers) {
+  co_await addScope(
+      "rack",
+      {{"rack0", {"host0", "host2"}},
+       {"rack1", {"host1"}},
+       {"rack2", {"host3"}}});
+
+  interface::CapacitySpec spec;
+  spec.scope() = "rack";
+  spec.dimension() = "cpu";
+  spec.bound() = interface::CapacitySpecBound::MAX;
+  spec.definition() = interface::CapacitySpecDefinition::DURING;
+  spec.limit()->type() = interface::LimitType::ABSOLUTE;
+  spec.limit()->globalLimit() = 0;
+  spec.filter()->itemsWhitelist() = {"rack0"};
+
+  const auto universe = buildUniverse();
+  const CapacitySpecBuilder specBuilder(universe, spec);
+  InvalidMoveFilter filter(
+      universe->getObjects().getObjectIds().size(),
+      universe->getContainers().getContainerIds().size());
+  const Assignment updatedInitialAssignment(
+      deltaFromInitial({{"task2", "host2"}}));
+  specBuilder.populateInvalidMoveFilter(filter, updatedInitialAssignment);
+
+  const std::set<InvalidPair> expected{
+      {task(3), containerId("host0")},
+      {task(4), containerId("host0")},
+      {task(5), containerId("host0")},
+      {task(3), containerId("host2")},
+      {task(4), containerId("host2")},
+      {task(5), containerId("host2")},
+  };
+  EXPECT_EQ(expected, collectInvalidPairs(filter));
 }
 
 TEST_F(CapacitySpecBuilderTest, PreFilterBlocksRelativeLimitWithZeroCapacity) {
@@ -827,7 +995,8 @@ TEST_F(CapacitySpecBuilderTest, FilterAfterUsesInitialUtilForBrokenScopeItem) {
       universe_->getContainers().getContainerIds().size();
   InvalidMoveFilter filter(numObjects, numContainers);
 
-  specBuilder.populateInvalidMoveFilter(filter);
+  specBuilder.populateInvalidMoveFilter(
+      filter, expressionBuilder().getUpdatedInitialAssignment());
 
   // host0 has ABSOLUTE limit 0 and initial util = 0.1 (task1 has cpu=0.1).
   // For AFTER definition, threshold = initial util = 0.1.
@@ -991,7 +1160,8 @@ CO_TEST_F(CapacitySpecBuilderTest, FilterNoOpForNegativeDimensions) {
       universe_->getContainers().getContainerIds().size();
   InvalidMoveFilter filter(numObjects, numContainers);
 
-  specBuilder.populateInvalidMoveFilter(filter);
+  specBuilder.populateInvalidMoveFilter(
+      filter, expressionBuilder().getUpdatedInitialAssignment());
 
   // Dimension has negative values → filter is skipped entirely
   EXPECT_TRUE(filter.empty());

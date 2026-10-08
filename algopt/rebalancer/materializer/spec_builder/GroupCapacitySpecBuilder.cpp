@@ -148,7 +148,7 @@ GroupCapacitySpecBuilder::getConstraint(
           contributionGroupIds,
           scopeItemIds,
           relevantContainersPtr,
-          expressionBuilder.getInitialAssignment());
+          expressionBuilder.getUpdatedInitialAssignment());
     } else {
       groupUtil = co_await getDuringUtilForMainGroup(
           expressionBuilder, contributionGroupIds, scopeItemIds);
@@ -186,7 +186,7 @@ ExprPtr GroupCapacitySpecBuilder::getAfterUtilForMainGroup(
     const std::vector<entities::ScopeItemId>& scopeItemIds,
     std::shared_ptr<const entities::Set<entities::ContainerId>>
         relevantContainersPtr,
-    const Assignment& initialAssignment) const {
+    const Assignment& updatedInitialAssignment) const {
   auto getTransformType = [this]() {
     switch (*spec_.utilType()) {
       case GroupCapacitySpecUtilType::LINEAR:
@@ -226,7 +226,7 @@ ExprPtr GroupCapacitySpecBuilder::getAfterUtilForMainGroup(
         scopeId_,
         scopeItemIds,
         relevantContainersPtr,
-        initialAssignment,
+        updatedInitialAssignment,
         scopeItemIdToMultiplier,
         /*scopeItemDefaultWeight=*/1.0,
         groupScopeItemTransformUtilType,

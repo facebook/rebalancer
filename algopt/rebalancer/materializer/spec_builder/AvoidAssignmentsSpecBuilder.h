@@ -35,7 +35,9 @@ class AvoidAssignmentsSpecBuilder : public SpecBuilder {
 
   SpecParameters getSpecInfo() const override;
 
-  void populateInvalidMoveFilter(InvalidMoveFilter& filter) const override;
+  void populateInvalidMoveFilter(
+      InvalidMoveFilter& filter,
+      const Assignment& updatedInitialAssignment) const override;
 
  private:
   interface::AvoidAssignmentsSpec spec_;

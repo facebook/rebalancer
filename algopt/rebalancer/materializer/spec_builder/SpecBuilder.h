@@ -22,6 +22,7 @@
 #include "algopt/rebalancer/materializer/utils/ExpressionBuilder.h"
 #include "algopt/rebalancer/solver/expressions/Expression.h"
 #include "algopt/rebalancer/solver/moves/InvalidMoveFilter.h"
+#include "algopt/rebalancer/solver/utils/Assignment.h"
 #include "algopt/rebalancer/solver/utils/GoalInfo.h"
 
 #include <thrift/lib/cpp/util/EnumUtils.h>
@@ -86,9 +87,9 @@ class SpecBuilder {
   // need to override this for all specs that override fixedContainers
   virtual entities::Set<entities::ContainerId> nonAcceptingContainers() const;
 
-  // Populate invalid (object, container) pairs into the filter.
-  // Default: no-op.
-  virtual void populateInvalidMoveFilter(InvalidMoveFilter& filter) const;
+  virtual void populateInvalidMoveFilter(
+      InvalidMoveFilter& filter,
+      const Assignment& updatedInitialAssignment) const;
 
   GoalInfo getSeparatedConstraintViolation(
       const std::vector<ConstraintInfo>& constraints,

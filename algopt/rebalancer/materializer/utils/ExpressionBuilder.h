@@ -271,8 +271,8 @@ class ExpressionBuilder {
       bool minBound);
 
  public:
-  const Assignment& getInitialAssignment() const {
-    return initialAssignment_;
+  const Assignment& getUpdatedInitialAssignment() const {
+    return updatedInitialAssignment_;
   }
 
   std::shared_ptr<ObjectPartitionMoveLimit> getObjectPartitionMoveLimit(
@@ -766,9 +766,9 @@ class ExpressionBuilder {
   // Accessed by getUpperBound()/getLowerBound(); guarded by applyfunc.
   Context context_ FOLLY_TS_GUARDED_BY(applyfunc);
 
-  // Initial assignment, exposed via getInitialAssignment(). Set once in the
-  // constructor and read-only thereafter; no mutex needed.
-  Assignment initialAssignment_;
+  // Includes changes from MovesInProgressSpec. Set once in the constructor and
+  // read-only thereafter; no mutex needed.
+  Assignment updatedInitialAssignment_;
 
   std::shared_ptr<algopt::treeprof::ExecutorWrapper> executor_ = nullptr;
 

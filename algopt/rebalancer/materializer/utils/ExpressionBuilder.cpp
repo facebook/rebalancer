@@ -68,7 +68,7 @@ ExpressionBuilder::ExpressionBuilder(
     : universe_(std::move(universe)),
       executor_(std::move(executor)),
       metrics_(std::move(metrics)) {
-  initialAssignment_ = Assignment(updatedInitialAssignment);
+  updatedInitialAssignment_ = Assignment(updatedInitialAssignment);
 }
 
 folly::coro::Task<ExprPtr> ExpressionBuilder::getAbsoluteUtil(
@@ -276,7 +276,7 @@ folly::coro::Task<ExprPtr> ExpressionBuilder::getAbsoluteUtil(
       : getObjectVector(dimensionId, 0);
 
   co_return object_lookup(
-      objectVector, relevantContainerIds, initialAssignment_);
+      objectVector, relevantContainerIds, updatedInitialAssignment_);
 }
 
 double ExpressionBuilder::getUpperBound(const Expression& expression) {
@@ -836,7 +836,9 @@ std::shared_ptr<ObjectLookup> ExpressionBuilder::getObjectLookup(
     std::shared_ptr<const PackerSet<entities::ContainerId>> containerIds,
     std::shared_ptr<ObjectVector> objectVector) {
   return object_lookup(
-      std::move(objectVector), std::move(containerIds), initialAssignment_);
+      std::move(objectVector),
+      std::move(containerIds),
+      updatedInitialAssignment_);
 }
 
 std::shared_ptr<ObjectLookup> ExpressionBuilder::getObjectLookupOutOfScope(
@@ -845,7 +847,7 @@ std::shared_ptr<ObjectLookup> ExpressionBuilder::getObjectLookupOutOfScope(
   return object_lookup(
       std::move(objectVector),
       getContainersOutOfScopePtr(scopeId),
-      initialAssignment_);
+      updatedInitialAssignment_);
 }
 
 std::shared_ptr<StableStayed> ExpressionBuilder::getStableStayed(
@@ -868,7 +870,7 @@ std::shared_ptr<StableStayed> ExpressionBuilder::getStableStayed(
       std::move(fullObjectVector),
       std::move(containerIds),
       *universe_,
-      initialAssignment_);
+      updatedInitialAssignment_);
 }
 
 std::shared_ptr<StableStayed> ExpressionBuilder::getStableStayedOutOfScope(
@@ -1044,7 +1046,7 @@ std::shared_ptr<Expression> ExpressionBuilder::isAssigned(
   auto key = std::make_tuple(objectId, containerId);
   return isAssignedContainerCache_.getSavedOrCompute(key, [&]() {
     return rebalancer::variable(
-        objectId, containerId, *universe_, initialAssignment_);
+        objectId, containerId, *universe_, updatedInitialAssignment_);
   });
 }
 
@@ -1265,7 +1267,7 @@ std::shared_ptr<Expression> ExpressionBuilder::createObjectPartitionLookup(
       universe_->getScope(scopeId).getContainerIdsPtr(scopeItemId),
       scopeId,
       scopeItemId,
-      initialAssignment_,
+      updatedInitialAssignment_,
       overrides,
       std::move(initialObjects),
       // TODO: consider removing defaultGroupLimitOverride as it seems to be
@@ -1296,7 +1298,7 @@ ExpressionBuilder::getObjectPartitionMoveLimit(
       objectToGroupIds;
   return std::make_shared<ObjectPartitionMoveLimit>(
       *universe_,
-      initialAssignment_,
+      updatedInitialAssignment_,
       partitionId,
       dimensionId,
       groupLimits,
@@ -1310,7 +1312,7 @@ std::shared_ptr<GroupRoutingRing> ExpressionBuilder::getGroupRoutingRing(
   auto key = std::make_pair(routingConfigId, groupId);
   return routingConfigToGroupRoutingRing_.getSavedOrCompute(key, [&]() {
     auto groupRoutingRing = std::make_shared<GroupRoutingRing>(
-        routingConfigId, groupId, *universe_, initialAssignment_);
+        routingConfigId, groupId, *universe_, updatedInitialAssignment_);
 
     if (metrics_) {
       metrics_->addToGroupRoutingTrafficCollection(

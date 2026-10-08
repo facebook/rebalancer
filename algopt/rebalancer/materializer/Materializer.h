@@ -90,7 +90,7 @@ class Materializer {
   static ExprPtr getViolationBeyondInitial(
       ExprPtr constraint,
       double initialValue,
-      const Assignment& initialAssignment);
+      const Assignment& updatedInitialAssignment);
 
   entities::Map<entities::ObjectId, entities::ContainerId>
   getUpdatesInInitialAssignment();

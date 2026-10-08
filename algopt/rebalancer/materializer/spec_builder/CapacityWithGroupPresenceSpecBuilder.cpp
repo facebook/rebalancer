@@ -517,7 +517,7 @@ CapacityWithGroupPresenceSpecBuilder::createGroupUtilExpr(
     UtilMetric metric,
     ExprPtr objectPartition,
     entities::ScopeItemId aggregationScopeItemId,
-    const Assignment& initialAssignment) const {
+    const Assignment& updatedInitialAssignment) const {
   PackerSet<entities::ObjectId> initialDuringObjects;
   if (metric == UtilMetric::DURING) {
     for (auto containerId : universe_->getScope(aggregationScopeId_)
@@ -539,7 +539,7 @@ CapacityWithGroupPresenceSpecBuilder::createGroupUtilExpr(
         aggregationScopeId_,
         aggregationScopeItemId,
         *universe_,
-        initialAssignment,
+        updatedInitialAssignment,
         /*groupLimitOverrides=*/PackerMap<entities::GroupId, double>{},
         initialDuringObjects,
         /*defaultGroupLimitOverride=*/std::nullopt,
@@ -593,7 +593,7 @@ CapacityWithGroupPresenceSpecBuilder::
             metric,
             objectPartition,
             aggregationScopeItemId,
-            expressionBuilder.getInitialAssignment()));
+            expressionBuilder.getUpdatedInitialAssignment()));
   }
 
   return utilExprs;
@@ -627,7 +627,7 @@ CapacityWithGroupPresenceSpecBuilder::
             metric,
             std::move(objectPartition),
             aggregationScopeItemId,
-            expressionBuilder.getInitialAssignment()));
+            expressionBuilder.getUpdatedInitialAssignment()));
   }
 
   return utilExprs;

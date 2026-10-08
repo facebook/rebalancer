@@ -121,7 +121,8 @@ TEST_F(AvoidAssignmentsSpecBuilderTest, FilterBlocksAvoidedAssignments) {
       universe_->getContainers().getContainerIds().size();
   InvalidMoveFilter filter(numObjects, numContainers);
 
-  specBuilder.populateInvalidMoveFilter(filter);
+  specBuilder.populateInvalidMoveFilter(
+      filter, expressionBuilder().getUpdatedInitialAssignment());
 
   const std::set<InvalidPair> expectedInvalidPairs{
       {objectId("task0"), containerId("host0")},

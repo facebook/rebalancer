@@ -126,7 +126,7 @@ class CapacityWithGroupPresenceSpecBuilder : public SpecBuilder {
       UtilMetric metric,
       ExprPtr objectPartition,
       entities::ScopeItemId aggregationScopeItemId,
-      const Assignment& initialAssignment) const;
+      const Assignment& updatedInitialAssignment) const;
 
   folly::coro::Task<UtilExprs> getGroupUtilInMainScopeItem(
       UtilMetric metric,

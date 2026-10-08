@@ -45,7 +45,9 @@ class GroupCountSpecBuilder : public SpecBuilder {
 
   SpecParameters getSpecInfo() const override;
 
-  void populateInvalidMoveFilter(InvalidMoveFilter& filter) const override;
+  void populateInvalidMoveFilter(
+      InvalidMoveFilter& filter,
+      const Assignment& updatedInitialAssignment) const override;
 
  private:
   std::vector<ConstraintInfo> buildOptimizedGroupCountExprs(

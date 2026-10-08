@@ -40,9 +40,18 @@ class CapacitySpecBuilder : public SpecBuilder {
 
   entities::Set<entities::ContainerId> nonAcceptingContainers() const override;
 
-  void populateInvalidMoveFilter(InvalidMoveFilter& filter) const override;
+  void populateInvalidMoveFilter(
+      InvalidMoveFilter& filter,
+      const Assignment& updatedInitialAssignment) const override;
 
  private:
+  double getAverageCapacity(
+      const std::vector<entities::ScopeItemId>& scopeItemIds) const;
+
+  double getNormalizationCoefficient(
+      entities::ScopeItemId scopeItemId,
+      double averageCapacity) const;
+
   // A wrapper over enum UtilMetric to allow some optimizations such as
   // - for DURING_AND_AFTER spec, AFTER metric is redundant if the DURING
   //  was not initially broken

@@ -44,7 +44,8 @@ entities::Set<entities::ContainerId> SpecBuilder::nonAcceptingContainers()
 }
 
 void SpecBuilder::populateInvalidMoveFilter(
-    InvalidMoveFilter& /*filter*/) const {}
+    InvalidMoveFilter& /*filter*/,
+    const Assignment& /*updatedInitialAssignment*/) const {}
 
 ValueRequirement SpecBuilder::getPenaltyValueRequirement() const {
   return ValueRequirement::NON_NEGATIVE;

@@ -56,7 +56,7 @@ class GroupCapacitySpecBuilder : public SpecBuilder {
       const std::vector<entities::ScopeItemId>& scopeItemIds,
       std::shared_ptr<const entities::Set<entities::ContainerId>>
           relevantContainersPtr,
-      const Assignment& initialAssignment) const;
+      const Assignment& updatedInitialAssignment) const;
 
   folly::coro::Task<ExprPtr> getDuringUtilForMainGroup(
       ExpressionBuilder& expressionBuilder,

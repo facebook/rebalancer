@@ -46,12 +46,12 @@ class ColocateGroupsSpecBuilder : public SpecBuilder {
   std::shared_ptr<Expression> getContinuousPenaltyExpr(
       entities::GroupId groupId,
       double groupWeight,
-      const Assignment& initialAssignment) const;
+      const Assignment& updatedInitialAssignment) const;
 
   ConstraintInfo getConstraint(
       entities::GroupId groupId,
       double groupWeight,
-      const Assignment& initialAssignment) const;
+      const Assignment& updatedInitialAssignment) const;
 
   const interface::ColocateGroupsSpec spec_;
   const entities::DimensionId dimensionId_;

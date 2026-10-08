@@ -65,7 +65,7 @@ static ExprPtr getStayedObjectCountExpr(
       objVector,
       std::make_shared<PackerSet<entities::ContainerId>>(
           PackerSet<entities::ContainerId>{containerId}),
-      expressionBuilder.getInitialAssignment());
+      expressionBuilder.getUpdatedInitialAssignment());
 }
 
 folly::coro::Task<std::vector<ConstraintInfo>>

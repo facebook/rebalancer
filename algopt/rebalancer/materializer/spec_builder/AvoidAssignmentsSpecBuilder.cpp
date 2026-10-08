@@ -70,7 +70,8 @@ std::string AvoidAssignmentsSpecBuilder::description() const {
 }
 
 void AvoidAssignmentsSpecBuilder::populateInvalidMoveFilter(
-    InvalidMoveFilter& invalidMoveFilter) const {
+    InvalidMoveFilter& invalidMoveFilter,
+    const Assignment& /*updatedInitialAssignment*/) const {
   const auto scopeId = universe_->getScopeId(*spec_.scope());
   const auto& scope = universe_->getScope(scopeId);
   Map<ScopeItemId, std::vector<ObjectId>> scopeItemToInvalidObjects;

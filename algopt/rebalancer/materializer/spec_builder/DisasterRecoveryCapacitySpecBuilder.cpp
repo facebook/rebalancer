@@ -160,7 +160,7 @@ DisasterRecoveryCapacitySpecBuilder::getObjectsInDisasterGroupExprs(
           object_lookup(
               objectIdToObjectVector.at(objectId),
               disasterGroupContainers,
-              expressionBuilder.getInitialAssignment()));
+              expressionBuilder.getUpdatedInitialAssignment()));
     }
     objectsInDisasterGroupsExprs.push_back(std::move(objectsInDisasterGroup));
   }

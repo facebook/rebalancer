@@ -77,13 +77,14 @@ ValueRequirement ColocateGroupsSpecBuilder::getPenaltyValueRequirement() const {
 folly::coro::Task<ExprPtr> ColocateGroupsSpecBuilder::goalCoro(
     ExpressionBuilder& expressionBuilder) const {
   const auto& groupIds = partition_.getGroupIds();
-  const auto& initialAssignment = expressionBuilder.getInitialAssignment();
+  const auto& updatedInitialAssignment =
+      expressionBuilder.getUpdatedInitialAssignment();
   auto aggregatedViolation = const_expr(0, *universe_);
   for (const auto groupId : groupIds) {
     const auto groupWeight = folly::get_default(
         *spec_.groupToWeight(), universe_->getEntityName(groupId), 1);
     const auto constraintViolation = getConstraintViolation(
-        getConstraint(groupId, groupWeight, initialAssignment));
+        getConstraint(groupId, groupWeight, updatedInitialAssignment));
     aggregatedViolation += groupWeight * constraintViolation;
   }
 
@@ -104,12 +105,13 @@ folly::coro::Task<std::vector<ConstraintInfo>>
 ColocateGroupsSpecBuilder::constraints(
     ExpressionBuilder& expressionBuilder) const {
   std::vector<ConstraintInfo> result;
-  const auto& initialAssignment = expressionBuilder.getInitialAssignment();
+  const auto& updatedInitialAssignment =
+      expressionBuilder.getUpdatedInitialAssignment();
   for (const auto groupId : partition_.getGroupIds()) {
     const auto groupWeight = folly::get_default(
         *spec_.groupToWeight(), universe_->getEntityName(groupId), 1);
     auto [constraintExpr, additionalPenaltyExpr] =
-        getConstraint(groupId, groupWeight, initialAssignment);
+        getConstraint(groupId, groupWeight, updatedInitialAssignment);
     constraintExpr *= groupWeight;
     if (additionalPenaltyExpr) {
       additionalPenaltyExpr *= std::abs(groupWeight);
@@ -122,7 +124,7 @@ ColocateGroupsSpecBuilder::constraints(
 ConstraintInfo ColocateGroupsSpecBuilder::getConstraint(
     entities::GroupId groupId,
     double groupWeight,
-    const Assignment& initialAssignment) const {
+    const Assignment& updatedInitialAssignment) const {
   ExprPtr howManyWeightedItems;
   // optimized linear size expression
   howManyWeightedItems += std::make_shared<GroupScopeItemTransformUtil>(
@@ -133,7 +135,7 @@ ConstraintInfo ColocateGroupsSpecBuilder::getConstraint(
       scopeId_,
       allowedScopeItems_,
       relevantContainersPtr_,
-      initialAssignment,
+      updatedInitialAssignment,
       scopeItemWeights_,
       kScopeItemDefaultWeight,
       GroupScopeItemTransformUtil::TransformFunctionType::STEP);
@@ -146,7 +148,7 @@ ConstraintInfo ColocateGroupsSpecBuilder::getConstraint(
   return {
       *spec_.squares() ? power(std::move(howManyWeightedItems), 1.1)
                        : std::move(howManyWeightedItems),
-      getContinuousPenaltyExpr(groupId, groupWeight, initialAssignment)};
+      getContinuousPenaltyExpr(groupId, groupWeight, updatedInitialAssignment)};
 }
 
 std::string ColocateGroupsSpecBuilder::description() const {
@@ -176,7 +178,7 @@ SpecParameters ColocateGroupsSpecBuilder::getSpecInfo() const {
 std::shared_ptr<Expression> ColocateGroupsSpecBuilder::getContinuousPenaltyExpr(
     entities::GroupId groupId,
     double groupWeight,
-    const Assignment& initialAssignment) const {
+    const Assignment& updatedInitialAssignment) const {
   if (!needContinuousExpressions_) {
     // continuous expressions are not needed for example when solving using MIPs
     return nullptr;
@@ -262,7 +264,7 @@ std::shared_ptr<Expression> ColocateGroupsSpecBuilder::getContinuousPenaltyExpr(
       scopeId_,
       allowedScopeItems_,
       relevantContainersPtr_,
-      initialAssignment,
+      updatedInitialAssignment,
       scopeItemWeights_,
       kScopeItemDefaultWeight,
       GroupScopeItemTransformUtil::TransformFunctionType::IDENTITY,
@@ -276,7 +278,7 @@ std::shared_ptr<Expression> ColocateGroupsSpecBuilder::getContinuousPenaltyExpr(
       scopeId_,
       allowedScopeItems_,
       relevantContainersPtr_,
-      initialAssignment,
+      updatedInitialAssignment,
       scopeItemWeights_,
       kScopeItemDefaultWeight,
       GroupScopeItemTransformUtil::TransformFunctionType::SQUARE,

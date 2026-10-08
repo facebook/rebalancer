@@ -328,11 +328,7 @@ CapacitySpecBuilder::getConstraint(
     co_return std::vector<ConstraintInfo>{};
   }
 
-  double totalCapacity = 0;
-  for (auto scopeItemId : scopeItemIds) {
-    totalCapacity += scopeDimension.getValue(scopeItemId);
-  }
-  const double averageCapacity = totalCapacity / scopeItemIds.size();
+  const double averageCapacity = getAverageCapacity(scopeItemIds);
 
   // {scopeItemId, threshold, normCoef}
   using ScopeItemParams = std::tuple<entities::ScopeItemId, double, double>;
@@ -344,29 +340,10 @@ CapacitySpecBuilder::getConstraint(
     if (limits_.getType() == LimitType::RELATIVE) {
       threshold *= scopeDimension.getValue(scopeItemId);
     }
-
-    // We use average capacity to normalize absolute expressions, which
-    // makes tuning the weights straightforward. While the average can
-    // legitimately be zero, it makes it impossible for us to normalize
-    // the expression. In that particular case, we leave normalization
-    // up to the user by using the weight. Also note that in the most
-    // common case where capacity is used as a constraint that's
-    // initially not broken, normalization is completely irrelevant.
-    double normCoef = averageCapacity == 0 ? 1 : 1 / averageCapacity;
-
-    if (*spec_.useLegacyFormula()) {
-      const double capacity = scopeDimension.getValue(scopeItemId);
-      if (capacity == 0) {
-        throw std::runtime_error(
-            fmt::format(
-                "{} {} has zero capacity which is not compatible with legacy formula",
-                universe_->getEntityName(scopeId_),
-                universe_->getEntityName(scopeItemId)));
-      }
-      normCoef = 1 / capacity;
-    }
-
-    params.emplace_back(scopeItemId, threshold, normCoef);
+    params.emplace_back(
+        scopeItemId,
+        threshold,
+        getNormalizationCoefficient(scopeItemId, averageCapacity));
   }
 
   std::vector<ConstraintInfo> result;
@@ -390,6 +367,37 @@ CapacitySpecBuilder::getConstraint(
         }
       });
   co_return result;
+}
+
+double CapacitySpecBuilder::getAverageCapacity(
+    const std::vector<entities::ScopeItemId>& scopeItemIds) const {
+  const auto& scopeDimension =
+      universe_->getScope(scopeId_).getDimension(dimensionId_);
+  double totalCapacity = 0;
+  for (const auto scopeItemId : scopeItemIds) {
+    totalCapacity += scopeDimension.getValue(scopeItemId);
+  }
+  return totalCapacity / scopeItemIds.size();
+}
+
+double CapacitySpecBuilder::getNormalizationCoefficient(
+    entities::ScopeItemId scopeItemId,
+    double averageCapacity) const {
+  if (!*spec_.useLegacyFormula()) {
+    return averageCapacity == 0 ? 1 : 1 / averageCapacity;
+  }
+
+  const double capacity = universe_->getScope(scopeId_)
+                              .getDimension(dimensionId_)
+                              .getValue(scopeItemId);
+  if (capacity == 0) {
+    throw std::runtime_error(
+        fmt::format(
+            "{} {} has zero capacity which is not compatible with legacy formula",
+            universe_->getEntityName(scopeId_),
+            universe_->getEntityName(scopeItemId)));
+  }
+  return 1 / capacity;
 }
 
 entities::Set<entities::ContainerId>
@@ -479,7 +487,8 @@ folly::coro::Task<ExprPtr> CapacitySpecBuilder::getBoundedUtil(
 }
 
 void CapacitySpecBuilder::populateInvalidMoveFilter(
-    InvalidMoveFilter& invalidMoveFilter) const {
+    InvalidMoveFilter& invalidMoveFilter,
+    const Assignment& updatedInitialAssignment) const {
   const auto def = *spec_.definition();
   if (*spec_.bound() != CapacitySpecBound::MAX ||
       (def != CapacitySpecDefinition::AFTER &&
@@ -496,7 +505,6 @@ void CapacitySpecBuilder::populateInvalidMoveFilter(
 
   const auto& scope = universe_->getScope(scopeId_);
   const auto& scalarDim = objDim.only();
-  const auto& containers = universe_->getContainers();
   const auto scopeItemIds = scopeFilter_.getScopeItemIds();
   if (scopeItemIds.empty()) {
     return;
@@ -505,6 +513,8 @@ void CapacitySpecBuilder::populateInvalidMoveFilter(
   const auto isRelative = limits_.getType() == LimitType::RELATIVE;
   const auto& scopeDimension = scope.getDimension(dimensionId_);
   const auto isAfter = def == CapacitySpecDefinition::AFTER;
+  const auto& precision = universe_->getPrecision();
+  const auto averageCapacity = getAverageCapacity(scopeItemIds);
   const auto maxObjValue = scalarDim.getMaximumValue();
 
   // Block (object, container) pairs that can never be valid: an object is
@@ -525,53 +535,76 @@ void CapacitySpecBuilder::populateInvalidMoveFilter(
   }
 
   const auto objectIds = universe_->getObjects().getObjectIds();
-  Map<double, std::vector<ScopeItemId>> thresholdToBlockedScopeItems;
-  Map<ScopeItemId, std::vector<ObjectId>> scopeItemToInitialObjects;
+  using ThresholdKey = std::pair<double, double>;
+  Map<ThresholdKey, std::vector<ScopeItemId>> thresholdToBlockedScopeItems;
+  // Objects won't be blocked from a scope item they belonged to in either the
+  // original or updated assignment, allowing moves within its containers.
+  Map<ScopeItemId, std::vector<ObjectId>> scopeItemToExemptObjects;
   for (const auto scopeItemId : scopeItemIds) {
     auto limit = limits_.getLimit(scopeItemId);
     if (isRelative) {
       limit *= scopeDimension.getValue(scopeItemId);
     }
+    if (*spec_.useLegacyFormula() &&
+        scopeDimension.getValue(scopeItemId) == 0.0) {
+      continue;
+    }
 
     double initialUtil = 0.0;
     for (const auto& cid : scope.getContainerIds(scopeItemId)) {
-      for (const auto& objectId : containers.getInitialObjectIds(cid)) {
+      const auto collectObject = [&](const auto objectId) {
         const auto value = scalarDim.getValue(objectId);
-        initialUtil += value;
         // Zero-valued objects won't be blocked anyway.
         if (value != 0.0) {
-          scopeItemToInitialObjects[scopeItemId].push_back(objectId);
+          scopeItemToExemptObjects[scopeItemId].push_back(objectId);
+        }
+        return value;
+      };
+      if (isAfter) {
+        for (const auto objectId : updatedInitialAssignment.getObjects(cid)) {
+          initialUtil += collectObject(objectId);
+        }
+      } else {
+        for (const auto objectId :
+             universe_->getContainers().getInitialObjectIds(cid)) {
+          initialUtil += collectObject(objectId);
+        }
+        for (const auto objectId : updatedInitialAssignment.getObjects(cid)) {
+          collectObject(objectId);
         }
       }
     }
     const auto threshold = isAfter ? std::max(limit, initialUtil)
                                    : std::max(limit - initialUtil, 0.0);
-    if (maxObjValue <= threshold) {
+    const auto normCoef =
+        getNormalizationCoefficient(scopeItemId, averageCapacity);
+    if (!precision.isStrictlyGtZero((maxObjValue - threshold) * normCoef)) {
       // No object exceeds this scope item's bound; nothing to block.
       continue;
     }
-    thresholdToBlockedScopeItems[threshold].push_back(scopeItemId);
+    thresholdToBlockedScopeItems[{threshold, normCoef}].push_back(scopeItemId);
   }
 
   if (thresholdToBlockedScopeItems.empty()) {
     return;
   }
 
-  for (const auto& [threshold, blockedScopeItemIds] :
+  for (const auto& [thresholdKey, blockedScopeItemIds] :
        thresholdToBlockedScopeItems) {
+    const auto& [threshold, normCoef] = thresholdKey;
     algopt::DynamicBitSet invalidObjectsForThreshold(objectIds.size());
     for (const auto objectId : objectIds) {
       const auto value = scalarDim.getValue(objectId);
-      if (value > threshold) {
+      if (precision.isStrictlyGtZero((value - threshold) * normCoef)) {
         invalidObjectsForThreshold.set(objectId.asIndex());
       }
     }
 
     for (const auto scopeItemId : blockedScopeItemIds) {
       auto invalidObjects = invalidObjectsForThreshold;
-      if (const auto* initialObjects =
-              folly::get_ptr(scopeItemToInitialObjects, scopeItemId)) {
-        for (const auto objectId : *initialObjects) {
+      if (const auto* exemptObjects =
+              folly::get_ptr(scopeItemToExemptObjects, scopeItemId)) {
+        for (const auto objectId : *exemptObjects) {
           invalidObjects.clear(objectId.asIndex());
         }
       }

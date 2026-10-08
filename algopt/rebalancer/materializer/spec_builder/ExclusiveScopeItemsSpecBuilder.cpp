@@ -190,7 +190,7 @@ ExclusiveScopeItemsSpecBuilder::buildConstraintPerGroup(
               scopeId_,
               conflictingScopeItemIds,
               relevantContainersPtr,
-              expressionBuilder.getInitialAssignment(),
+              expressionBuilder.getUpdatedInitialAssignment(),
               folly::F14FastMap<entities::ScopeItemId, double>{},
               1 /* scopeItemDefaultWeight */,
               GroupScopeItemTransformUtil::TransformFunctionType::IDENTITY);

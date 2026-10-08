@@ -323,7 +323,8 @@ folly::coro::Task<void> Materializer::materializeConstraintCoro(
 
   if (invalidMoveFilter &&
       constraint.getPolicy() != interface::ConstraintPolicy::SOFT) {
-    specBuilder->populateInvalidMoveFilter(*invalidMoveFilter);
+    specBuilder->populateInvalidMoveFilter(
+        *invalidMoveFilter, expressionBuilder.getUpdatedInitialAssignment());
   }
 
   logger_->log(
@@ -370,7 +371,7 @@ SplitConstraint Materializer::splitConstraintComponent(
           .hardComponent = getViolationBeyondInitial(
               constraintExpr,
               initialValue,
-              expressionBuilder.getInitialAssignment()),
+              expressionBuilder.getUpdatedInitialAssignment()),
           .softComponent = std::move(objectiveExpr),
           .penaltyComponent = std::move(penaltyExpr)};
     }
@@ -492,13 +493,14 @@ GoalInfo Materializer::getSeparatedSoftenedConstraint(
 ExprPtr Materializer::getViolationBeyondInitial(
     ExprPtr constraint,
     double initialValue,
-    const Assignment& initialAssignment) {
+    const Assignment& updatedInitialAssignment) {
   // ObjectPartitionLookup requires complex handling in order to treat groups
   // independently as they are all conflated under the same expression.
   auto objectPartitionLookup =
       std::dynamic_pointer_cast<ObjectPartitionLookupDefault>(constraint);
   if (objectPartitionLookup != nullptr) {
-    return objectPartitionLookup->get_do_not_make_worse_copy(initialAssignment);
+    return objectPartitionLookup->get_do_not_make_worse_copy(
+        updatedInitialAssignment);
   }
 
   return std::move(constraint) - initialValue;
