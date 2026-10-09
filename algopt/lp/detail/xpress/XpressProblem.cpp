@@ -28,6 +28,7 @@
 #include <folly/container/MapUtil.h>
 #include <folly/logging/xlog.h>
 
+#include <cstring>
 #include <filesystem>
 #include <map>
 #include <numeric>
@@ -1204,8 +1205,126 @@ void XpressProblem::setCallback(
 }
 
 std::optional<IIS> XpressProblem::getIIS() {
-  XLOG(WARNING) << "getIIS has not been implemented in XPRESS.";
-  return {};
+  // An IIS is diagnostic, so report none rather than failing the solve.
+  try {
+    XPRSprob xprob = problem_.getXPRSprob();
+    int iisStatus = 0;
+    // Mode 1 refines the initial infeasible subsystem down to an irreducible
+    // one.
+    throwIfXpressError(
+        XPRSiisfirst(xprob, 1, &iisStatus), xprob, "XPRSiisfirst failed");
+    // NO_SOLUTION_EXISTS also covers unbounded models, which have no IIS.
+    if (iisStatus != 0) {
+      XLOGF(WARNING, "Xpress found no IIS (XPRSiisfirst status {})", iisStatus);
+      return std::nullopt;
+    }
+
+    int nrows = 0;
+    int ncols = 0;
+    throwIfXpressError(
+        XPRSgetiisdata(
+            xprob,
+            1,
+            &nrows,
+            &ncols,
+            nullptr,
+            nullptr,
+            nullptr,
+            nullptr,
+            nullptr,
+            nullptr,
+            nullptr,
+            nullptr),
+        xprob,
+        "XPRSgetiisdata failed");
+    std::vector<int> rowind(nrows);
+    std::vector<int> colind(ncols);
+    std::vector<char> bndtype(ncols);
+    // XPRSgetiisdata takes no buffer capacity, so this check cannot prevent an
+    // overrun; it only detects, after the fact, that the vectors were sized
+    // from a different IIS than the one just read.
+    int nrowsRead = 0;
+    int ncolsRead = 0;
+    throwIfXpressError(
+        XPRSgetiisdata(
+            xprob,
+            1,
+            &nrowsRead,
+            &ncolsRead,
+            rowind.data(),
+            colind.data(),
+            nullptr,
+            bndtype.data(),
+            nullptr,
+            nullptr,
+            nullptr,
+            nullptr),
+        xprob,
+        "XPRSgetiisdata failed");
+    if (nrowsRead != nrows || ncolsRead != ncols) {
+      throw std::runtime_error(
+          fmt::format(
+              "XPRSgetiisdata size changed between calls: {}x{} then {}x{}",
+              nrows,
+              ncols,
+              nrowsRead,
+              ncolsRead));
+    }
+
+    const auto getName = [&](int type, int index) {
+      int nbytes = 0;
+      throwIfXpressError(
+          XPRSgetnamelist(xprob, type, nullptr, 0, &nbytes, index, index),
+          xprob,
+          "XPRSgetnamelist failed");
+      std::string name(nbytes, '\0');
+      throwIfXpressError(
+          XPRSgetnamelist(
+              xprob, type, name.data(), nbytes, &nbytes, index, index),
+          xprob,
+          "XPRSgetnamelist failed");
+      // The buffer holds one null-terminated name.
+      name.resize(std::strlen(name.c_str()));
+      return name;
+    };
+
+    IIS iis;
+    iis.constraintIds.reserve(nrows);
+    iis.lowerBoundVars.reserve(ncols);
+    iis.upperBoundVars.reserve(ncols);
+    for (const auto row : rowind) {
+      iis.constraintIds.push_back(getName(XPRS_NAMES_ROW, row));
+    }
+    for (const auto i : folly::irange(ncols)) {
+      const auto name = getName(XPRS_NAMES_COLUMN, colind[i]);
+      switch (bndtype[i]) {
+        case 'L':
+          iis.lowerBoundVars.push_back(name);
+          break;
+        case 'U':
+          iis.upperBoundVars.push_back(name);
+          break;
+        case 'F':
+          // A fixed column is pinned from both sides.
+          iis.lowerBoundVars.push_back(name);
+          iis.upperBoundVars.push_back(name);
+          break;
+        default:
+          // Other codes (e.g. a MIP integrality restriction) are not bound
+          // conflicts, so listing them on either side would mislead.
+          XLOGF(
+              WARNING,
+              "Unexpected XPRSgetiisdata bound type '{}' for column {}; "
+              "omitting it from the IIS bounds",
+              bndtype[i],
+              name);
+      }
+    }
+    return iis;
+  } catch (const std::exception& e) {
+    XLOGF(WARNING, "Xpress could not compute an IIS: {}", e.what());
+    return std::nullopt;
+  }
 }
 
 void XpressProblem::replay(const std::string& /* fileName */) const {
