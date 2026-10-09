@@ -87,6 +87,55 @@ std::unique_ptr<ProblemSolver> buildProblem(
   }
   return solver;
 }
+
+// Three stages that each apply one move. Stages 0 and 2 put all objects in one
+// equivalence set, and stage 1 puts each object in its own set.
+LocalSearchStageSolverSpec makeStagesSwitchingEquivalenceSets(
+    const MoveTypeSpec& moveTypeSpec) {
+  // this will result in typical equivalence sets as per balance cpu goal
+  // (excluding kDummyConstraint)
+  CustomEquivalenceSetConfig onlyEquivalenceSetConfig;
+  onlyEquivalenceSetConfig.constraintSelectionConfig()->stringsToFilter() = {};
+  onlyEquivalenceSetConfig.constraintSelectionConfig()->filterType() =
+      ListFilterType::ALLOWLIST;
+  onlyEquivalenceSetConfig.goalSelectionConfig()->stringsToFilter() = {};
+  onlyEquivalenceSetConfig.goalSelectionConfig()->filterType() =
+      ListFilterType::ALLOWLIST;
+
+  // this will result in trivial equivalence set where each object is in its own
+  // equivalence set (due to kDummyConstraint)
+  auto trivialEquivalenceSetConfig = onlyEquivalenceSetConfig;
+  trivialEquivalenceSetConfig.constraintSelectionConfig()
+      ->stringsToFilter()
+      ->emplace_back(kDummyConstraint);
+
+  LocalSearchStageSolverSpec stageSolver;
+  // by default, all stages will have the standard equivalence sets
+  stageSolver.customEquivalenceSetConfig() =
+      std::move(onlyEquivalenceSetConfig);
+
+  LocalSearchStageSpec stageTemplate;
+  stageTemplate.begin() = 0;
+  stageTemplate.end() = 1;
+  stageTemplate.solverSpec()->stopAfterMoves() = 1;
+  stageTemplate.solverSpec()->moveTypeList()->emplace_back(moveTypeSpec);
+
+  auto stage0 = stageTemplate;
+  stage0.name() = "Stage 0: only one equivalence set";
+  stageSolver.stageSpecs()->emplace_back(std::move(stage0));
+
+  // stage 1 will have as many equivalence sets as objects
+  auto stage1 = stageTemplate;
+  stage1.name() = "Stage 1: distinct equivalence sets";
+  stage1.solverSpec()->customEquivalenceSetConfig() =
+      std::move(trivialEquivalenceSetConfig);
+  stageSolver.stageSpecs()->emplace_back(std::move(stage1));
+
+  auto stage2 = stageTemplate;
+  stage2.name() = "Stage 2: only one equivalence set";
+  stageSolver.stageSpecs()->emplace_back(std::move(stage2));
+  return stageSolver;
+}
 } // namespace
 
 TEST_P(EquivalentObjectsTest, Basic) {
@@ -203,51 +252,8 @@ TEST_P(EquivalentObjectsTest, CustomEquivalenceSetsStageSolver) {
       /*toFreeHost=*/"h1",
       initialAssignment);
 
-  // this will result in typical equivalence sets as per balance cpu goal
-  // (excluding kDummyConstraint)
-  CustomEquivalenceSetConfig onlyEquivalenceSetConfig;
-  onlyEquivalenceSetConfig.constraintSelectionConfig()->stringsToFilter() = {};
-  onlyEquivalenceSetConfig.constraintSelectionConfig()->filterType() =
-      ListFilterType::ALLOWLIST;
-  onlyEquivalenceSetConfig.goalSelectionConfig()->stringsToFilter() = {};
-  onlyEquivalenceSetConfig.goalSelectionConfig()->filterType() =
-      ListFilterType::ALLOWLIST;
-
-  // this will result in trivial equivalence set where each object is in its own
-  // equivalence set (due to kDummyConstraint)
-  auto trivialEquivalenceSetConfig = onlyEquivalenceSetConfig;
-  trivialEquivalenceSetConfig.constraintSelectionConfig()
-      ->stringsToFilter()
-      ->emplace_back(kDummyConstraint);
-
-  LocalSearchStageSolverSpec stageSolver;
-  // by default, all stages will have the standard equivalence sets
-  stageSolver.customEquivalenceSetConfig() =
-      std::move(onlyEquivalenceSetConfig);
-
-  LocalSearchStageSpec stageTemplate;
-  stageTemplate.begin() = 0;
-  stageTemplate.end() = 1;
-  stageTemplate.solverSpec()->stopAfterMoves() = 1;
-  stageTemplate.solverSpec()->moveTypeList()->emplace_back(
-      ProblemSolver::makeMoveTypeSpec(SingleMoveTypeSpec()));
-
-  auto stage0 = stageTemplate;
-  stage0.name() = "Stage 0: only one equivalence set";
-  stageSolver.stageSpecs()->emplace_back(std::move(stage0));
-
-  // stage 1 will have as many equivalence sets as objects
-  auto stage1 = stageTemplate;
-  stage1.name() = "Stage 1: distinct equivalence sets";
-  stage1.solverSpec()->customEquivalenceSetConfig() =
-      std::move(trivialEquivalenceSetConfig);
-  stageSolver.stageSpecs()->emplace_back(std::move(stage1));
-
-  auto stage2 = stageTemplate;
-  stage2.name() = "Stage 2: only one equivalence set";
-  stageSolver.stageSpecs()->emplace_back(std::move(stage2));
-
-  solver->addSolver(stageSolver);
+  solver->addSolver(makeStagesSwitchingEquivalenceSets(
+      ProblemSolver::makeMoveTypeSpec(SingleMoveTypeSpec())));
   auto solution = solver->solve();
   folly::F14FastMap<std::string, int> containerToObjectCount;
 
@@ -282,4 +288,33 @@ TEST_P(EquivalentObjectsTest, CustomEquivalenceSetsStageSolver) {
   auto stage2Moves = movesSummary.at(2);
   EXPECT_EQ(1, *stage2Moves.evalsCount());
   EXPECT_EQ(1, stage2Moves.moves()->size());
+}
+
+// SINGLE_FIXED_SOURCE lists objects through the assignment's equivalence index,
+// so every stage must index its own equivalence sets.
+TEST_P(EquivalentObjectsTest, CustomEquivalenceSetsStageSolverFixedSource) {
+  const std::vector<std::pair<std::string, std::vector<std::string>>>
+      initialAssignment = {{"h1", {"s1", "s2", "s3", "s4", "s5"}}, {"h2", {}}};
+  auto solver = buildProblem(
+      GetParam(),
+      /*addDummyCapacityConstraint=*/true,
+      /*addBalanceGoal=*/false,
+      /*toFreeHost=*/"h1",
+      initialAssignment);
+  // h1 is not its own source while it is hot, so objects move to h2 when h2 is
+  SingleFixedSourceMoveTypeSpec fixedSourceSpec;
+  fixedSourceSpec.specialContainer() = "h1";
+  solver->addSolver(makeStagesSwitchingEquivalenceSets(
+      ProblemSolver::makeMoveTypeSpec(fixedSourceSpec)));
+
+  const auto solution = solver->solve();
+
+  std::vector<int64_t> evalsPerStage;
+  for (const auto& stageMoves : *solution.movesSummary()) {
+    EXPECT_EQ(1, stageMoves.moves()->size());
+    evalsPerStage.push_back(*stageMoves.evalsCount());
+  }
+  // one object per equivalence set: 1 of 5, then 4 of 4, then 1 of 3
+  const std::vector<int64_t> expectedEvalsPerStage = {1, 4, 1};
+  EXPECT_EQ(expectedEvalsPerStage, evalsPerStage);
 }

@@ -212,33 +212,45 @@ void Assignment::buildIndexByEquivalentSets(
   };
   containerToEquivSetsToObjects_ =
       AssignmentIndexedByEquivSet(containerToObjectsDynamic_, getObjectIdxFunc);
+  indexedEquivalenceSetsKey_ = equivalenceSets.getKey();
+}
+
+bool Assignment::isIndexedByEquivalentSets(
+    const EquivalenceSets& equivalenceSets) const {
+  return containerToEquivSetsToObjects_ &&
+      indexedEquivalenceSetsKey_ == equivalenceSets.getKey();
 }
 
 const AssignmentIndexedByEquivSet&
 Assignment::maybeBuildAndGetObjectsIndexedByEquivSets(
     const EquivalenceSets& equivalenceSets) {
-  if (!containerToEquivSetsToObjects_) {
+  if (!isIndexedByEquivalentSets(equivalenceSets)) {
     buildIndexByEquivalentSets(equivalenceSets);
   }
   return *containerToEquivSetsToObjects_;
 }
 
-const AssignmentIndexedByEquivSet& Assignment::getObjectsIndexedByEquivSets()
-    const {
-  if (containerToEquivSetsToObjects_) {
-    return *containerToEquivSetsToObjects_;
+const AssignmentIndexedByEquivSet& Assignment::getObjectsIndexedByEquivSets(
+    const EquivalenceSets& equivalenceSets) const {
+  if (!containerToEquivSetsToObjects_) {
+    throw std::runtime_error(
+        "Assignment index by equivalence sets is not built yet");
   }
-  throw std::runtime_error(
-      "Assignment index by equivalence sets is not built yet");
+  if (!isIndexedByEquivalentSets(equivalenceSets)) {
+    throw std::runtime_error(
+        fmt::format(
+            "Assignment index by equivalence sets was built from sets with key '{}', not the requested '{}'",
+            indexedEquivalenceSetsKey_,
+            equivalenceSets.getKey()));
+  }
+  return *containerToEquivSetsToObjects_;
 }
 
-std::vector<entities::ObjectId>
-Assignment::maybeBuildEquivSetIdxAndGetDistinctObjects(
+std::vector<entities::ObjectId> Assignment::getDistinctObjectsFromEquivSetIdx(
     const entities::ContainerId& containerId,
-    const EquivalenceSets& equivalenceSets) {
-  const auto& equivSetsToObjects =
-      maybeBuildAndGetObjectsIndexedByEquivSets(equivalenceSets)
-          .getContainerObjects(containerId);
+    const EquivalenceSets& equivalenceSets) const {
+  const auto& equivSetsToObjects = getObjectsIndexedByEquivSets(equivalenceSets)
+                                       .getContainerObjects(containerId);
   std::vector<entities::ObjectId> distinctObjectIds;
   for (auto& [_, objectIds] : equivSetsToObjects) {
     distinctObjectIds.push_back(*objectIds.begin());

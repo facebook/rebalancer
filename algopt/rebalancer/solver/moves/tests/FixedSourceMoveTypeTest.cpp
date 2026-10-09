@@ -191,6 +191,7 @@ CO_TEST_F(FixedSourceMoveTypeTest, VerifyMoveSetWithSpecialContainer) {
       /*objectiveTuple=*/{const_expr(0, *universe)},
       /*constraint=*/const_expr(0, *universe));
 
+  buildEquivalenceIndex();
   auto bestResult = singleFixedSourceMoveType.findBestMove(
       getMovesEvaluator(),
       container(1) /*hotContainer*/,
@@ -226,6 +227,7 @@ CO_TEST_F(FixedSourceMoveTypeTest, VerifyMoveSetWithScopeItems) {
       /*objectiveTuple=*/{const_expr(0, *universe)},
       /*constraint=*/const_expr(0, *universe));
 
+  buildEquivalenceIndex();
   auto bestResult = singleFixedSourceMoveType.findBestMove(
       getMovesEvaluator(),
       container(1) /*hotContainer*/,
@@ -271,6 +273,7 @@ CO_TEST_F(FixedSourceMoveTypeTest, VerifyMoveSetWithScopeItemsAndEquivSets) {
       }));
   setEquivalenceSets(equivalenceSets);
 
+  buildEquivalenceIndex();
   auto bestResult = singleFixedSourceMoveType.findBestMove(
       getMovesEvaluator(),
       container(1) /*hotContainer*/,
@@ -310,6 +313,7 @@ CO_TEST_F(FixedSourceMoveTypeTest, NotSampled) {
   auto moveType =
       FixedSourceMoveType(interface::LocalSearchSolverSpec(), fixedSrcSpec);
 
+  buildEquivalenceIndex();
   auto bestResult = moveType.findBestMove(
       getMovesEvaluator(),
       container(1),
@@ -335,6 +339,7 @@ CO_TEST_F(FixedSourceMoveTypeTest, Sampled) {
   auto moveType =
       FixedSourceMoveType(interface::LocalSearchSolverSpec(), fixedSrcSpec);
 
+  buildEquivalenceIndex();
   auto bestResult = moveType.findBestMove(
       getMovesEvaluator(),
       container(1),

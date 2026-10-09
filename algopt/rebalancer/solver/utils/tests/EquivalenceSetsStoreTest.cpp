@@ -418,4 +418,28 @@ CO_TEST_F(EquivalenceSetsStoreTest, customEquivalenceSetConfig) {
   EXPECT_EQ(1, problem.getEquivalenceSetsStore().get().size());
 }
 
+TEST_F(EquivalenceSetsStoreTest, AssignmentIndexFollowsInitializedSets) {
+  auto problem = makeProblem();
+  auto& store = problem.getEquivalenceSetsStore();
+  const auto numDistinctObjects = [&]() {
+    return problem.assignment
+        .maybeBuildAndGetObjectsIndexedByEquivSets(store.get())
+        .getContainerObjects(container(0))
+        .size();
+  };
+
+  // the default sets split the objects into odd and even
+  EXPECT_EQ(2, numDistinctObjects());
+
+  store.initialize(
+      /*excludeConstraintNames=*/{"binary_constraint"},
+      /*excludeGoalNames=*/{"binary_goal"});
+  EXPECT_EQ(1, numDistinctObjects());
+
+  // back to the cached default sets
+  store.initialize(
+      /*excludeConstraintNames=*/kEmptySet, /*excludeGoalNames=*/kEmptySet);
+  EXPECT_EQ(2, numDistinctObjects());
+}
+
 } // namespace facebook::rebalancer::packer::tests

@@ -106,6 +106,25 @@ TEST_F(AssignmentTest, DynamicObjects) {
   assignment.moveTo(object(1001), container(101));
 }
 
+TEST_F(AssignmentTest, EquivalenceIndexGetterRejectsOtherKeys) {
+  const entities::Map<std::string, std::vector<std::string>> initialAssignment =
+      {{{"host0", {"task0", "task1"}}}};
+  setInitialAssignment(initialAssignment);
+  const auto universe = buildUniverse();
+  Assignment assignment(universe->getContainers().getInitialAssignment());
+  EquivalenceSets sets(*universe, "sets");
+  sets.finalize();
+  EquivalenceSets otherSets(*universe, "other_sets");
+  otherSets.finalize();
+
+  EXPECT_THROW(
+      assignment.getObjectsIndexedByEquivSets(sets), std::runtime_error);
+  assignment.buildIndexByEquivalentSets(sets);
+  EXPECT_NO_THROW(assignment.getObjectsIndexedByEquivSets(sets));
+  EXPECT_THROW(
+      assignment.getObjectsIndexedByEquivSets(otherSets), std::runtime_error);
+}
+
 CO_TEST_F(AssignmentTest, IndexedObjects) {
   const entities::Map<std::string, std::vector<std::string>> initialAssignment =
       {{
@@ -157,8 +176,8 @@ CO_TEST_F(AssignmentTest, IndexedObjects) {
                                  std::vector<entities::ObjectId> expectedOdd,
                                  std::vector<entities::ObjectId> expectedEven) {
     auto indexedByEquivSet =
-        assignment.getObjectsIndexedByEquivSets().getContainerObjects(
-            container);
+        assignment.getObjectsIndexedByEquivSets(equivalenceSets)
+            .getContainerObjects(container);
     auto indexedByGroupId =
         assignment.getObjectsIndexedByPartition(oddEvenPartitionId)
             .getContainerObjects(container);
@@ -175,9 +194,8 @@ CO_TEST_F(AssignmentTest, IndexedObjects) {
         << debugStr;
 
     // ensure getDistinctObjectsInContainer returns one object from each set
-    auto expectedDistinctObjs =
-        assignment.maybeBuildEquivSetIdxAndGetDistinctObjects(
-            container, equivalenceSets);
+    auto expectedDistinctObjs = assignment.getDistinctObjectsFromEquivSetIdx(
+        container, equivalenceSets);
     if (!expectedOdd.empty()) {
       int oddObjCount = 0;
       for (auto oddObj : expectedOdd) {

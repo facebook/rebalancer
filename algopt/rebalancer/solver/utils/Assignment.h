@@ -26,6 +26,7 @@
 #include <memory>
 #include <optional>
 #include <ranges>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -109,13 +110,19 @@ class Assignment {
 
   // APIs for building and accessing object indices
   // Note that these indices are only built over dynamic objects
+  // The equivalence-set index is tied to EquivalenceSets::getKey(); sets with
+  // another key rebuild it.
   void buildIndexByEquivalentSets(const EquivalenceSets& equivalenceSets);
+  bool isIndexedByEquivalentSets(const EquivalenceSets& equivalenceSets) const;
+  // Builds the index if it is missing or was built from other sets.
   const AssignmentIndexedByEquivSet& maybeBuildAndGetObjectsIndexedByEquivSets(
       const EquivalenceSets& equivalenceSets);
-  const AssignmentIndexedByEquivSet& getObjectsIndexedByEquivSets() const;
-  std::vector<entities::ObjectId> maybeBuildEquivSetIdxAndGetDistinctObjects(
+  // These throw unless the index was built from sets with the same key.
+  const AssignmentIndexedByEquivSet& getObjectsIndexedByEquivSets(
+      const EquivalenceSets& equivalenceSets) const;
+  std::vector<entities::ObjectId> getDistinctObjectsFromEquivSetIdx(
       const entities::ContainerId& containerId,
-      const EquivalenceSets& equivalenceSets);
+      const EquivalenceSets& equivalenceSets) const;
 
   void buildIndexByPartition(
       const entities::Universe& universe,
@@ -162,6 +169,8 @@ class Assignment {
   // the set of equivalent objects present at any given time in a container.
   std::optional<AssignmentIndexedByEquivSet> containerToEquivSetsToObjects_ =
       std::nullopt;
+  // EquivalenceSets::getKey() of the sets the index above was built from.
+  std::string indexedEquivalenceSetsKey_;
   // 2. EquivSetId -> GroupId -> Objects  (for every container)
   // Can be built for more than one partition
   PackerMap<entities::PartitionId, AssignmentIndexedByEquivSetAndGroupId>

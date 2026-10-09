@@ -58,9 +58,16 @@ namespace {
 }
 } // namespace
 
-EquivalenceSets::EquivalenceSets(const entities::Universe& universe)
+EquivalenceSets::EquivalenceSets(
+    const entities::Universe& universe,
+    std::string key)
     : universe_(&universe),
+      key_(std::move(key)),
       objectIdToSetId_(universe.getNumObjects(), kUnassignedSetId) {}
+
+const std::string& EquivalenceSets::getKey() const {
+  return key_;
+}
 
 size_t EquivalenceSets::size() const {
   return sets_.size();

@@ -25,6 +25,8 @@
 #include <iterator>
 #include <stddef.h>
 #include <stdint.h>
+#include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -34,10 +36,18 @@ namespace facebook::rebalancer {
 // algopt/rebalancer/entities/Identifiers.h.
 using ExprId = int64_t;
 
+constexpr std::string_view kDefaultKey{"default"};
+
 class EquivalenceSets {
  public:
-  explicit EquivalenceSets(const entities::Universe& universe);
+  // `key` identifies the config the sets are built from. EquivalenceSetsStore
+  // caches the sets under it, and indices built from the sets are rebuilt when
+  // it changes.
+  explicit EquivalenceSets(
+      const entities::Universe& universe,
+      std::string key = std::string(kDefaultKey));
 
+  const std::string& getKey() const;
   size_t size() const;
   const PackerSet<entities::ObjectId>& getSet(
       entities::EquivalenceSetId idx) const;
@@ -91,6 +101,7 @@ class EquivalenceSets {
   static constexpr int kUnassignedSetId = -1;
 
   const entities::Universe* universe_;
+  std::string key_;
   std::vector<PackerSet<entities::ObjectId>> sets_;
   // i-th entry refers to setId associated with ObjectId(i); if the entry is
   // kUnassignedSetId => object is not in any set.

@@ -53,7 +53,7 @@ BENCHMARK(EquivalenceSetsAccessTest) {
   // artificially inject a lot of arbitrary equivalence set to the store
   for (const auto i : folly::irange(10)) {
     problem->getEquivalenceSetsStore().override(
-        EquivalenceSets(problem->getUniverse()), fmt::format("es_{}", i));
+        EquivalenceSets(problem->getUniverse(), fmt::format("es_{}", i)));
   }
   const folly::F14FastSet<std::string> emptySet;
   // reinitialize with all goals and constraints

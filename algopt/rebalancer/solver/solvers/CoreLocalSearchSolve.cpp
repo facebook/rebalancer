@@ -540,6 +540,10 @@ bool CoreLocalSearchSolve::solve() {
     problem_.getEquivalenceSetsStore().initialize(
         *spec_.customEquivalenceSetConfig());
   }
+  // Move types read the equivalence index, some from worker threads, so it is
+  // built before they run.
+  problem_.assignment.maybeBuildAndGetObjectsIndexedByEquivSets(
+      problem_.getEquivalenceSets());
 
   // Cycle through checking improvements on all containers,
   // until a cycle's improvement is insufficient to justify another cycle.

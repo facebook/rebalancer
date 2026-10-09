@@ -88,9 +88,8 @@ void FixedSourceMoveType::getSingleMoveCandidates(
     folly::F14FastSet<std::pair<ObjectBundle, entities::ContainerId>>& moves) {
   auto& objects = evaluator.getDynamicObjects(srcContainerId);
   Problem& problem = evaluator.getProblem();
-  const auto dedupedObjs =
-      problem.assignment.maybeBuildEquivSetIdxAndGetDistinctObjects(
-          srcContainerId, problem.getEquivalenceSets());
+  const auto dedupedObjs = problem.assignment.getDistinctObjectsFromEquivSetIdx(
+      srcContainerId, problem.getEquivalenceSets());
 
   const int numObjects = static_cast<int>(objects.size());
   auto containerObjectIds =

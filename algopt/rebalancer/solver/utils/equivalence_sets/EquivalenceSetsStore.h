@@ -31,7 +31,6 @@ namespace facebook::rebalancer {
 
 class Problem;
 class Expression;
-constexpr std::string_view kDefaultKey{"default"};
 
 class EquivalenceSetsStore {
  public:
@@ -67,11 +66,9 @@ class EquivalenceSetsStore {
       const std::vector<std::string>& constraintNames,
       const std::vector<std::string>& goalNames);
 
-  /** Overrides the equivalence set in the store (if it exists) with matching
-   * label to the one provided in @param equivalenceSets  */
-  void override(
-      EquivalenceSets equivalenceSets,
-      const std::string& label = std::string(kDefaultKey));
+  /** Overrides the equivalence set in the store (if it exists) with the same
+   * key as the one provided in @param equivalenceSets  */
+  void override(EquivalenceSets equivalenceSets);
 
   /**
    * Clears the equivalence sets calculated in the last set() call.
@@ -137,10 +134,8 @@ class EquivalenceSetsStore {
    * orchestrator */
   EquivalenceSets buildDefaultEquivalenceSets();
 
-  /** stores the @param equivalenceSets in the cache indexed by @param key */
-  void saveToEquivalenceSetCache(
-      const std::string& key,
-      EquivalenceSets equivalenceSets);
+  /** stores the @param equivalenceSets in the cache indexed by their key */
+  void saveToEquivalenceSetCache(EquivalenceSets equivalenceSets);
 
   /** updates the @param mostRecentEquivSetsPtr_ to point to the one stored in
    * the cache indexed by @param key */

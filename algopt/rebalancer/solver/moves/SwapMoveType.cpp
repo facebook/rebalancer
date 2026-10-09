@@ -131,6 +131,7 @@ MoveResult SwapMoveType::exploreAllAndGetBestResult(
 
   std::optional<std::string> dimensionName;
   std::optional<entities::ScopeItemId> dimensionScopeItemId;
+  PackerSet<entities::ObjectId> hotObjectsInEquivSet = {hotObject};
   if (auto swapRatioDimension = config_.swapRatioDimension()) {
     dimensionName = folly::get_default(
         *swapRatioDimension->value(),
@@ -139,14 +140,11 @@ MoveResult SwapMoveType::exploreAllAndGetBestResult(
     const auto dimensionId = universe.getDimensionId(*dimensionName);
     dimensionScopeItemId = getDimensionScopeItemIdForContainer(
         universe, dimensionId, hotContainer);
-  }
 
-  PackerSet<entities::ObjectId> hotObjectsInEquivSet = {hotObject};
-  if (dimensionName.has_value()) {
+    // built by CoreLocalSearchSolve when the stage starts
     const auto hotEquivalenceSetId = equivalenceSets.at(hotObject);
     const auto& hotObjectsByEquivalenceSet =
-        problem.assignment
-            .maybeBuildAndGetObjectsIndexedByEquivSets(equivalenceSets)
+        problem.assignment.getObjectsIndexedByEquivSets(equivalenceSets)
             .getContainerObjects(hotContainer);
     const auto* indexedHotObjectsInEquivSet =
         folly::get_ptr(hotObjectsByEquivalenceSet, hotEquivalenceSetId);

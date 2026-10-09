@@ -86,6 +86,12 @@ void MoveTestBaseT<T>::setEquivalenceSets(EquivalenceSets equivalenceSets) {
 }
 
 template <typename T>
+void MoveTestBaseT<T>::buildEquivalenceIndex() {
+  problem_->assignment.maybeBuildAndGetObjectsIndexedByEquivSets(
+      problem_->getEquivalenceSets());
+}
+
+template <typename T>
 int64_t MoveTestBaseT<T>::getTotalMovesEvaluated() {
   return stats_->getGlobalStats().getTotalMoves();
 }

@@ -194,7 +194,7 @@ void EquivalenceSetsStore::buildAndStoreInclusive(
     buildAndStoreDefault();
   } else {
     const auto& universe = problem_.getUniverse();
-    EquivalenceSets equivalenceSets(universe);
+    EquivalenceSets equivalenceSets(universe, cacheKey);
     // the descriptors of how sets were created helps with debugging
     std::vector<std::string> equivSetDescriptors;
     equivSetDescriptors.reserve(partitionIds.size() + 1);
@@ -221,23 +221,21 @@ void EquivalenceSetsStore::buildAndStoreInclusive(
         equivalenceSets.size(),
         folly::join(",", equivSetDescriptors));
 
-    saveToEquivalenceSetCache(cacheKey, std::move(equivalenceSets));
+    saveToEquivalenceSetCache(std::move(equivalenceSets));
   }
 }
 
-void EquivalenceSetsStore::override(
-    EquivalenceSets equivalenceSets,
-    const std::string& label) {
-  equivalenceSetsCache_.erase(label);
-  saveToEquivalenceSetCache(label, std::move(equivalenceSets));
-  updateMostRecentEquivSetsPtr(label);
+void EquivalenceSetsStore::override(EquivalenceSets equivalenceSets) {
+  equivalenceSetsCache_.erase(equivalenceSets.getKey());
+  saveToEquivalenceSetCache(std::move(equivalenceSets));
 }
 
 EquivalenceSets EquivalenceSetsStore::buildDefaultEquivalenceSets() {
   // when building default equivalence sets, we use the existing orchestrator
   // because it avoids the need for initializing it again
   algopt::treeprof::EventRecorder event("Build default equivalence sets");
-  EquivalenceSets equivalenceSets(problem_.getUniverse());
+  EquivalenceSets equivalenceSets(
+      problem_.getUniverse(), std::string(kDefaultKey));
   problem_.getOrchestrator().updateEquivalenceSets(
       equivalenceSets, problem_.getUniverse().getNumObjects());
   event.stop();
@@ -306,8 +304,9 @@ double EquivalenceSetsStore::getTotalBuildTime() const {
 }
 
 void EquivalenceSetsStore::saveToEquivalenceSetCache(
-    const std::string& key,
     EquivalenceSets equivalenceSets) {
+  // copied because the sets are moved into the cache
+  const auto key = equivalenceSets.getKey();
   equivalenceSetsCache_.getSavedOrCompute(key, [&]() {
     return std::make_unique<EquivalenceSets>(std::move(equivalenceSets));
   });
@@ -320,8 +319,7 @@ void EquivalenceSetsStore::updateMostRecentEquivSetsPtr(
 }
 
 void EquivalenceSetsStore::buildAndStoreDefault() {
-  saveToEquivalenceSetCache(
-      std::string(kDefaultKey), buildDefaultEquivalenceSets());
+  saveToEquivalenceSetCache(buildDefaultEquivalenceSets());
 }
 
 } // namespace facebook::rebalancer
