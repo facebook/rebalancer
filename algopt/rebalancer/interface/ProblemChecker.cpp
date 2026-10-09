@@ -1956,6 +1956,17 @@ void ProblemChecker::checkMoveStrategies(
       throw std::runtime_error(
           "numScopeItemsToExplorePerTertiaryGroup must not be set when tertiaryPartition is not set in MoveStrategyType");
     }
+    if (*hintOption.distinctScopeItemsAcrossTertiaryGroups()) {
+      if (!hintOption.tertiaryPartition().has_value()) {
+        throw std::runtime_error(
+            "distinctScopeItemsAcrossTertiaryGroups requires tertiaryPartition in MoveStrategyType");
+      }
+      if (*hintOption.type() !=
+          interface::MoveStrategyType::RANDOM_SAMPLING_WITHOUT_REPLACEMENT) {
+        throw std::runtime_error(
+            "distinctScopeItemsAcrossTertiaryGroups requires RANDOM_SAMPLING_WITHOUT_REPLACEMENT in MoveStrategyType");
+      }
+    }
   }
 }
 

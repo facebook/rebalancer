@@ -769,6 +769,9 @@ struct MoveStrategy {
   // If set to k, and there are g groups in tertiaryPartition, then we first create k tuples [ (s_i^1, ..., s_g^1), ..., (s_i^k, ..., s_g^k)],
   // where each s_i^j is a scope item selected at random from the scope items in specified in `moveToScopeItems`
   5: optional i32 numScopeItemsToExplorePerTertiaryGroup;
+  // If true, each tuple generated above contains no repeated scope item:
+  // two tertiary groups cannot select the same destination scope item.
+  6: bool distinctScopeItemsAcrossTertiaryGroups = false;
 }
 
 struct MoveStrategies {

@@ -101,7 +101,8 @@ class GroupMoveWithHintStrategiesMoveType : public MoveType {
       const ReferenceList<const std::vector<entities::ContainerId>>&
           acceptingContainersPerScopeItem,
       const interface::MoveStrategyType& strategy,
-      const entities::ContainerId hotContainer) const;
+      const entities::ContainerId hotContainer,
+      bool distinctScopeItems = false) const;
 
   MoveSet generateMoveSetWithScopeItemTuple(
       const std::vector<int>& scopeItemTuple,
@@ -130,7 +131,8 @@ class GroupMoveWithHintStrategiesMoveType : public MoveType {
           acceptingContainersPerScopeItem,
       const interface::MoveStrategyType& strategy,
       entities::ContainerId exclusionContainer,
-      const Problem& problem) const;
+      const Problem& problem,
+      bool distinctScopeItems = false) const;
 
   std::vector<MoveSet> exploreScopeItemMoves(
       const std::vector<entities::ObjectId>& objects,

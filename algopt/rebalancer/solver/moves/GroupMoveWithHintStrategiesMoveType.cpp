@@ -219,7 +219,8 @@ GroupMoveWithHintStrategiesMoveType::generateDestinationScopeItemIndexPerGroup(
     const ReferenceList<const std::vector<entities::ContainerId>>&
         acceptingContainersPerScopeItem,
     const interface::MoveStrategyType& strategy,
-    const entities::ContainerId hotContainer) const {
+    const entities::ContainerId hotContainer,
+    bool distinctScopeItems) const {
   std::vector<int> scopeItemIndices(acceptingContainersPerScopeItem.size());
   std::iota(scopeItemIndices.begin(), scopeItemIndices.end(), 0);
 
@@ -229,6 +230,11 @@ GroupMoveWithHintStrategiesMoveType::generateDestinationScopeItemIndexPerGroup(
     int validIndex = -1;
 
     for (const auto index : scopeItemIndices) {
+      if (distinctScopeItems &&
+          std::find(selectedIndices.begin(), selectedIndices.end(), index) !=
+              selectedIndices.end()) {
+        continue;
+      }
       const auto& scopeItemContainer =
           acceptingContainersPerScopeItem[index].get();
       if (notEnoughContainersForMoveSet(
@@ -334,7 +340,8 @@ GroupMoveWithHintStrategiesMoveType::exploreTertiaryPartitionMoves(
         acceptingContainersPerScopeItem,
     const interface::MoveStrategyType& strategy,
     entities::ContainerId exclusionContainer,
-    const Problem& problem) const {
+    const Problem& problem,
+    bool distinctScopeItems) const {
   const auto& universe = problem.getUniverse();
   const auto tertiaryPartitionId =
       universe.getPartitionId(tertiaryPartitionName);
@@ -363,7 +370,8 @@ GroupMoveWithHintStrategiesMoveType::exploreTertiaryPartitionMoves(
         tertiaryGroupToObjects,
         acceptingContainersPerScopeItem,
         strategy,
-        exclusionContainer);
+        exclusionContainer,
+        distinctScopeItems);
 
     if (destinationIndices.size() < tertiaryGroupToObjects.size()) {
       continue;
@@ -485,7 +493,8 @@ std::vector<MoveSet> GroupMoveWithHintStrategiesMoveType::generateAllMoveSets(
           acceptingContainersPerScopeItem,
           strategy,
           exclusionContainer,
-          problem);
+          problem,
+          *hintOptions.distinctScopeItemsAcrossTertiaryGroups());
     } else {
       newMoveSets = exploreScopeItemMoves(
           objects,

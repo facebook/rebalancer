@@ -1079,6 +1079,7 @@ class MoveStrategy(TypedDict, total=False):
     moveToScopeItems: MoveToScopeItemsSpec
     tertiaryPartition: str
     numScopeItemsToExplorePerTertiaryGroup: int
+    distinctScopeItemsAcrossTertiaryGroups: bool  # default False
 
 
 class MoveStrategies(TypedDict, total=False):

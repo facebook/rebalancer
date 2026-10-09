@@ -3730,6 +3730,54 @@ TEST_P(ProblemSolverChecksTest, GroupMoveWithHintStrategiesMoveType) {
   }
 
   {
+    MoveStrategy hintOption;
+    hintOption.type() = MoveStrategyType::RANDOM_SAMPLING_WITHOUT_REPLACEMENT;
+    MoveToScopeItemsSpec distinctMoveToScopeItemsSpec;
+    ScopeItemList distinctDefaultScopeItems;
+    distinctDefaultScopeItems.scopeName() = "worlds";
+    distinctMoveToScopeItemsSpec.defaultScopeItems() =
+        distinctDefaultScopeItems;
+    hintOption.moveToScopeItems() = distinctMoveToScopeItemsSpec;
+    hintOption.distinctScopeItemsAcrossTertiaryGroups() = true;
+
+    MoveStrategies moveStrategies;
+    moveStrategies.groupToMoveStrategy()["j1"] = hintOption;
+    const auto spec = makeGroupMoveWithStrategies(
+        "primaryPartition", "secondaryPartition", moveStrategies);
+
+    LocalSearchSolverSpec solverSpec;
+    solverSpec.moveTypeList()->push_back(ProblemSolver::makeMoveTypeSpec(spec));
+    REBALANCER_EXPECT_RUNTIME_ERROR(
+        solver->addSolver(solverSpec),
+        "distinctScopeItemsAcrossTertiaryGroups requires tertiaryPartition in MoveStrategyType");
+  }
+
+  {
+    MoveStrategy hintOption;
+    hintOption.type() = MoveStrategyType::RANDOM_SAMPLING_WITH_REPLACEMENT;
+    MoveToScopeItemsSpec replacementMoveToScopeItemsSpec;
+    ScopeItemList replacementDefaultScopeItems;
+    replacementDefaultScopeItems.scopeName() = "worlds";
+    replacementMoveToScopeItemsSpec.defaultScopeItems() =
+        replacementDefaultScopeItems;
+    hintOption.moveToScopeItems() = replacementMoveToScopeItemsSpec;
+    hintOption.tertiaryPartition() = "tertiaryPartition";
+    hintOption.numScopeItemsToExplorePerTertiaryGroup() = 1;
+    hintOption.distinctScopeItemsAcrossTertiaryGroups() = true;
+
+    MoveStrategies moveStrategies;
+    moveStrategies.groupToMoveStrategy()["j1"] = hintOption;
+    const auto spec = makeGroupMoveWithStrategies(
+        "primaryPartition", "secondaryPartition", moveStrategies);
+
+    LocalSearchSolverSpec solverSpec;
+    solverSpec.moveTypeList()->push_back(ProblemSolver::makeMoveTypeSpec(spec));
+    REBALANCER_EXPECT_RUNTIME_ERROR(
+        solver->addSolver(solverSpec),
+        "distinctScopeItemsAcrossTertiaryGroups requires RANDOM_SAMPLING_WITHOUT_REPLACEMENT in MoveStrategyType");
+  }
+
+  {
     // if SecondaryGroupToSecondaryGroups does not have a group that exist,
     // throw an error
     MoveStrategy hintOption;

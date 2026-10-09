@@ -89,7 +89,8 @@ class MockGroupMoveWithHintStrategiesMoveType
           acceptingContainersPerScopeItem,
       const interface::MoveStrategyType& strategy,
       entities::ContainerId exclusionContainer,
-      const Problem& problem) const {
+      const Problem& problem,
+      bool distinctScopeItems = false) const {
     return GroupMoveWithHintStrategiesMoveType::exploreTertiaryPartitionMoves(
         objects,
         tertiaryPartitionName,
@@ -98,7 +99,8 @@ class MockGroupMoveWithHintStrategiesMoveType
         acceptingContainersPerScopeItem,
         strategy,
         exclusionContainer,
-        problem);
+        problem,
+        distinctScopeItems);
   }
 
   std::vector<MoveSet> exploreScopeItemMoves(
@@ -1166,6 +1168,68 @@ CO_TEST_F(
       EXPECT_NE(move.getDestinationContainer(), container("dummyRank"));
       EXPECT_EQ(move.getSourceContainer(), container("dummyRank"));
     }
+  }
+}
+
+CO_TEST_F(
+    GroupMoveWithHintStrategiesTest,
+    ExploreTertiaryPartitionMovesUsesDistinctScopeItems) {
+  const auto universe = co_await setUpUniverse();
+  createProblem({const_expr(0, *universe)}, const_expr(0, *universe));
+
+  interface::GroupMoveWithHintStrategiesMoveTypeSpec moveTypeSpec;
+  moveTypeSpec.primaryPartition() = "tables";
+  moveTypeSpec.secondaryPartition() = "shardTypes";
+
+  const MockGroupMoveWithHintStrategiesMoveType mock(
+      interface::LocalSearchSolverSpec{}, moveTypeSpec, getProblem());
+
+  const std::vector<entities::ObjectId> objects = {
+      object(0),
+      object(1),
+      object(2),
+      object(3),
+      object(4),
+      object(5),
+      object(6),
+      object(7)};
+  const std::vector<std::vector<entities::ContainerId>> scopeItemContainers = {
+      {container("rank0"), container("rank1")},
+      {container("rank2"), container("rank3")},
+      {container("rank4"), container("rank5")},
+      {container("rank6"), container("rank7")}};
+
+  ReferenceList<const std::vector<entities::ContainerId>>
+      acceptingContainersPerScopeItem;
+  entities::Map<entities::ContainerId, size_t> containerToScopeItem;
+  for (const auto scopeItemIndex : folly::irange(scopeItemContainers.size())) {
+    const auto& containers = scopeItemContainers.at(scopeItemIndex);
+    acceptingContainersPerScopeItem.push_back(std::cref(containers));
+    for (const auto containerId : containers) {
+      containerToScopeItem[containerId] = scopeItemIndex;
+    }
+  }
+
+  const auto moveSets = mock.exploreTertiaryPartitionMoves(
+      objects,
+      "tertiaryPartition",
+      /*numScopeItemsToExplore=*/5,
+      /*moveSetsPerScopeItem=*/1,
+      acceptingContainersPerScopeItem,
+      interface::MoveStrategyType::RANDOM_SAMPLING_WITHOUT_REPLACEMENT,
+      container("dummyRank"),
+      getProblem(),
+      /*distinctScopeItems=*/true);
+
+  EXPECT_EQ(moveSets.size(), 5);
+  for (const auto& moveSet : moveSets) {
+    entities::Set<size_t> destinationScopeItems;
+    for (const auto& move : moveSet) {
+      destinationScopeItems.insert(
+          containerToScopeItem.at(move.getDestinationContainer()));
+    }
+    EXPECT_EQ(moveSet.size(), objects.size());
+    EXPECT_EQ(destinationScopeItems.size(), 4);
   }
 }
 
