@@ -87,7 +87,8 @@ MoveResult SingleChainFastMoveType::findBestMove(
         coldContainers,
         evaluate,
         timeLimit - timer.getSeconds(),
-        getParallelExecutionConfig());
+        parallelExecutionSelector(),
+        name());
     bestResult.aggregate(std::move(result));
     if (bestResult.isBetter(precision)) {
       break;

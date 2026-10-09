@@ -69,7 +69,8 @@ MoveResult SingleFastMoveType::findBestMove(
               spec_.destinationsToExplore().value()),
           remainingTime,
           stats,
-          getParallelExecutionConfig());
+          parallelExecutionSelector(),
+          name());
     } else {
       result = MoveHelper::findBestMove(
           evaluator,
@@ -78,7 +79,8 @@ MoveResult SingleFastMoveType::findBestMove(
           problem.containers,
           remainingTime,
           stats,
-          getParallelExecutionConfig());
+          parallelExecutionSelector(),
+          name());
     }
     bestMove.aggregate(std::move(result));
 

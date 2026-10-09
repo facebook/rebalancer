@@ -1667,6 +1667,12 @@ void ProblemChecker::checkSolverSpec(
   }
 }
 
+void ProblemChecker::checkBatchingConfig(
+    const interface::BatchingExecutionConfig& config) {
+  checkNonNegativeValue(
+      *config.maxConcurrency(), "BatchingExecutionConfig.maxConcurrency");
+}
+
 void ProblemChecker::checkExecutionConfig(
     const interface::ParallelExecutionConfig& config) {
   switch (config.getType()) {
@@ -1674,13 +1680,12 @@ void ProblemChecker::checkExecutionConfig(
       throw std::runtime_error("ParallelExecutionConfig cannot be empty");
     case interface::ParallelExecutionConfig::Type::slidingWindow:
       return;
-    case interface::ParallelExecutionConfig::Type::batching: {
-      const auto& batchingConfig = config.get_batching();
-      checkNonNegativeValue(
-          *batchingConfig.maxConcurrency(),
-          "BatchingExecutionConfig.maxConcurrency");
+    case interface::ParallelExecutionConfig::Type::batching:
+      checkBatchingConfig(config.get_batching());
       return;
-    }
+    case interface::ParallelExecutionConfig::Type::autoExecution:
+      checkBatchingConfig(*config.get_autoExecution().batching());
+      return;
   }
   throw std::runtime_error("Unknown ParallelExecutionConfig type");
 }

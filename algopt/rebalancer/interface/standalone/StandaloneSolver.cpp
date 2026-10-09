@@ -124,20 +124,20 @@ DEFINE_string(
     parallel_execution_strategy,
     "",
     "Override parallel execution strategy for local search. "
-    "Options: sliding_window, batching. If empty, uses problem config.");
+    "Options: sliding_window, batching, auto. If empty, uses problem config.");
 
 DEFINE_int32(
     batch_size,
     0,
     "Batch size for batching execution strategy. "
-    "Only used when --parallel_execution_strategy=batching. "
+    "Only used when --parallel_execution_strategy=batching or auto. "
     "If 0, uses default (32).");
 
 DEFINE_int32(
     batching_max_concurrency,
     -1,
     "Maximum concurrent batch consumers for the batching execution strategy. "
-    "Only used when --parallel_execution_strategy=batching. "
+    "Only used when --parallel_execution_strategy=batching or auto. "
     "-1 uses the configured default, 0 uses all executor threads, and positive "
     "values set an explicit limit.");
 
@@ -224,7 +224,9 @@ makeParallelExecutionConfigFromFlags() {
         INFO,
         "Overriding parallel execution: strategy={}",
         FLAGS_parallel_execution_strategy);
-  } else if (FLAGS_parallel_execution_strategy == "batching") {
+  } else if (
+      FLAGS_parallel_execution_strategy == "batching" ||
+      FLAGS_parallel_execution_strategy == "auto") {
     if (FLAGS_batching_max_concurrency < -1) {
       throw std::runtime_error(
           fmt::format(
@@ -240,7 +242,13 @@ makeParallelExecutionConfigFromFlags() {
     }
     const auto batchSize = *batchingConfig.batchSize();
     const auto maxConcurrency = *batchingConfig.maxConcurrency();
-    spec.set_batching(std::move(batchingConfig));
+    if (FLAGS_parallel_execution_strategy == "batching") {
+      spec.set_batching(std::move(batchingConfig));
+    } else {
+      interface::AutoExecutionConfig autoConfig;
+      autoConfig.batching() = std::move(batchingConfig);
+      spec.set_autoExecution(std::move(autoConfig));
+    }
     XLOGF(
         INFO,
         "Overriding parallel execution: strategy={}, batchSize={}, "
@@ -252,7 +260,7 @@ makeParallelExecutionConfigFromFlags() {
     throw std::runtime_error(
         fmt::format(
             "Invalid parallel_execution_strategy '{}'. "
-            "Valid options: sliding_window, batching",
+            "Valid options: sliding_window, batching, auto",
             FLAGS_parallel_execution_strategy));
   }
 

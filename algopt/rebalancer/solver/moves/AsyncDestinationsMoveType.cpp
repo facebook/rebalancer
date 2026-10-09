@@ -54,7 +54,8 @@ MoveResult AsyncDestinationsMoveType::findBestMove(
       coldContainers,
       evaluate,
       timeLimit,
-      getParallelExecutionConfig());
+      parallelExecutionSelector(),
+      name());
 
   XLOG_EVERY_N(INFO, 100) << name() << " move evaluations per second "
                           << bestResult.getEvalsCount() / timer.getSeconds()

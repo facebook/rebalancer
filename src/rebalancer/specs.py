@@ -859,11 +859,17 @@ class BatchingExecutionConfig(TypedDict, total=False):
     maxConcurrency: int  # default 24
 
 
+class AutoExecutionConfig(TypedDict, total=False):
+    slidingWindow: SlidingWindowExecutionConfig
+    batching: BatchingExecutionConfig
+
+
 class ParallelExecutionConfig(TypedDict, total=False):
     """Union: exactly one arm must be present."""
 
     slidingWindow: NotRequired[SlidingWindowExecutionConfig]
     batching: NotRequired[BatchingExecutionConfig]
+    autoExecution: NotRequired[AutoExecutionConfig]
 
 
 class MinCycleObjectiveImprovementConfig(TypedDict, total=False):

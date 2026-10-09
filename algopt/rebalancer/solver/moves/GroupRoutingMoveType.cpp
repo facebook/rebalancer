@@ -111,7 +111,8 @@ MoveResult GroupRoutingMoveType::findBestMove(
       relevantGroups,
       exploreMovingGroup,
       timeLimit,
-      getParallelExecutionConfig());
+      parallelExecutionSelector(),
+      name());
 }
 
 MoveSet GroupRoutingMoveType::generateMoveSetFor(

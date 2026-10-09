@@ -14,16 +14,19 @@
 
 #pragma once
 
-#include "algopt/rebalancer/interface/thrift/gen-cpp2/SolverSpecs_types.h"
 #include "algopt/rebalancer/solver/moves/MoveResult.h"
-#include "algopt/rebalancer/solver/moves/MoveType.h"
+#include "algopt/rebalancer/solver/utils/ParallelExecutionSelector.h"
 #include "algopt/rebalancer/solver/utils/Util.h"
 
 #include <folly/executors/ThreadPoolExecutor.h>
 #include <folly/Random.h>
 
+#include <string_view>
+
 namespace facebook::rebalancer {
 
+class MoveStatsAggregator;
+class MovesEvaluator;
 class Problem;
 
 class MoveHelper {
@@ -35,7 +38,8 @@ class MoveHelper {
       const PackerSet<entities::ContainerId>& coldContainers,
       double timeout,
       MoveStatsAggregator& stats,
-      const std::optional<interface::ParallelExecutionConfig>& execSpec);
+      ParallelExecutionSelector& executionSelector,
+      std::string_view moveTypeName);
 
   template <class Input, class InputCollection>
   static MoveResult findBest(
@@ -43,7 +47,8 @@ class MoveHelper {
       const InputCollection& inputs,
       const std::function<MoveResult(Input)>& evaluate,
       double timeout,
-      const std::optional<interface::ParallelExecutionConfig>& execSpec);
+      ParallelExecutionSelector& executionSelector,
+      std::string_view moveTypeName);
 
   // Returns true with probability sampleSize / setSize.
   template <typename RNG = folly::Random::DefaultGenerator>
@@ -62,7 +67,7 @@ class MoveHelper {
       const InitializeFn& initialize,
       const AggregateFn& aggregate,
       double timeout,
-      const std::optional<interface::ParallelExecutionConfig>& execSpec)
+      const ParallelExecutionSelector& executionSelector)
       -> std::invoke_result_t<InitializeFn>;
 };
 } // namespace facebook::rebalancer

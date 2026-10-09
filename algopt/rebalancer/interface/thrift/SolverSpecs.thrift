@@ -168,11 +168,19 @@ struct BatchingExecutionConfig {
   2: i32 maxConcurrency = 24;
 }
 
+struct AutoExecutionConfig {
+  1: SlidingWindowExecutionConfig slidingWindow;
+  2: BatchingExecutionConfig batching;
+}
+
 // IDs 1 and 2 belong to the previous struct representation.
 @thrift.ReserveIds{ids = [1, 2]}
 union ParallelExecutionConfig {
   3: SlidingWindowExecutionConfig slidingWindow;
   4: BatchingExecutionConfig batching;
+  // AUTO times sliding-window and batching on each move type's early
+  // evaluation calls, then keeps the one with higher evaluation throughput.
+  5: AutoExecutionConfig autoExecution;
 }
 
 // Minimum improvement a cycle must achieve to justify starting the next cycle.

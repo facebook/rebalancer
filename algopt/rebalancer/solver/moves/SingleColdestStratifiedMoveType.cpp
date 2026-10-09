@@ -68,7 +68,8 @@ MoveResult SingleColdestStratifiedMoveType::findBestMove(
         sampleSet,
         timeLimit - timer.getSeconds(),
         stats,
-        getParallelExecutionConfig());
+        parallelExecutionSelector(),
+        name());
 
     bestResult.aggregate(std::move(result));
 

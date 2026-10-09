@@ -140,7 +140,8 @@ MoveResult FixedDestSwapMultiMoveType::findBestMove(
               std::vector<BundleIdx>({srcObjectBundleId}), dstObjectBundleIds),
           evaluate,
           timeLimit - timer.getSeconds(),
-          getParallelExecutionConfig());
+          parallelExecutionSelector(),
+          name());
       bestResult.aggregate(std::move(result));
       if (bestResult.isBetter(precision)) {
         // stop search once we found a better move
@@ -158,7 +159,8 @@ MoveResult FixedDestSwapMultiMoveType::findBestMove(
         CartesianProduct(srcObjectBundleIds, dstObjectBundleIds),
         evaluate,
         timeLimit,
-        getParallelExecutionConfig());
+        parallelExecutionSelector(),
+        name());
   }
   return bestResult;
 }
@@ -268,7 +270,8 @@ MoveResult FixedDestSwapMultiMoveType::findBestMoveWithSwapRatio(
             std::vector<BundleIdx>({srcObjectBundleId}), it->second),
         evaluateWithMultiObjects,
         timeLimit - timer.getSeconds(),
-        getParallelExecutionConfig());
+        parallelExecutionSelector(),
+        name());
     bestResult.aggregate(std::move(result));
 
     if (bestResult.isBetter(precision)) {

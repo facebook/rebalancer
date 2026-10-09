@@ -523,7 +523,7 @@ MoveResult GroupMoveWithHintStrategiesMoveType::exploreMovingGroup(
     const MovesEvaluator& evaluator,
     MoveStatsAggregator& stats,
     double timeLimit,
-    const std::vector<MoveSet>& possibleMoveSets) const {
+    const std::vector<MoveSet>& possibleMoveSets) {
   const std::function<MoveResult(MoveSet)> sampleContainersAndEvaluate =
       [&](MoveSet moveset) {
         auto result = evaluator.evaluate(std::move(moveset));
@@ -536,7 +536,8 @@ MoveResult GroupMoveWithHintStrategiesMoveType::exploreMovingGroup(
       possibleMoveSets,
       sampleContainersAndEvaluate,
       timeLimit,
-      getParallelExecutionConfig());
+      parallelExecutionSelector(),
+      name());
 }
 
 } // namespace facebook::rebalancer

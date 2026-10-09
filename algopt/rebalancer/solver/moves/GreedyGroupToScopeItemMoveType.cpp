@@ -140,7 +140,7 @@ MoveResult GreedyGroupToScopeItemMoveType::exploreMovingGroup(
     const std::vector<entities::ObjectId>& groupObjectIds,
     const ReferenceList<const std::vector<entities::ContainerId>>& destinations,
     MoveStatsAggregator& stats,
-    double timeLimit) const {
+    double timeLimit) {
   const std::function<MoveResult(
       std::reference_wrapper<const std::vector<entities::ContainerId>>)>
       sampleContainersAndEvaluate =
@@ -185,7 +185,8 @@ MoveResult GreedyGroupToScopeItemMoveType::exploreMovingGroup(
       destinations,
       sampleContainersAndEvaluate,
       timeLimit,
-      getParallelExecutionConfig());
+      parallelExecutionSelector(),
+      name());
 }
 
 MoveResult GreedyGroupToScopeItemMoveType::findBestMove(

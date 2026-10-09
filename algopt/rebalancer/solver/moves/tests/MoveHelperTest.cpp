@@ -21,6 +21,7 @@
 
 #include <algorithm>
 #include <mutex>
+#include <optional>
 #include <random>
 #include <set>
 #include <thread>
@@ -44,8 +45,9 @@ TEST(MoveHelperTest, FindBest) {
         GlobalObjectiveValue({0.1 * input}),
         {});
   };
-  auto best =
-      MoveHelper::findBest(&executor, inputs, evaluate, 10, std::nullopt);
+  ParallelExecutionSelector executionSelector(std::nullopt);
+  auto best = MoveHelper::findBest(
+      &executor, inputs, evaluate, 10, executionSelector, "test");
   EXPECT_EQ(5, best.getEvalsCount());
   EXPECT_EQ(-0.2, best.getValue().get(0));
   ASSERT_EQ(1, best.getMoveSet().size());
@@ -110,8 +112,10 @@ TEST(MoveHelperTest, FindBestWithBatchingStrategy) {
   batchingConfig.batchSize() = 2;
   interface::ParallelExecutionConfig execSpec;
   execSpec.set_batching(std::move(batchingConfig));
+  ParallelExecutionSelector executionSelector(execSpec);
 
-  auto best = MoveHelper::findBest(&executor, inputs, evaluate, 10, execSpec);
+  auto best = MoveHelper::findBest(
+      &executor, inputs, evaluate, 10, executionSelector, "test");
   EXPECT_EQ(5, best.getEvalsCount());
   EXPECT_EQ(-0.2, best.getValue().get(0));
   ASSERT_EQ(1, best.getMoveSet().size());
@@ -138,9 +142,10 @@ TEST(MoveHelperTest, MaxConcurrencyLimitsParallelEvaluations) {
   batchingConfig.maxConcurrency() = 1;
   interface::ParallelExecutionConfig execSpec;
   execSpec.set_batching(std::move(batchingConfig));
+  ParallelExecutionSelector executionSelector(execSpec);
 
-  const auto best =
-      MoveHelper::findBest(&executor, inputs, evaluate, 10, execSpec);
+  const auto best = MoveHelper::findBest(
+      &executor, inputs, evaluate, 10, executionSelector, "test");
   EXPECT_EQ(5, best.getEvalsCount());
   EXPECT_EQ(1, workerThreads.size());
 }
@@ -161,12 +166,41 @@ TEST(MoveHelperTest, FindBestWithSlidingWindowStrategy) {
 
   interface::ParallelExecutionConfig execSpec;
   execSpec.set_slidingWindow(interface::SlidingWindowExecutionConfig{});
+  ParallelExecutionSelector executionSelector(execSpec);
 
-  auto best = MoveHelper::findBest(&executor, inputs, evaluate, 10, execSpec);
+  auto best = MoveHelper::findBest(
+      &executor, inputs, evaluate, 10, executionSelector, "test");
   EXPECT_EQ(5, best.getEvalsCount());
   EXPECT_EQ(-0.2, best.getValue().get(0));
   ASSERT_EQ(1, best.getMoveSet().size());
   EXPECT_EQ(object(1), best.getMoveSet().begin()->getObject());
+}
+
+TEST(MoveHelperTest, FindBestFeedsAutoSelectorUntilItLocks) {
+  CPUThreadPoolExecutor executor(10);
+  const vector<int> inputs = {-2, -1, 0, 1, 2};
+
+  const std::function<MoveResult(int)> evaluate = [](int input) {
+    return MoveResult::makeValid(
+        MoveSet(),
+        GlobalObjectiveValue({0}),
+        GlobalObjectiveValue({0.1 * input}),
+        {});
+  };
+
+  interface::ParallelExecutionConfig execSpec;
+  execSpec.set_autoExecution(interface::AutoExecutionConfig{});
+  ParallelExecutionSelector executionSelector(execSpec);
+
+  constexpr int kMaxCalls = 100;
+  int calls = 0;
+  while (executionSelector.isExploring() && calls < kMaxCalls) {
+    const auto best = MoveHelper::findBest(
+        &executor, inputs, evaluate, 10, executionSelector, "test");
+    EXPECT_EQ(5, best.getEvalsCount());
+    ++calls;
+  }
+  EXPECT_FALSE(executionSelector.isExploring());
 }
 
 TEST(MoveHelperTest, FindBestWithNulloptUsesDefault) {
@@ -183,8 +217,9 @@ TEST(MoveHelperTest, FindBestWithNulloptUsesDefault) {
         {});
   };
 
-  auto best =
-      MoveHelper::findBest(&executor, inputs, evaluate, 10, std::nullopt);
+  ParallelExecutionSelector executionSelector(std::nullopt);
+  auto best = MoveHelper::findBest(
+      &executor, inputs, evaluate, 10, executionSelector, "test");
   EXPECT_EQ(5, best.getEvalsCount());
   EXPECT_EQ(-0.2, best.getValue().get(0));
   ASSERT_EQ(1, best.getMoveSet().size());

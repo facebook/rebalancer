@@ -110,7 +110,8 @@ MoveResult ReplicaDropMoveType::findBestMove(
         singleMoves,
         evaluate,
         timeLimit - timer.getSeconds(),
-        getParallelExecutionConfig());
+        parallelExecutionSelector(),
+        name());
 
     if (result.isBetter(precision)) {
       return result;

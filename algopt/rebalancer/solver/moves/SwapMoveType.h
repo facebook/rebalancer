@@ -72,7 +72,7 @@ class SwapMoveType : public AsyncSingleMovesMoveType {
       entities::ContainerId coldContainer,
       MoveStatsAggregator& stats,
       bool shouldParallelizeWithinColdContainer = false,
-      std::optional<double> timeLimit = std::nullopt) const;
+      std::optional<double> timeLimit = std::nullopt);
 
   bool attemptMoveWithThisObject(
       const MovesEvaluator& evaluator,
@@ -88,7 +88,7 @@ class SwapMoveType : public AsyncSingleMovesMoveType {
       const ObjectStore& dynamicObjects,
       MoveStatsAggregator& stats,
       bool shouldParallelizeWithinColdContainer,
-      std::optional<double> timeLimit) const;
+      std::optional<double> timeLimit);
 
   virtual std::optional<PackerSet<entities::ContainerId>>
   getCustomColdContainers(

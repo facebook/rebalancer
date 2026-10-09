@@ -328,7 +328,8 @@ MoveResult FixedSrcDstMultiMoveType<MoveTypeSpecT>::findBestMoveHelper(
       relevantObjectBundleIndices,
       evaluate,
       timeLimit,
-      getParallelExecutionConfig());
+      parallelExecutionSelector(),
+      name());
   // return after we have tried all objects that may improve the objective
   return bestResult;
 }

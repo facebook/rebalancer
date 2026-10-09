@@ -163,7 +163,8 @@ MoveResult SwapNMoveType::findBestMove(
       moves,
       evaluate,
       timeLimit,
-      getParallelExecutionConfig());
+      parallelExecutionSelector(),
+      name());
 }
 
 PackerSet<int> SwapNMoveType::pickRandom(int n, int k) {

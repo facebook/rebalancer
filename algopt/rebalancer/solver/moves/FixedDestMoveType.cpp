@@ -218,7 +218,8 @@ MoveResult FixedDestMoveType::findBestMoveWithBundleOptions(
         Filter(moves, shouldKeepCandidate),
         evaluate,
         timeLimit - timer.getSeconds(),
-        getParallelExecutionConfig());
+        parallelExecutionSelector(),
+        name());
     bestResult.aggregate(std::move(result));
   }
 

@@ -55,7 +55,8 @@ MoveResult SingleRandomObjectStratifiedMoveType::findBestMove(
       getSampledSet(similarObjectsList),
       evaluateSampledObjectToHotContainer,
       timeLimit,
-      getParallelExecutionConfig());
+      parallelExecutionSelector(),
+      name());
 }
 
 PackerSet<entities::ObjectId>

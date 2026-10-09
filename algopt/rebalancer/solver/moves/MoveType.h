@@ -19,6 +19,7 @@
 #include "algopt/rebalancer/solver/moves/MoveResult.h"
 #include "algopt/rebalancer/solver/moves/MoveStatsAggregator.h"
 #include "algopt/rebalancer/solver/moves/ObjectsToExploreGenerator.h"
+#include "algopt/rebalancer/solver/utils/ParallelExecutionSelector.h"
 #include "algopt/rebalancer/solver/utils/SearchHints.h"
 
 namespace facebook::rebalancer {
@@ -31,7 +32,6 @@ struct MovesSummary;
 struct MoveTypeBaseConfig {
   int32_t minHotObjects = 0;
   int32_t stratifiedSampleSize = 0;
-  std::optional<interface::ParallelExecutionConfig> parallelExecutionConfig;
   bool includeEqualSizeRandomSampleForSingleColdestMoveType = false;
 
   static MoveTypeBaseConfig fromSpec(
@@ -39,7 +39,6 @@ struct MoveTypeBaseConfig {
     return MoveTypeBaseConfig{
         .minHotObjects = *spec.minHotObjects(),
         .stratifiedSampleSize = *spec.stratifiedSampleSize(),
-        .parallelExecutionConfig = spec.parallelExecutionConfig().to_optional(),
         .includeEqualSizeRandomSampleForSingleColdestMoveType =
             *spec.includeEqualSizeRandomSampleForSingleColdestMoveType(),
     };
@@ -52,7 +51,9 @@ class MoveType {
 
  public:
   explicit MoveType(const interface::LocalSearchSolverSpec& configs)
-      : configs_(MoveTypeBaseConfig::fromSpec(configs)) {}
+      : configs_(MoveTypeBaseConfig::fromSpec(configs)),
+        parallelExecutionSelector_(
+            configs.parallelExecutionConfig().to_optional()) {}
   virtual ~MoveType();
 
   virtual std::string name() const = 0;
@@ -63,12 +64,6 @@ class MoveType {
       MoveStatsAggregator& stats,
       const SearchHints& hints,
       double timeLimit) = 0;
-
-  // Returns the parallel execution config for this move type, if configured
-  virtual std::optional<interface::ParallelExecutionConfig>
-  getParallelExecutionConfig() const {
-    return configs_.parallelExecutionConfig;
-  }
 
   static MoveResult findBestWithValidator(
       Problem& evaluator,
@@ -85,6 +80,9 @@ class MoveType {
   }
   bool includeEqualSizeRandomSample() const {
     return configs_.includeEqualSizeRandomSampleForSingleColdestMoveType;
+  }
+  ParallelExecutionSelector& parallelExecutionSelector() {
+    return parallelExecutionSelector_;
   }
 
   ReferenceList<const std::vector<entities::ContainerId>>
@@ -118,6 +116,8 @@ class MoveType {
   mutable std::mt19937 rng_;
 
  private:
+  ParallelExecutionSelector parallelExecutionSelector_;
+
   static std::string getMoveDescription(
       const interface::MovesSummary& moveSummary);
 };

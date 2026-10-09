@@ -74,7 +74,7 @@ class GroupMoveWithHintStrategiesMoveType : public MoveType {
       const MovesEvaluator& evaluator,
       MoveStatsAggregator& stats,
       double timeLimit,
-      const std::vector<MoveSet>& possibleMoveSets) const;
+      const std::vector<MoveSet>& possibleMoveSets);
 
   MoveSet generateSampledContainersAndMoveSet(
       interface::MoveStrategyType strategy,

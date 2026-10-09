@@ -147,7 +147,8 @@ MoveResult ColocateGroupsMoveType::findBestMove(
             moveSets,
             evaluate,
             timeLimit - timer.getSeconds(),
-            getParallelExecutionConfig()));
+            parallelExecutionSelector(),
+            name()));
 
     if (bestResult.isBetter(precision)) {
       // return early if we found a better move

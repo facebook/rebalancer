@@ -54,7 +54,7 @@ class GreedyGroupToScopeItemMoveType : public MoveType {
       const ReferenceList<const std::vector<entities::ContainerId>>&
           destinations,
       MoveStatsAggregator& stats,
-      double timeLimit) const;
+      double timeLimit);
 
   const std::string partitionName_;
   const int nSampleSetsToExplore_;

@@ -14,11 +14,13 @@
 
 #pragma once
 
+#include "algopt/rebalancer/algopt_common/Timer.h"
 #include "algopt/rebalancer/solver/iterators/Timeout.h"
 #include "algopt/rebalancer/solver/utils/ParallelExecution.h"
 
 #include <functional>
 #include <stdexcept>
+#include <type_traits>
 
 namespace facebook::rebalancer {
 
@@ -28,17 +30,31 @@ inline MoveResult MoveHelper::findBest(
     const InputCollection& inputs,
     const std::function<MoveResult(Input)>& evaluate,
     const double timeout,
-    const std::optional<interface::ParallelExecutionConfig>& execSpec) {
-  return execute(
-      executor,
-      inputs,
-      evaluate,
-      []() noexcept { return MoveResult::makeEmpty(); },
-      [](MoveResult& acc, MoveResult&& result) noexcept {
-        acc.aggregate(std::move(result));
-      },
-      timeout,
-      execSpec);
+    ParallelExecutionSelector& executionSelector,
+    const std::string_view moveTypeName) {
+  const auto run = [&] {
+    return execute(
+        executor,
+        inputs,
+        evaluate,
+        []() noexcept { return MoveResult::makeEmpty(); },
+        [](MoveResult& acc, MoveResult&& result) noexcept {
+          acc.aggregate(std::move(result));
+        },
+        timeout,
+        executionSelector);
+  };
+  if (!executionSelector.isExploring()) {
+    return run();
+  }
+
+  const algopt::Timer timer(true);
+  auto result = run();
+  executionSelector.record(
+      {.evaluations = result.getEvalsCount(),
+       .durationSecs = timer.getSeconds()},
+      moveTypeName);
+  return result;
 }
 
 template <
@@ -53,43 +69,30 @@ inline auto MoveHelper::execute(
     const InitializeFn& initialize,
     const AggregateFn& aggregate,
     const double timeout,
-    const std::optional<interface::ParallelExecutionConfig>& execSpec)
+    const ParallelExecutionSelector& executionSelector)
     -> std::invoke_result_t<InitializeFn> {
   Timeout<InputCollection> timeoutInputs(inputs, timeout);
   timeoutInputs.start_timer();
 
-  const auto executeBatch =
-      [&](const interface::BatchingExecutionConfig& batchingConfig) {
-        BatchingExecutionOptions options;
-        if (*batchingConfig.batchSize() != 0) {
-          options.batchSize = static_cast<size_t>(*batchingConfig.batchSize());
-        }
-        if (*batchingConfig.maxConcurrency() > 0) {
-          options.maxConcurrency =
-              static_cast<size_t>(*batchingConfig.maxConcurrency());
-        }
-        return executeParallelBatch(
-            executor, timeoutInputs, process, initialize, aggregate, options);
-      };
   const auto executeSlidingWindow = [&]() {
     const int windowSize = static_cast<int>(10 + executor->numThreads());
     return executeParallelWindow(
         executor, timeoutInputs, process, initialize, aggregate, windowSize);
   };
 
-  if (execSpec) {
-    switch (execSpec->getType()) {
-      case interface::ParallelExecutionConfig::Type::batching: {
-        return executeBatch(execSpec->get_batching());
-      }
-      case interface::ParallelExecutionConfig::Type::slidingWindow:
-        return executeSlidingWindow();
-      case interface::ParallelExecutionConfig::Type::__EMPTY__:
-        throw std::invalid_argument(
-            "Parallel execution config cannot be empty");
-    }
+  switch (executionSelector.strategy()) {
+    case ParallelExecutionSelector::Strategy::SlidingWindow:
+      return executeSlidingWindow();
+    case ParallelExecutionSelector::Strategy::Batching:
+      return executeParallelBatch(
+          executor,
+          timeoutInputs,
+          process,
+          initialize,
+          aggregate,
+          executionSelector.batchingOptions());
   }
-  return executeSlidingWindow();
+  throw std::invalid_argument("Unknown parallel execution strategy");
 }
 
 template <typename RNG>

@@ -68,8 +68,8 @@ std::optional<ParallelExecutionConfig> getStageConfig(
 } // namespace
 
 // The overrides have to be applied by the constructor. solve() builds the move
-// types from the stage specs, and a move type keeps a copy of
-// parallelExecutionConfig, so overriding any later has no effect.
+// types from the stage specs, and a move type builds its execution selector
+// from parallelExecutionConfig, so overriding any later has no effect.
 TEST(LocalSearchStageSolverTest, StageWithoutConfigTakesSolverLevelConfig) {
   const LocalSearchStageSolver solver(makeTwoStageSpec());
 

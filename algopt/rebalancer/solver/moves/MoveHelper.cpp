@@ -26,7 +26,8 @@ MoveResult MoveHelper::findBestMove(
     const PackerSet<entities::ContainerId>& coldContainers,
     double timeout,
     MoveStatsAggregator& stats,
-    const std::optional<interface::ParallelExecutionConfig>& execSpec) {
+    ParallelExecutionSelector& executionSelector,
+    std::string_view moveTypeName) {
   const auto& problem = evaluator.getProblem();
   const auto* filter = problem.getInvalidMoveFilter();
   auto filteredContainers = Filter(
@@ -56,7 +57,8 @@ MoveResult MoveHelper::findBestMove(
       filteredContainers,
       evaluate,
       timeout,
-      execSpec);
+      executionSelector,
+      moveTypeName);
 }
 
 } // namespace facebook::rebalancer

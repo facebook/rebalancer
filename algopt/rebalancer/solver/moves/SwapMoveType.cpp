@@ -80,7 +80,7 @@ MoveResult SwapMoveType::exploreSwappingHotObjectWithObjectsInColdContainer(
     entities::ContainerId coldContainer,
     MoveStatsAggregator& stats,
     bool shouldParallelizeWithinColdContainer,
-    std::optional<double> timeLimit) const {
+    std::optional<double> timeLimit) {
   struct GroupInfo {
     std::string partitionName;
     entities::GroupId groupId;
@@ -124,7 +124,7 @@ MoveResult SwapMoveType::exploreAllAndGetBestResult(
     const ObjectStore& dynamicObjects,
     MoveStatsAggregator& stats,
     bool shouldParallelizeWithinColdContainer,
-    std::optional<double> timeLimit) const {
+    std::optional<double> timeLimit) {
   auto& problem = evaluator.getProblem();
   auto& universe = problem.getUniverse();
   const auto& equivalenceSets = problem.getEquivalenceSets();
@@ -223,7 +223,8 @@ MoveResult SwapMoveType::exploreAllAndGetBestResult(
           Filter(candidatesToEvaluate, shouldKeepCandidate),
           std::function<MoveResult(SwapCandidate)>(evaluate),
           remainingTime,
-          getParallelExecutionConfig());
+          parallelExecutionSelector(),
+          name());
       bestResult.aggregate(std::move(result));
     }
   } else {
@@ -360,7 +361,8 @@ MoveResult SwapMoveType::findBestMoveWithBundleOptions(
         Filter(moves, shouldKeepBundleCandidate),
         evaluate,
         timeLimit - timer.getSeconds(),
-        getParallelExecutionConfig());
+        parallelExecutionSelector(),
+        name());
     bestResult.aggregate(std::move(result));
   }
   return bestResult;
@@ -451,7 +453,8 @@ MoveResult SwapMoveType::findBestMove(
           coldContainers,
           evaluate,
           timeLimit - timer.getSeconds(),
-          getParallelExecutionConfig());
+          parallelExecutionSelector(),
+          name());
     }
     bestResult.aggregate(std::move(result));
     if (bestResult.isBetter(precision)) {

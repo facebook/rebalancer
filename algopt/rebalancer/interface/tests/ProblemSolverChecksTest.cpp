@@ -3300,6 +3300,23 @@ TEST_P(ProblemSolverChecksTest, NegativeBatchingMaxConcurrency) {
       "expected BatchingExecutionConfig.maxConcurrency to be non-negative but got -1");
 }
 
+TEST_P(ProblemSolverChecksTest, NegativeAutoBatchingMaxConcurrency) {
+  auto solver = makeInitializedSolver(GetParam());
+  ASSERT_NE(solver, nullptr);
+  AutoExecutionConfig autoConfig;
+  autoConfig.batching()->maxConcurrency() = -1;
+  ParallelExecutionConfig executionConfig;
+  executionConfig.set_autoExecution(std::move(autoConfig));
+  LocalSearchSolverSpec solverSpec;
+  solverSpec.moveTypeList()->push_back(
+      ProblemSolver::makeMoveTypeSpec(SingleMoveTypeSpec{}));
+  solverSpec.parallelExecutionConfig() = std::move(executionConfig);
+
+  REBALANCER_EXPECT_RUNTIME_ERROR(
+      solver->addSolver(solverSpec),
+      "expected BatchingExecutionConfig.maxConcurrency to be non-negative but got -1");
+}
+
 TEST_P(ProblemSolverChecksTest, MultiStageConfigNegativeStageTest) {
   auto solver = makeInitializedSolver(GetParam());
   LocalSearchStageSolverSpec stageSolverSpec;

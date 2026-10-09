@@ -27,6 +27,7 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <utility>
 
 namespace facebook::rebalancer::packer::tests {
 
@@ -39,12 +40,14 @@ class MockSwapMoveType : public SwapMoveType {
       const interface::SwapMoveTypeSpec& moveTypeSpec)
       : SwapMoveType(solverConfigs, moveTypeSpec) {}
 
+  using MoveType::parallelExecutionSelector;
+
   MoveResult exploreSwappingHotObjectWithObjectsInColdContainer(
       const MovesEvaluator& evaluator,
       entities::ContainerId hotContainer,
       entities::ObjectId hotObject,
       entities::ContainerId coldContainer,
-      MoveStatsAggregator& stats) const {
+      MoveStatsAggregator& stats) {
     // CoreLocalSearchSolve builds the index when the stage starts
     auto& problem = evaluator.getProblem();
     problem.assignment.maybeBuildAndGetObjectsIndexedByEquivSets(
@@ -53,6 +56,23 @@ class MockSwapMoveType : public SwapMoveType {
         evaluator, hotContainer, hotObject, coldContainer, stats);
   }
 };
+
+TEST(MoveTypeExecutionSelectorTest, BuiltFromSolverSpec) {
+  interface::BatchingExecutionConfig batchingConfig;
+  batchingConfig.batchSize() = 128;
+  batchingConfig.maxConcurrency() = 7;
+  interface::ParallelExecutionConfig config;
+  config.set_batching(std::move(batchingConfig));
+  interface::LocalSearchSolverSpec solverSpec;
+  solverSpec.parallelExecutionConfig() = std::move(config);
+
+  MockSwapMoveType move(solverSpec, interface::SwapMoveTypeSpec{});
+
+  const auto& selector = move.parallelExecutionSelector();
+  EXPECT_EQ(selector.strategy(), ParallelExecutionSelector::Strategy::Batching);
+  EXPECT_EQ(selector.batchingOptions().batchSize, 128);
+  EXPECT_EQ(selector.batchingOptions().maxConcurrency, 7);
+}
 
 class SwapMoveTypeTest : public MoveTestBaseWithTwoBinaryParams {
  protected:

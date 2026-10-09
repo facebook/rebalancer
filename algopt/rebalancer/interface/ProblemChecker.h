@@ -213,6 +213,7 @@ class ProblemChecker {
   void checkSolverSpec(const LocalSearchSolverSpec& spec) const;
   void checkSolverSpec(const LocalSearchStageSolverSpec& spec) const;
   static void checkExecutionConfig(const ParallelExecutionConfig& config);
+  static void checkBatchingConfig(const BatchingExecutionConfig& config);
   static void checkMultiStageConfig(const MultiStageConfig& multiStageConfig);
 
   static void checkAbsoluteEpsilon(const double absoluteEpsilon);

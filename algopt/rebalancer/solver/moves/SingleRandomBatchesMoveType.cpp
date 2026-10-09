@@ -76,7 +76,8 @@ MoveResult SingleRandomBatchesMoveType::findBestMove(
           batch,
           timeLimit - timer.getSeconds(),
           stats,
-          getParallelExecutionConfig());
+          parallelExecutionSelector(),
+          name());
       bestResult.aggregate(std::move(result));
       // return after the first result that improves the objective
       if (bestResult.isBetter(precision)) {
