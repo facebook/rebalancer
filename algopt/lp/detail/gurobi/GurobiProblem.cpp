@@ -952,15 +952,22 @@ std::optional<NumericalStabilityInfo> GurobiProblem::getNumericalStability(
     info.largestConstraintCoef = maxConstraintCoef;
   }
 
-  // Extract objective coefficient range.
+  // Extract objective coefficient range. getObjective() reports only the
+  // first objective, so a multi-objective model has to be walked level by
+  // level: the spread that matters is the one across the whole hierarchy.
+  const int numObjectives = model_.get(GRB_IntAttr::GRB_IntAttr_NumObj);
   double minObjCoef = std::numeric_limits<double>::max();
   double maxObjCoef = 0.0;
-  const GRBLinExpr objExpr = model_.getObjective().getLinExpr();
-  for (const auto j : folly::irange(objExpr.size())) {
-    const double coeff = std::abs(objExpr.getCoeff(j));
-    if (coeff > 0.0) {
-      minObjCoef = std::min(minObjCoef, coeff);
-      maxObjCoef = std::max(maxObjCoef, coeff);
+  for (const auto n : folly::irange(std::max(numObjectives, 1))) {
+    const GRBLinExpr objExpr = numObjectives > 1
+        ? model_.getObjective(n)
+        : model_.getObjective().getLinExpr();
+    for (const auto j : folly::irange(objExpr.size())) {
+      const double coeff = std::abs(objExpr.getCoeff(j));
+      if (coeff > 0.0) {
+        minObjCoef = std::min(minObjCoef, coeff);
+        maxObjCoef = std::max(maxObjCoef, coeff);
+      }
     }
   }
   if (maxObjCoef > 0.0) {
