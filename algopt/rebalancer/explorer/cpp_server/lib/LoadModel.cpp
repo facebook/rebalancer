@@ -18,8 +18,6 @@
 #include "rebalancer/explorer/cpp_server/lib/Utils.h"
 #include "rebalancer/explorer/if/gen-cpp2/explorer_types.h"
 
-#include <range/v3/range/conversion.hpp>
-
 #include <fmt/core.h>
 #include <folly/container/irange.h>
 #include <folly/executors/CPUThreadPoolExecutor.h>
@@ -710,8 +708,8 @@ static folly::coro::Task<Table> buildContainerTable(
     std::shared_ptr<const ObjectAssignments> objectAssignments,
     std::shared_ptr<algopt::treeprof::ExecutorWrapper> executor) {
   const auto& universe = *universePtr;
-  const auto containerIds =
-      universe.getContainers().getContainerIds() | ranges::to<std::vector>;
+  const auto ids = universe.getContainers().getContainerIds();
+  const std::vector<ContainerId> containerIds(ids.begin(), ids.end());
   TableBuilder<ContainerId> builder(containerIds);
   for (const auto scopeId : universe.getScopeIds()) {
     builder.add(buildContainerScopeColumn(builder, universe, scopeId));
@@ -867,8 +865,10 @@ static folly::coro::Task<Table> buildObjectTable(
   const auto& universe = *universePtr;
   const auto& objectAssignments = *objectAssignmentsPtr;
   const auto& equivalenceSetsData = *equivalenceSetsDataPtr;
-  const auto objectIds =
-      universe.getObjects().getObjectIds() | ranges::to<std::vector>;
+  const auto ids = universe.getObjects().getObjectIds();
+  std::vector<ObjectId> objectIds;
+  objectIds.reserve(ids.size());
+  objectIds.assign(ids.begin(), ids.end());
   TableBuilder<ObjectId> builder(objectIds);
 
   builder.add(buildObjectCol(builder, universe));
