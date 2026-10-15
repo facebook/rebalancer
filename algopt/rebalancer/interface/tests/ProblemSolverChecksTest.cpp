@@ -1397,20 +1397,6 @@ TEST_P(ProblemSolverChecksTest, enableMoveStats) {
       "unknown item fake_container in scope host");
 }
 
-TEST_P(ProblemSolverChecksTest, enableMoveValidator) {
-  auto solver = makeInitializedSolver(GetParam());
-  TupperwareMoveValidatorSpec tupperware;
-  tupperware.dryrun() = true;
-  REBALANCER_EXPECT_RUNTIME_ERROR(
-      solver->enableMoveValidator(tupperware),
-      "TupperwareMoveValidatorSpec requires non empty scheduler domain field");
-  tupperware.tupperwareSchedulerDomain() = "tsp_ldc";
-  solver->enableMoveValidator(tupperware);
-  REBALANCER_EXPECT_RUNTIME_ERROR(
-      solver->enableMoveValidator(tupperware),
-      "Move validator is already enabled");
-}
-
 TEST_P(ProblemSolverChecksTest, AvoidAssignmentsSpecUnknownScope) {
   auto solver = makeInitializedSolver(GetParam());
 

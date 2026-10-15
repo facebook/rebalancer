@@ -262,15 +262,6 @@ void ProblemSolver::enableMoveStatsImpl(MoveStatsSpec spec) {
   moveStatsSpec = std::move(spec);
 }
 
-ProblemSolver& ProblemSolver::enableMoveValidator(
-    const TupperwareMoveValidatorSpec& spec) {
-  REBALANCER_PROBLEM_SETUP_TIMER_SCOPE();
-  checker.enableMoveValidator(spec);
-  moveValidatorSpec.tupperware() = spec;
-  moveValidatorEnabled = true;
-  return *this;
-}
-
 ProblemSolver& ProblemSolver::enableProfiler() {
   REBALANCER_PROBLEM_SETUP_TIMER_SCOPE();
   profilerEnabled = true;
@@ -329,14 +320,6 @@ std::string ProblemSolver::getRunId() const {
 
 MoveStatsSpec ProblemSolver::getMoveStatsSpec() const {
   return moveStatsSpec;
-}
-
-MoveValidatorSpec ProblemSolver::getMoveValidatorSpec() const {
-  return moveValidatorSpec;
-}
-
-bool ProblemSolver::isMoveValidatorEnabled() const {
-  return moveValidatorEnabled;
 }
 
 bool ProblemSolver::isProfilerEnabled() const {
@@ -647,10 +630,6 @@ AssignmentSolution ProblemSolver::solve() {
   problem->rolloutConfig() = rolloutConfig_;
   if (decompositionScopeName_) {
     problem->decompositionScopeName() = *decompositionScopeName_;
-  }
-
-  if (isMoveValidatorEnabled()) {
-    problem->moveValidator() = getMoveValidatorSpec();
   }
 
   problem->publishMetrics() = publishMetrics_;

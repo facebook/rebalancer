@@ -134,8 +134,6 @@ class ProblemSolverBinding {
 
   void enableMoveStats(const interface::MoveStatsSpec& spec);
 
-  void enableMoveValidator(const interface::TupperwareMoveValidatorSpec& spec);
-
   void enableProfiler();
 
   void enableRestrictMovingObjectOnlyOnce();

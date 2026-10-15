@@ -154,9 +154,6 @@ unique class ProblemSolverBinding {
   @output_name(py="enableMoveStats")
   mut void enableMoveStats(Types.MoveStatsSpec spec) throws;
 
-  @output_name(py="enableMoveValidator")
-  mut void enableMoveValidator(Types.TupperwareMoveValidatorSpec spec) throws;
-
   @output_name(py="enableProfiler")
   mut void enableProfiler() throws;
 

@@ -207,18 +207,5 @@ void StreamLog::log(const BenchmarkInfo& info) {
   XLOG(DBG1) << fmt::format(
       "\n== BenchMark of {} ==\nused {}s", info.key, info.totalTime);
 }
-
-void StreamLog::log(const TupperwareLogSummary& info) {
-  fmt::memory_buffer buf;
-  const auto bufInserter = std::back_inserter(buf);
-  fmt::format_to(
-      bufInserter,
-      "Function {} got {} from scheduler:\n",
-      info.function,
-      info.success ? "success" : "error");
-  fmt::format_to(bufInserter, "\t\trequest = {}\n", info.request);
-  fmt::format_to(bufInserter, "\t\tresponse = {}\n", info.response);
-  XLOG(DBG1) << fmt::to_string(buf);
-}
 } // namespace rebalancer
 } // namespace facebook

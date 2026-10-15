@@ -241,10 +241,6 @@ AssignmentSolution CoreSolver::solve(
         GenericInfo{
             .key = "using_dynamic_object_ordering",
             .value = *problemSpec.useDynamicObjectOrdering() ? 1.0 : 0.0});
-    logger->log(
-        GenericInfo{
-            .key = "using_move_validator",
-            .value = problemSpec.moveValidator().has_value() ? 1.0 : 0.0});
   }
   try {
     const algopt::treeprof::EventRecorder coreSolveEvent("CoreSolver::Solve");

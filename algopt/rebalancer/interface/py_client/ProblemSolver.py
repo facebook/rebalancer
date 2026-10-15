@@ -33,7 +33,6 @@ from rebalancer.interface.thrift.Types.thrift_types import (
     ConstraintPolicy,
     GroupRoutingRings,
     MoveStatsSpec,
-    TupperwareMoveValidatorSpec,
 )
 from rebalancer.interface.thrift.v2.ProblemSolver.thrift_types import (
     ConstraintSpecs,
@@ -319,10 +318,6 @@ class ProblemSolver:
 
     def enableMoveStats(self, spec: MoveStatsSpec) -> ProblemSolver:
         self._ps.enableMoveStats(spec)
-        return self
-
-    def enableMoveValidator(self, spec: TupperwareMoveValidatorSpec) -> ProblemSolver:
-        self._ps.enableMoveValidator(spec)
         return self
 
     def enableProfiler(self) -> ProblemSolver:

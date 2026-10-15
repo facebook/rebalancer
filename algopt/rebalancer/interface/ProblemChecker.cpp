@@ -1551,18 +1551,6 @@ void ProblemChecker::enableMoveStats(const MoveStatsSpec& spec) const {
   }
 }
 
-void ProblemChecker::enableMoveValidator(
-    const TupperwareMoveValidatorSpec& spec) {
-  if ((*spec.tupperwareSchedulerDomain()).empty()) {
-    throw std::runtime_error(
-        "TupperwareMoveValidatorSpec requires non empty scheduler domain field");
-  } else if (moveValidatorEnabled) {
-    throw std::runtime_error("Move validator is already enabled");
-  } else {
-    moveValidatorEnabled = true;
-  }
-}
-
 std::string ProblemChecker::toString(EntityType type) {
   switch (type) {
     case EntityType::OBJECT:

@@ -32,8 +32,7 @@
 #       specs and their nested types.
 #   - algopt/rebalancer/interface/thrift/Types.thrift
 #       AssignmentSolution and the supporting result-side structs;
-#       ConstraintParams, ConstraintPolicy, MoveStatsSpec,
-#       TupperwareMoveValidatorSpec, GroupRoutingRings.
+#       ConstraintParams, ConstraintPolicy, MoveStatsSpec, GroupRoutingRings.
 #   - algopt/rebalancer/interface/thrift/Metrics.thrift
 #       Metrics struct used in AssignmentSolution.
 #   - algopt/rebalancer/algopt_common/thrift/Types.thrift
@@ -1303,14 +1302,6 @@ class ConstraintParams(TypedDict, total=False):
     invalidCost: float  # default 100
     invalidState: float  # default 10000
     tuplePosIfBroken: int  # default 0
-
-
-class TupperwareMoveValidatorSpec(TypedDict, total=False):
-    tupperwareSchedulerScope: str
-    tupperwareSchedulerDomain: str
-    moveDescriptionSuffix: str
-    dryrun: bool
-    maxSimulationAttempts: int
 
 
 class MoveStatsSpec(TypedDict, total=False):

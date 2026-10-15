@@ -38,7 +38,6 @@ from .specs import (
     MoveStatsSpec,
     PrecisionTolerances,
     SolverSpec,
-    TupperwareMoveValidatorSpec,
 )
 
 __all__ = [
@@ -53,7 +52,6 @@ __all__ = [
     "PrecisionTolerances",
     "ProblemSolver",
     "SolverSpec",
-    "TupperwareMoveValidatorSpec",
     "__version__",
     "get_library_path",
     "specs",

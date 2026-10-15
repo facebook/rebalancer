@@ -114,19 +114,6 @@ enum EndReason {
   UNABLE_TO_FIND_IMPROVING_MOVES = 11,
 }
 
-struct TupperwareMoveValidatorSpec {
-  1: string tupperwareSchedulerScope;
-  2: string tupperwareSchedulerDomain;
-  3: string moveDescriptionSuffix;
-  4: bool dryrun;
-  5: i64 maxSimulationAttempts;
-}
-
-// NOTE: This should be a union, only kept a struct to make SWIG happy.
-struct MoveValidatorSpec {
-  1: TupperwareMoveValidatorSpec tupperware;
-}
-
 struct MoveStatsSpec {
   1: bool trackContainers = false;
   2: bool trackObjects = false;

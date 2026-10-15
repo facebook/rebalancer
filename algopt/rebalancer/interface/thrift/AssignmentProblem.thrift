@@ -24,7 +24,7 @@ include "thrift/annotation/thrift.thrift"
 namespace cpp2 facebook.rebalancer.interface
 namespace py3 rebalancer.interface.thrift
 
-@thrift.ReserveIds{ids = [4, 9, 11, 18]}
+@thrift.ReserveIds{ids = [4, 9, 11, 12, 18]}
 struct AssignmentProblem {
   1: string jsonSpecFilepath;
   2: packer.StrategyT strategy;
@@ -36,7 +36,6 @@ struct AssignmentProblem {
   7: string scope;
   8: Types.ConstraintPolicy constraintPolicy;
   10: list<string> summaryOptions;
-  12: optional Types.MoveValidatorSpec moveValidator;
   13: bool enableScubaLogger = true;
   14: Types.MoveStatsSpec moveStatsSpec;
   15: string runId = "";

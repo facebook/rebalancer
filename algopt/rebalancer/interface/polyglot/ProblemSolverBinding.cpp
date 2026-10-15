@@ -247,11 +247,6 @@ void ProblemSolverBinding::enableMoveStats(
   solver_->enableMoveStats(spec);
 }
 
-void ProblemSolverBinding::enableMoveValidator(
-    const interface::TupperwareMoveValidatorSpec& spec) {
-  solver_->enableMoveValidator(spec);
-}
-
 void ProblemSolverBinding::enableProfiler() {
   solver_->enableProfiler();
 }

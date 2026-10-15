@@ -223,8 +223,6 @@ class ProblemChecker {
 
   void enableMoveStats(const MoveStatsSpec& spec) const;
 
-  void enableMoveValidator(const TupperwareMoveValidatorSpec& spec);
-
  private:
   enum EntityType {
     OBJECT,
@@ -376,7 +374,6 @@ class ProblemChecker {
   // captures what exactly a container represents, eg: 'servers', 'hosts'
   // not to be confused with name of a specific container
   std::string containerName;
-  bool moveValidatorEnabled = false;
   algopt::SetImpl<std::string> objects;
   algopt::MapImpl<std::string, algopt::SetImpl<std::string>> scopes;
   algopt::MapImpl<std::string, algopt::SetImpl<std::string>> scopeContainers;

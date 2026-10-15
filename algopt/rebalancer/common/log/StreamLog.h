@@ -28,7 +28,6 @@ class StreamLog : public RebalancerLog {
   void log(const interface::MovesSummary& info) override;
   void log(const SolverSummary& info) override;
   void log(const BenchmarkInfo& info) override;
-  void log(const TupperwareLogSummary& info) override;
 };
 
 } // namespace rebalancer

@@ -141,13 +141,6 @@ struct PerformanceInfo {
   double peakMemoryUsed;
 };
 
-struct TupperwareLogSummary {
-  std::string function;
-  bool success;
-  std::string response;
-  std::string request;
-};
-
 struct SpecParameters {
   std::string name;
   std::optional<std::string> scope = std::nullopt;
@@ -189,7 +182,6 @@ class RebalancerLog {
   virtual void log(const BenchmarkInfo& /* info */) {}
   virtual void log(const ExitStatusInfo& /* info */) {}
   virtual void log(const interface::FinalEvaluationSummary& /* info */) {}
-  virtual void log(const TupperwareLogSummary& /* info */) {}
   virtual void log(const interface::LocalSearchProfile& /* info */) {}
   virtual void log(const interface::SpecMetadata& /* info */) {}
   virtual void log(const GenericInfo& /* info */) {}

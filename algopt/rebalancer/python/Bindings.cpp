@@ -353,12 +353,6 @@ class ProblemSolverPy {
     return *this;
   }
 
-  ProblemSolverPy& enableMoveValidator(nb::handle spec) {
-    auto specValue = deserialize<interface::TupperwareMoveValidatorSpec>(spec);
-    solver_->enableMoveValidator(specValue);
-    return *this;
-  }
-
   ProblemSolverPy& enableProfiler() {
     solver_->enableProfiler();
     return *this;
@@ -804,17 +798,6 @@ NB_MODULE(_rebalancer, m) {
           "Enable per-move statistics collection.\n\n"
           "Args:\n"
           "  spec: dict matching MoveStatsSpec.\n"
-          "Returns:\n"
-          "  self, for fluent chaining.")
-      .def(
-          "enable_move_validator",
-          &ProblemSolverPy::enableMoveValidator,
-          nb::arg("spec"),
-          self,
-          "Enable Tupperware-aware move validation; rejects moves that\n"
-          "would violate Tupperware-side invariants.\n\n"
-          "Args:\n"
-          "  spec: dict matching TupperwareMoveValidatorSpec.\n"
           "Returns:\n"
           "  self, for fluent chaining.")
       .def(

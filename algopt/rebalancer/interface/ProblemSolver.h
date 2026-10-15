@@ -148,10 +148,6 @@ class ProblemSolver {
   // Enable per-move statistics collection using the supplied spec.
   ProblemSolver& enableMoveStats(MoveStatsSpec spec);
 
-  // Enable Tupperware-aware move validation; rejects moves that would
-  // violate Tupperware-side invariants.
-  ProblemSolver& enableMoveValidator(const TupperwareMoveValidatorSpec& spec);
-
   // Enable the hierarchical solver profiler (treeprof). Profiling data is
   // emitted via XLOG.
   ProblemSolver& enableProfiler();
@@ -564,8 +560,6 @@ class ProblemSolver {
   ConstraintPolicy getConstraintPolicy() const;
   ConstraintParams getDefaultConstraintParams() const;
   MoveStatsSpec getMoveStatsSpec() const;
-  MoveValidatorSpec getMoveValidatorSpec() const;
-  bool isMoveValidatorEnabled() const;
   bool isProfilerEnabled() const;
   bool isLoggingEnabled() const;
   std::string getService() const;
@@ -591,8 +585,6 @@ class ProblemSolver {
 
   std::string runId;
   MoveStatsSpec moveStatsSpec = {};
-  MoveValidatorSpec moveValidatorSpec = {};
-  bool moveValidatorEnabled = false;
   bool profilerEnabled = false;
   bool loggingEnabled = true;
   bool getSolutionSummary = true;
