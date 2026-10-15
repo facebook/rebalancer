@@ -334,6 +334,33 @@ TEST_P(MultipleObjectivesTest, TestTimeLimit) {
   EXPECT_EQ(problem.getResultPerObjective().size(), 1);
 }
 
+TEST_P(MultipleObjectivesTest, AllowedWorseningLetsLaterObjectiveImprove) {
+  auto problem = initializeProblem();
+
+  auto x = problem.makeIntVar("x");
+  auto y = problem.makeIntVar("y");
+  x.setLB(0);
+  x.setUB(10);
+  y.setLB(0);
+  y.setUB(10);
+  problem.newConstraint(x + y >= 10);
+
+  // The first objective's optimum is 10, at x = 0. Allowing it to worsen by
+  // 40% of its value, which includes the constant, lets it reach 14 (x = 4),
+  // so the second objective can bring y down to 6.
+  algopt::common::thrift::AllowedWorsening allowedWorsening;
+  allowedWorsening.percent() = 40;
+  algopt::common::thrift::HigherPriorityObjectivesConfig higherPriObjConfig;
+  higherPriObjConfig.tuplePosToAllowedWorsening() = {{0, allowedWorsening}};
+  problem.setMultiObjConfig({.higherPriObjConfig = higherPriObjConfig});
+
+  problem.setObjective({x + 10, y});
+  problem.solve();
+
+  EXPECT_NEAR(4, x.getValue(), 1e-8);
+  EXPECT_NEAR(6, y.getValue(), 1e-8);
+}
+
 #ifdef REBALANCER_USE_GUROBI
 TEST_P(MultipleObjectivesTest, IndividualTimeLimitCustom) {
   // this test is just for testing that time limits are set correctly, so not

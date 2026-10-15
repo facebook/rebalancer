@@ -390,6 +390,9 @@ folly::F14FastMap<ConstGenericVarPtr, Variable> GenericProblemImpl::realize(
   if (callback_) {
     problem.setCallback(*callback_);
   }
+  if (multiObjConfig_.has_value()) {
+    problem.setMultiObjConfig(*multiObjConfig_);
+  }
 
   for (auto& [param, value] : params_) {
     problem.setParameter(param, value);
