@@ -65,6 +65,23 @@ TEST(HiGHSTest, MipTest) {
   EXPECT_EQ(attrib.numConstraints(), 4);
 }
 
+TEST(HiGHSTest, ReportsSolutionFoundWhenStoppedWithSolution) {
+  auto model = Problem(std::make_unique<HiGHSProblem>());
+  auto x = model.makeIntVar("x");
+  auto y = model.makeIntVar("y");
+  x.setBounds(0, 3.5);
+  y.setLB(0);
+  model.newConstraint(x + 7 * y <= 17.5);
+  model.setObjective(-x - 10 * y);
+  // No presolve and no search, so HiGHS stops with the start as its solution.
+  model.addStartValue(x, 0);
+  model.addStartValue(y, 0);
+  model.setParameter("presolve_reduction_limit", 0);
+  model.setParameter("mip_max_nodes", 0);
+  model.solve();
+  EXPECT_EQ(model.getStatus(), thrift::ProblemStatus::SOLUTION_FOUND);
+}
+
 TEST(HiGHSTest, IISExcludesUninvolvedRows) {
   auto model = Problem(std::make_unique<HiGHSProblem>());
   auto x = model.makeVar("x");

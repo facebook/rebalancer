@@ -35,18 +35,12 @@
 #include <iterator>
 #include <map>
 #include <optional>
-#include <stdexcept>
 #include <utility>
 #include <vector>
 
 namespace facebook::algopt::lp::detail {
 
-HiGHSProblem::HiGHSProblem() {
-  // HiGHS defaults to minimization, which is what we want
-  // Suppress output by default (users can enable via setLogfile or by not
-  // calling disableLogs)
-  REBALANCER_HIGHS_CALL(highs_.setOptionValue("output_flag", false));
-}
+HiGHSProblem::HiGHSProblem() = default;
 
 HiGHSProblem::~HiGHSProblem() = default;
 
@@ -366,7 +360,9 @@ thrift::ProblemStatus HiGHSProblem::getSolveStatus() {
     case HighsModelStatus::kTimeLimit:
     case HighsModelStatus::kIterationLimit:
     case HighsModelStatus::kSolutionLimit:
-      return thrift::ProblemStatus::SOLUTION_NOT_FOUND;
+      return highs_.getInfo().primal_solution_status == kSolutionStatusFeasible
+          ? thrift::ProblemStatus::SOLUTION_FOUND
+          : thrift::ProblemStatus::SOLUTION_NOT_FOUND;
     default:
       throw SolverError(
           fmt::format(
