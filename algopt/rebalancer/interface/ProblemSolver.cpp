@@ -217,7 +217,8 @@ ProblemSolver::ProblemSolver(
                           : nullptr),
       service(std::move(serviceName)),
       scope(std::move(serviceScope)),
-      prepareProblemOnly(prepareProblemOnly) {
+      prepareProblemOnly(prepareProblemOnly),
+      canExecuteAsync_(canExecuteAsync) {
   this->runId = UuidGenerator::genString();
 #ifndef REBALANCER_OSS_BUILD
   RolloutConfigResolver::resolveProblemSolverConfigs(
@@ -674,6 +675,8 @@ AssignmentSolution ProblemSolver::solve() {
     if (loggingLabel_) {
       logger_->setLoggingLabel(loggingLabel_.value());
     }
+    logger_->log(
+        GenericInfo{.key = "can_execute_async", .value = canExecuteAsync_});
   }
 
   if (prepareProblemOnly) {

@@ -606,6 +606,7 @@ class ProblemSolver {
   // when set to true, it will just prepare the local problem and skip the
   // solving
   bool prepareProblemOnly = false;
+  bool canExecuteAsync_ = false;
   ManifoldBackupParams manifoldBackupParams;
 
   // default to using the non-parallelized version
