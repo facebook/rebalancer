@@ -49,6 +49,9 @@ struct RolloutConfig {
   // sliding-window execution.
   5: bool useAutoParallelExecution = false;
 
+  // Materialize constraint-derived invalid move filters.
+  6: bool enableInvalidMoveFilter = false;
+
   // Temporary setting used to test saving, replaying, and logging a MetaConfig
   // value.
   32767: bool testOnlyConfig = false;

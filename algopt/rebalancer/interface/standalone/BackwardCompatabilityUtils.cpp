@@ -62,6 +62,9 @@ void fillMissingRolloutConfigValues(interface::RolloutConfig& config) {
   fillMissingValue(
       config.useAutoParallelExecution(),
       interface::kUseAutoParallelExecutionRolloutDefault);
+  fillMissingValue(
+      config.enableInvalidMoveFilter(),
+      interface::kEnableInvalidMoveFilterRolloutDefault);
 }
 #endif
 
