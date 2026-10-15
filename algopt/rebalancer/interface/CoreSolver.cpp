@@ -235,10 +235,6 @@ AssignmentSolution CoreSolver::solve(
             .value = (double)enableParallelizedNewMaterializer});
     logger->log(
         GenericInfo{
-            .key = "using_new_problem_builder",
-            .value = universe == nullptr ? 0.0 : 1.0});
-    logger->log(
-        GenericInfo{
             .key = "using_dynamic_object_ordering",
             .value = *problemSpec.useDynamicObjectOrdering() ? 1.0 : 0.0});
   }
