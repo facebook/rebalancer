@@ -117,6 +117,22 @@ class GurobiProblem : public ProblemImpl {
   // Bulk-loads variables, constraints, and objectives from a FastProblemImpl.
   void loadFromFastProblem(const FastProblemImpl& fast);
 
+  struct LpShadowPrices {
+    // Original Gurobi row order.
+    std::vector<double> shadowPrices;
+    double objectiveValue = 0;
+  };
+
+  struct LpShadowPricesSnapshot {
+    std::vector<std::string> constraintNames;
+    // Each objective's values use the original Gurobi row order.
+    std::vector<LpShadowPrices> objectives;
+  };
+  void enableLpShadowPrices() {
+    collectLpShadowPrices_ = true;
+  }
+  std::optional<LpShadowPricesSnapshot> takeLpShadowPrices();
+
   // Returns a map of variable name -> solved value for all Gurobi variables.
   folly::F14FastMap<std::string, double> getSolvedVariableValues() const;
 
@@ -148,6 +164,7 @@ class GurobiProblem : public ProblemImpl {
   std::vector<std::shared_ptr<const ExpressionImpl>> objectives_;
 
   void multiObjectiveSolve() override;
+  void captureLpShadowPrices(int pos);
   void solveModel(std::optional<double> timeLimit);
   void setObjective(std::shared_ptr<const ExpressionImpl> expression);
   void setMultiObjective();
@@ -186,6 +203,8 @@ class GurobiProblem : public ProblemImpl {
   // Mutable so the const readback can drain it. Tradeoff: the names are held
   // for the duration of the solve, duplicating Gurobi's internal copy.
   mutable std::vector<std::string> loadedVarNames_;
+  bool collectLpShadowPrices_ = false;
+  std::optional<LpShadowPricesSnapshot> lpShadowPrice_;
 
   class CallbackWrapper : public GRBCallback {
    public:

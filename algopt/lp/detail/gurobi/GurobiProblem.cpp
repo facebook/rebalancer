@@ -40,6 +40,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <string_view>
+#include <utility>
 #include <variant>
 
 namespace {
@@ -607,6 +608,11 @@ void GurobiProblem::setMultiObjective() {
 }
 
 void GurobiProblem::multiObjectiveSolve() try {
+  model_.update();
+  if (collectLpShadowPrices_ && !model_.get(GRB_IntAttr_IsMIP)) {
+    // Native multi-objective optimization does not expose per-stage Pi.
+    return customMultiObjectiveIterativeSolve();
+  }
   if (!allExprsLinear(objectives_)) {
     // Gurobi does not support quadratic objectives in multi-objective solves,
     // so use custom implementation for that case
@@ -711,8 +717,56 @@ void GurobiProblem::solveForObjectiveAt(
   setObjective(objective);
   setMultiObjectiveParameter(pos, std::nullopt);
   solveModel(timeLimit);
+  captureLpShadowPrices(pos);
 } catch (const GRBException& e) {
   rethrowGurobiError(e);
+}
+
+void GurobiProblem::captureLpShadowPrices(int pos) {
+  if (!collectLpShadowPrices_) {
+    return;
+  }
+  if (pos == 0) {
+    lpShadowPrice_.reset();
+  }
+  if (model_.get(GRB_IntAttr_Status) != GRB_OPTIMAL ||
+      model_.get(GRB_IntAttr_IsMIP) || model_.get(GRB_IntAttr_NumQConstrs) ||
+      model_.get(GRB_IntAttr_NumGenConstrs) || !allExprsLinear(objectives_)) {
+    lpShadowPrice_.reset();
+    return;
+  }
+  if (pos != 0 &&
+      (!lpShadowPrice_ || lpShadowPrice_->objectives.size() != pos)) {
+    return;
+  }
+  const std::unique_ptr<GRBConstr[]> constraints(model_.getConstrs());
+  if (pos == 0) {
+    lpShadowPrice_.emplace();
+    const auto numConstraints = model_.get(GRB_IntAttr_NumConstrs);
+    lpShadowPrice_->constraintNames.reserve(numConstraints);
+    for (const auto i : folly::irange(numConstraints)) {
+      lpShadowPrice_->constraintNames.push_back(
+          constraints[i].get(GRB_StringAttr_ConstrName));
+    }
+  }
+  const auto rowCount = lpShadowPrice_->constraintNames.size();
+  const std::unique_ptr<double[]> prices(model_.get(
+      GRB_DoubleAttr_Pi, constraints.get(), static_cast<int>(rowCount)));
+  LpShadowPrices values;
+  values.objectiveValue = model_.get(GRB_DoubleAttr_ObjVal);
+  values.shadowPrices.assign(prices.get(), prices.get() + rowCount);
+  // Each component is the stage's Gurobi Pi, holding earlier objective
+  // bounds fixed.
+  lpShadowPrice_->objectives.push_back(std::move(values));
+}
+
+std::optional<GurobiProblem::LpShadowPricesSnapshot>
+GurobiProblem::takeLpShadowPrices() {
+  if (!lpShadowPrice_ ||
+      lpShadowPrice_->objectives.size() != objectives_.size()) {
+    return std::nullopt;
+  }
+  return std::exchange(lpShadowPrice_, std::nullopt);
 }
 
 void GurobiProblem::solveModel(std::optional<double> timeLimit) {

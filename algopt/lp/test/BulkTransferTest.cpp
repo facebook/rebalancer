@@ -214,6 +214,55 @@ TEST(BulkTransferTest, BinaryAndBoolVariables) {
   EXPECT_NEAR(values.at("x"), 50.0, 1e-6);
 }
 
+TEST(BulkTransferTest, NormalLpShadowPricesPreservesRowNamesAndSigns) {
+  auto fastLp = ProblemFactory::makeFastProblem();
+  auto y = fastLp.makeVar("z_y");
+  auto x = fastLp.makeVar("a_x");
+  y.setLB(0);
+  y.setUB(100);
+  x.setLB(0);
+  x.setUB(100);
+  fastLp.newConstraint(x >= 1.5, "z_demand");
+  fastLp.newConstraint(x <= 10, "a_capacity");
+  fastLp.setObjective(2 * x + 5 * y);
+  const auto& fast = static_cast<const FastProblemImpl&>(fastLp.get());
+
+  auto problem = ProblemFactory::makeGurobiProblem();
+  auto& gurobi = static_cast<detail::GurobiProblem&>(
+      const_cast<ProblemImpl&>(problem.get()));
+  gurobi.loadFromFastProblem(fast);
+  gurobi.enableLpShadowPrices();
+  problem.solve();
+  const auto values = gurobi.takeLpShadowPrices();
+  ASSERT_TRUE(values);
+  EXPECT_EQ(
+      std::vector<std::string>({"a_capacity", "z_demand"}),
+      values->constraintNames);
+  ASSERT_EQ(1, values->objectives.size());
+  EXPECT_NEAR(3, values->objectives.front().objectiveValue, 1e-6);
+  EXPECT_EQ(
+      std::vector<double>({0, 2}), values->objectives.front().shadowPrices);
+}
+
+TEST(BulkTransferTest, NormalLpShadowPricesUnavailableForInfeasibleModel) {
+  auto fastLp = ProblemFactory::makeFastProblem();
+  auto x = fastLp.makeVar("x");
+  x.setLB(5);
+  x.setUB(10);
+  fastLp.newConstraint(x <= 3, "impossible");
+  fastLp.setObjective(x);
+  const auto& fast = static_cast<const FastProblemImpl&>(fastLp.get());
+  auto gurobiProblem = ProblemFactory::makeGurobiProblem();
+  auto& gurobi = static_cast<detail::GurobiProblem&>(
+      const_cast<ProblemImpl&>(gurobiProblem.get()));
+  gurobi.loadFromFastProblem(fast);
+  gurobi.enableLpShadowPrices();
+  gurobiProblem.solve();
+  EXPECT_EQ(
+      thrift::ProblemStatus::NO_SOLUTION_EXISTS, gurobiProblem.getStatus());
+  EXPECT_FALSE(gurobi.takeLpShadowPrices());
+}
+
 } // namespace facebook::algopt::lp::tests
 
 #endif // REBALANCER_USE_GUROBI
