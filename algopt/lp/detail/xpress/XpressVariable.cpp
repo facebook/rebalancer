@@ -33,7 +33,7 @@ void XpressVariable::setLB(double lb) {
     throw SolverError(
         fmt::format(
             "cannot set lower bound on a {} variable. Did you mean to set threshold?",
-            type_));
+            fmt::underlying(type_)));
   }
   variable_.setLB(lb);
 }
@@ -45,7 +45,7 @@ void XpressVariable::setUB(double ub) {
 void XpressVariable::setThreshold(double threshold) {
   if (!hasThreshold()) {
     throw SolverError(
-        fmt::format("cannot set threshold on a {} variable", type_));
+        fmt::format("cannot set threshold on a {} variable", fmt::underlying(type_)));
   }
   variable_.setLim(threshold);
 }

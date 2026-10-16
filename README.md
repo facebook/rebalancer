@@ -160,6 +160,43 @@ ninja
 sudo dnf install boost-devel.x86_64 fbthrift-devel.x86_64 glog-devel.x86_64 gtest-devel.x86_64 gmock-devel.x86_64 fmt-devel.x86_64
 ```
 
+### Xpress (optional MIP solver)
+
+Rebalancer currently requires Xpress 9.9.x.
+
+To enable the Xpress solver, pass `-DUSE_XPRESS=ON` to CMake:
+
+```bash
+cmake -GNinja -DUSE_XPRESS=ON ..
+ninja
+```
+
+If you don't set `XPRESSDIR` or `-DXPRESS_ROOT=...` (see below), this
+downloads, extracts, and links the FICO Xpress SDK automatically from FICO's
+public GitHub release
+([fico-xpress/releases](https://github.com/fico-xpress/releases)) -- no
+manual installation needed. This works on Linux (Intel and ARM) and
+Apple Silicon macOS.
+
+> **Note:** Xpress does not support Intel macOS.
+
+This auto-download uses the community license bundled in that release, which
+is free but limited in problem size (5000 variables plus constraints for
+LP/MIP).
+
+If you already have a full Xpress 9.9.x installation with a commercial
+license, set the `XPRESSDIR` environment variable (or pass
+`-DXPRESS_ROOT=...`) to point the build at it before configuring:
+
+```bash
+export XPRESSDIR=/Applications/FICO\ Xpress/xpressmp
+cmake -GNinja -DUSE_XPRESS=ON ..
+ninja
+```
+
+(Adjust `XPRESSDIR` to wherever you installed Xpress, or pass
+`-DXPRESS_ROOT=...` instead of setting the environment variable.)
+
 #### After Building
 
 The default build produces the Rebalancer library. To build and run the bundled

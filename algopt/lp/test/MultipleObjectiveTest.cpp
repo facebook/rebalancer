@@ -16,6 +16,7 @@
 #include "algopt/lp/generic/Expression.h"
 #include "algopt/lp/generic/Operators.h"
 #include "algopt/lp/generic/Problem.h"
+#include "algopt/rebalancer/tests/SolverTestUtils.h"
 #include <algopt/lp/detail/generic/impl/GenericExpressionImpl.h>
 
 #include <fmt/format.h>
@@ -160,6 +161,10 @@ INSTANTIATE_TEST_CASE_P(
 #endif
 
 TEST_P(MultipleObjectivesTest, AllLinearExprs) {
+  if (GetParam() == SolverType::Xpress ||
+      GetParam() == SolverType::SimplifiedXpress) {
+    REBALANCER_SKIP_IF_XPRESS_COMMUNITY_LICENSE();
+  }
   // pick even numVars to ensure correctness below
   constexpr int numVars = 100;
   auto problem = initializeProblem();

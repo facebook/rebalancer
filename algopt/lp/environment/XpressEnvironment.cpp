@@ -36,6 +36,12 @@ bool XpressEnvironment::isInitialized() {
   return self_ != nullptr;
 }
 
+bool XpressEnvironment::isCommunityLicense() {
+  int status = 0;
+  XPRSfeaturequery("Community", &status);
+  return status == 1;
+}
+
 void XpressEnvironment::makeFromLicenseFile(
     std::string_view license_file_path) {
   if (self_) {
@@ -44,15 +50,16 @@ void XpressEnvironment::makeFromLicenseFile(
 
   self_ = std::shared_ptr<XpressEnvironment>(new XpressEnvironment);
 
-  // Set XPRESS env variable only if it's not already set.
-  setenv("XPRESS", license_file_path.data(), DO_NOT_OVERWRITE_ENV_VAR);
+  // Set XPAUTH_PATH only if it's not already set. XPAUTH_PATH is the current
+  // Xpress license-path variable.
+  setenv("XPAUTH_PATH", license_file_path.data(), DO_NOT_OVERWRITE_ENV_VAR);
 
   // If the file does not exist, we'll throw a runtime error. Otherwise, the
   // Xpress library will exit the process when invoked, not giving the
   // program a chance to handle the exception.
 
-  // Check that the file set as XPRESS env variable exists.
-  const auto raw_filepath = getenv("XPRESS");
+  // Check that the file set as XPAUTH_PATH exists.
+  const auto raw_filepath = getenv("XPAUTH_PATH");
   fs::path filepath;
   try {
     filepath = fs::canonical(raw_filepath);
@@ -64,6 +71,15 @@ void XpressEnvironment::makeFromLicenseFile(
     throw std::runtime_error(
         fmt::format("xpress license file not found at {}", filepath.string()));
   }
+
+  // Initializes BCL/Optimizer immediately, so a bad license surfaces here
+  // rather than lazily during the first solve.
+  if (dashoptimization::XPRB::init() != 0) {
+    throw std::runtime_error(
+        fmt::format(
+            "failed to initialize Xpress with license file {}",
+            filepath.string()));
+  }
 }
 
 std::shared_ptr<XpressEnvironment> XpressEnvironment::get() {
@@ -74,8 +90,9 @@ std::shared_ptr<XpressEnvironment> XpressEnvironment::get() {
 }
 
 XpressEnvironment::~XpressEnvironment() {
-  // prevents a memory leak detected by LeakSanitizer
-  XPRSfree();
+  // Symmetric with the explicit XPRB::init() call in makeFromLicenseFile();
+  // also prevents a memory leak detected by LeakSanitizer.
+  dashoptimization::XPRB::free();
 }
 
 } // namespace facebook::algopt::lp

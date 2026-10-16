@@ -70,6 +70,7 @@ TEST_P(MultiThreadingTest, Basic) {
   }
   if (GetParam() == SolverType::SimplifiedXpress) {
     REBALANCER_SKIP_IF_NO_XPRESS();
+    REBALANCER_SKIP_IF_XPRESS_COMMUNITY_LICENSE();
   }
   // use 'false' below to use a single thread
   auto executor = interface::getTestExecutor(
