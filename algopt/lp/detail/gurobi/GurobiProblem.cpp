@@ -34,6 +34,7 @@
 #include <folly/synchronization/SanitizeThread.h>
 
 #include <algorithm>
+#include <cmath>
 #include <map>
 #include <memory>
 #include <optional>
@@ -722,14 +723,15 @@ void GurobiProblem::solveForObjectiveAt(
   rethrowGurobiError(e);
 }
 
-void GurobiProblem::captureLpShadowPrices(int pos) {
+void GurobiProblem::captureLpShadowPrices(int pos) try {
   if (!collectLpShadowPrices_) {
     return;
   }
   if (pos == 0) {
     lpShadowPrice_.reset();
   }
-  if (model_.get(GRB_IntAttr_Status) != GRB_OPTIMAL ||
+  const auto status = model_.get(GRB_IntAttr_Status);
+  if ((status != GRB_OPTIMAL && status != GRB_SUBOPTIMAL) ||
       model_.get(GRB_IntAttr_IsMIP) || model_.get(GRB_IntAttr_NumQConstrs) ||
       model_.get(GRB_IntAttr_NumGenConstrs) || !allExprsLinear(objectives_)) {
     lpShadowPrice_.reset();
@@ -755,9 +757,23 @@ void GurobiProblem::captureLpShadowPrices(int pos) {
   LpShadowPrices values;
   values.objectiveValue = model_.get(GRB_DoubleAttr_ObjVal);
   values.shadowPrices.assign(prices.get(), prices.get() + rowCount);
+  if (!std::isfinite(values.objectiveValue) ||
+      !std::all_of(
+          values.shadowPrices.begin(),
+          values.shadowPrices.end(),
+          [](double price) { return std::isfinite(price); })) {
+    lpShadowPrice_.reset();
+    return;
+  }
   // Each component is the stage's Gurobi Pi, holding earlier objective
-  // bounds fixed.
+  // bounds fixed. SUBOPTIMAL prices are approximate.
   lpShadowPrice_->objectives.push_back(std::move(values));
+} catch (const GRBException& e) {
+  if (e.getErrorCode() != GRB_ERROR_DATA_NOT_AVAILABLE) {
+    throw;
+  }
+  lpShadowPrice_.reset();
+  XLOG(WARN) << "LP shadow prices unavailable: " << e.getMessage();
 }
 
 std::optional<GurobiProblem::LpShadowPricesSnapshot>

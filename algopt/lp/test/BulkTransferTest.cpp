@@ -244,6 +244,31 @@ TEST(BulkTransferTest, NormalLpShadowPricesPreservesRowNamesAndSigns) {
       std::vector<double>({0, 2}), values->objectives.front().shadowPrices);
 }
 
+TEST(BulkTransferTest, BarrierShadowPricesWithoutCrossover) {
+  auto problem = ProblemFactory::makeGurobiProblem();
+  auto x = problem.makeVar("x");
+  x.setLB(0);
+  x.setUB(100);
+  problem.newConstraint(x >= 1.5, "demand");
+  problem.setObjective(2 * x);
+  problem.setParameter("GRB_Method", 2);
+  problem.setParameter("GRB_Crossover", 0);
+  problem.setParameter("GRB_Presolve", 0);
+  auto& gurobi = static_cast<detail::GurobiProblem&>(
+      const_cast<ProblemImpl&>(problem.get()));
+  gurobi.enableLpShadowPrices();
+
+  problem.solve();
+
+  const auto values = gurobi.takeLpShadowPrices();
+  ASSERT_TRUE(values);
+  EXPECT_EQ(std::vector<std::string>({"demand"}), values->constraintNames);
+  ASSERT_EQ(1, values->objectives.size());
+  EXPECT_NEAR(3, values->objectives.front().objectiveValue, 1e-6);
+  ASSERT_EQ(1, values->objectives.front().shadowPrices.size());
+  EXPECT_NEAR(2, values->objectives.front().shadowPrices.front(), 1e-6);
+}
+
 TEST(BulkTransferTest, NormalLpShadowPricesUnavailableForInfeasibleModel) {
   auto fastLp = ProblemFactory::makeFastProblem();
   auto x = fastLp.makeVar("x");
