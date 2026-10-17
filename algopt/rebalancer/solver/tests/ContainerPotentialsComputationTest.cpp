@@ -95,6 +95,7 @@ class ContainerPotentialsComputationTest : public ExpressionTestsBase {
   void createSimpleExample(int nobjects, int nContainers);
   void createMovesEvaluator();
   ExprPtr getDefaultObjective();
+  LocalSearchObjectiveValue makeGlobalValue(double value) const;
 
   std::unique_ptr<Problem> problem_;
   std::shared_ptr<const entities::Universe> universe_;
@@ -132,6 +133,15 @@ ExprPtr ContainerPotentialsComputationTest::getDefaultObjective() {
   return objective;
 }
 
+LocalSearchObjectiveValue ContainerPotentialsComputationTest::makeGlobalValue(
+    double value) const {
+  GlobalObjective::Builder builder;
+  builder.setObjective(0, const_expr(value, *universe_));
+  return LocalSearchObjective(
+             builder.build(*universe_), GlobalObjective(*universe_), *universe_)
+      .getValue();
+}
+
 TEST_F(ContainerPotentialsComputationTest, BasicComputeAllPotentials) {
   const auto precision = createPrecision();
 
@@ -167,7 +177,7 @@ TEST_F(ContainerPotentialsComputationTest, BasicComputeAllPotentials) {
   PackerMap<entities::ContainerId, ContainerPotential> expectedPotentials;
   for (const auto containerId : folly::irange(nContainers)) {
     auto contributionToGoal =
-        GlobalObjectiveValue({contributions.at(container(containerId))});
+        makeGlobalValue(contributions.at(container(containerId)));
 
     // all the containers have 3 objects; so containerPotential is
     // (contributionToGoal, 3)
@@ -220,7 +230,9 @@ TEST_F(ContainerPotentialsComputationTest, BasicUpdatePotentials) {
   changeSet.insert(Change(object(4), container(3), 1));
 
   // apply the changes
-  auto appliedMoveResult = problem_->apply(changeSet);
+  auto [before, after] = problem_->apply(changeSet);
+  const auto appliedMoveResult = MoveResult::makeValid(
+      MoveSet::fromChangeSet(changeSet), std::move(before), std::move(after));
 
   // compute the *change* in containerPotentials
   auto computedChanges =
@@ -246,9 +258,9 @@ TEST_F(ContainerPotentialsComputationTest, BasicUpdatePotentials) {
   */
   PackerMap<entities::ContainerId, ContainerPotential> expectedChanges;
   ContainerPotential changeForSource =
-      ContainerPotential(GlobalObjectiveValue({-4}), -1, precision);
+      ContainerPotential(makeGlobalValue(-4), -1, precision);
   ContainerPotential changeForDestination =
-      ContainerPotential(GlobalObjectiveValue({24}), 1, precision);
+      ContainerPotential(makeGlobalValue(24), 1, precision);
   expectedChanges.emplace(container(0), changeForSource);
   expectedChanges.emplace(container(3), changeForDestination);
 

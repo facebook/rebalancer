@@ -18,6 +18,7 @@
 #include "algopt/rebalancer/solver/moves/MoveResult.h"
 #include "algopt/rebalancer/solver/utils/ContainerPotential.h"
 #include "algopt/rebalancer/solver/utils/GlobalObjective.h"
+#include "algopt/rebalancer/solver/utils/LocalSearchObjective.h"
 #include "algopt/rebalancer/solver/utils/Problem.h"
 #include "algopt/rebalancer/solver/utils/Util.h"
 
@@ -49,10 +50,6 @@ class MovesEvaluator {
   // Applies the move if it is valid. Otherwise, undoes it.
   ApplyStatus tryApply(const MoveResult& moveResult) const;
 
-  const GlobalObjective& getObjective() const;
-
-  // NOTE: currently used in all places except 'evaluate' in MoveTypes
-  // which had access to problems
   Problem& getProblem() const;
 
   const PackerSet<entities::ContainerId>& getContainers() const;
@@ -70,9 +67,14 @@ class MovesEvaluator {
  private:
   // TODO: underneath methods are copies of corresponding methods in Problem
   // clean them up in Problem once we deprecate Problem::evaluate
+  struct ObjectiveDeltasResult {
+    std::optional<ObjectiveDeltaSets> deltas;
+    int tupleBegin{};
+  };
+
   void checkMoves(const MoveSet& moves) const;
   bool shouldCollectMoveStats() const;
-  std::optional<ObjectiveDeltaSets> getObjectiveDeltas(
+  ObjectiveDeltasResult getObjectiveDeltas(
       Context& context,
       int objIdxEvaluatedUpto) const;
   std::optional<LabeledExpressionSet> getInvalidConstraints(
@@ -123,7 +125,9 @@ class MovesEvaluator {
   const Precision& precision_;
 
   DoNotWorsenGoalConfig doNotWorsenGoalConfig_;
-  GlobalObjective minimizingGoal_;
+  // only move comparison uses local-search penalties; hot-container ordering
+  // and stopping use the user objective (see CoreLocalSearchSolve)
+  LocalSearchObjective minimizingGoal_;
   std::optional<GlobalObjective> arbiterGoal_;
 };
 

@@ -27,7 +27,8 @@ class MovesSummaryHelper {
  public:
   static interface::MovesSummary makeMovesSummary(
       const Problem& p,
-      const MoveResult& move_result,
+      const MoveSet& moves,
+      const ObjectiveDeltaSets* objectiveDeltas,
       const MoveStatsAggregator& move_stats,
       const std::optional<int> stageId = std::nullopt,
       std::optional<int> cycleId = std::nullopt);

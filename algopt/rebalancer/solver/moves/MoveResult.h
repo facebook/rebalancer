@@ -18,6 +18,7 @@
 #include "algopt/rebalancer/solver/moves/MoveSet.h"
 #include "algopt/rebalancer/solver/summary/LabeledExpressions.h"
 #include "algopt/rebalancer/solver/utils/GlobalObjectiveValue.h"
+#include "algopt/rebalancer/solver/utils/LocalSearchObjective.h"
 
 #include <folly/small_vector.h>
 
@@ -27,14 +28,17 @@ struct ObjectiveDelta {
   LabeledExpressionPtr objective;
   double oldValue;
   double newValue;
+  bool isPenalty;
 
   ObjectiveDelta(
       LabeledExpressionPtr objective,
       double oldValue,
-      double newValue)
+      double newValue,
+      bool isPenalty = false)
       : objective(std::move(objective)),
         oldValue(oldValue),
-        newValue(newValue) {}
+        newValue(newValue),
+        isPenalty(isPenalty) {}
 };
 
 using ObjectiveDeltaSet = std::vector<ObjectiveDelta>;
@@ -46,10 +50,11 @@ class MoveResult {
   static MoveResult makeEmpty();
   static MoveResult makeValid(
       MoveSet moveSet,
-      GlobalObjectiveValue oldValue,
-      GlobalObjectiveValue newValue,
+      LocalSearchObjectiveValue oldValue,
+      LocalSearchObjectiveValue newValue,
       std::optional<GlobalObjectiveValue> arbiterValue = std::nullopt,
-      std::optional<ObjectiveDeltaSets> objectiveDeltas = std::nullopt);
+      std::optional<ObjectiveDeltaSets> objectiveDeltas = std::nullopt,
+      int objectiveDeltaIndexOffset = 0);
   static MoveResult makeInvalid(
       MoveSet moveSet,
       std::optional<LabeledExpressionSet> invalidConstraints = std::nullopt);
@@ -60,7 +65,6 @@ class MoveResult {
   // true if the move does not break any constraints
   bool isValid() const;
 
-  // whether the value after the move is better/neutral/worse than before
   bool isBetter(const Precision& precision) const;
   bool isNeutral(const Precision& precision) const;
   bool isWorse(const Precision& precision) const;
@@ -86,22 +90,22 @@ class MoveResult {
   // TODO: separate aggregator from the single result object
   void aggregate(MoveResult&& other);
 
-  const GlobalObjectiveValue& getOldValue() const;
-  const GlobalObjectiveValue& getValue() const;
+  const LocalSearchObjectiveValue& getOldValue() const;
+  const LocalSearchObjectiveValue& getValue() const;
 
  private:
   MoveResult();
   void clone(MoveResult& dst, const MoveResult& src);
-
   bool empty_ = false;
   bool valid_ = false;
   int64_t evalsCount_ = 0;
   MoveSet moveSet_;
-  GlobalObjectiveValue oldValue_;
-  GlobalObjectiveValue newValue_;
+  LocalSearchObjectiveValue oldValue_;
+  LocalSearchObjectiveValue newValue_;
   // used only for tie-breaking during aggregation
   std::optional<GlobalObjectiveValue> arbiterValue_;
   std::optional<ObjectiveDeltaSets> objectiveDeltas_;
+  int objectiveDeltaIndexOffset_ = 0;
   std::optional<LabeledExpressionSet> invalidConstraints_;
 };
 

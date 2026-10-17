@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include "algopt/rebalancer/algopt_common/TestUtils.h"
+#include "algopt/rebalancer/solver/expressions/Operators.h"
 #include "algopt/rebalancer/solver/moves/MoveStatsAggregator.h"
 #include "algopt/rebalancer/solver/tests/IdConverterTestUtils.h"
 
@@ -30,6 +31,15 @@ namespace {
 Precision createPrecision() {
   facebook::algopt::common::thrift::PrecisionTolerances tolerances;
   return Precision(tolerances);
+}
+
+LocalSearchObjectiveValue globalOnlyValue(double value) {
+  const entities::Universe universe;
+  GlobalObjective::Builder builder;
+  builder.setObjective(0, const_expr(value, universe));
+  return LocalSearchObjective(
+             builder.build(universe), GlobalObjective(universe), universe)
+      .getValue();
 }
 } // namespace
 
@@ -87,8 +97,8 @@ TEST(MoveStatsAggregatorTest, AddBetter) {
   moves.insert(Move(object(1000), container(100), container(200)));
   auto result = MoveResult::makeValid(
       std::move(moves),
-      GlobalObjectiveValue({10}),
-      GlobalObjectiveValue({5}),
+      globalOnlyValue(10),
+      globalOnlyValue(5),
       std::nullopt,
       {{{{o1, 5, 6}, {o2, 12, 6}}}});
   MoveStatsAggregator aggregator(
@@ -120,8 +130,8 @@ TEST(MoveStatsAggregatorTest, AddNeutral) {
   moves.insert(Move(object(1000), container(100), container(200)));
   auto result = MoveResult::makeValid(
       std::move(moves),
-      GlobalObjectiveValue({10}),
-      GlobalObjectiveValue({10}),
+      globalOnlyValue(10),
+      globalOnlyValue(10),
       std::nullopt,
       {{{{o1, 5, 11}, {o2, 12, 6}}}});
   MoveStatsAggregator aggregator(
@@ -149,8 +159,8 @@ TEST(MoveStatsAggregatorTest, AddWorse) {
   moves.insert(Move(object(1000), container(100), container(200)));
   auto result = MoveResult::makeValid(
       std::move(moves),
-      GlobalObjectiveValue({10}),
-      GlobalObjectiveValue({20}),
+      globalOnlyValue(10),
+      globalOnlyValue(20),
       std::nullopt,
       {{{{o1, 5, 5}, {o2, 5, 15}}}});
   MoveStatsAggregator aggregator(
@@ -185,13 +195,13 @@ TEST(MoveStatsAggregatorTest, Aggregate) {
   aggregator1.add(
       MoveResult::makeValid(
           moves,
-          GlobalObjectiveValue({10}),
-          GlobalObjectiveValue({10}))); // neutral
+          globalOnlyValue(10),
+          globalOnlyValue(10))); // neutral
   aggregator1.add(
       MoveResult::makeValid(
           moves,
-          GlobalObjectiveValue({10}),
-          GlobalObjectiveValue({15}))); // worse
+          globalOnlyValue(10),
+          globalOnlyValue(15))); // worse
   MoveStatsAggregator aggregator2(
       std::make_shared<MoveStatsAggregatorConfig>(true, true), precision);
   aggregator2.add(MoveResult::makeInvalid(moves));
@@ -201,8 +211,8 @@ TEST(MoveStatsAggregatorTest, Aggregate) {
   aggregator2.add(
       MoveResult::makeValid(
           std::move(newMoves),
-          GlobalObjectiveValue({10}),
-          GlobalObjectiveValue({5}),
+          globalOnlyValue(10),
+          globalOnlyValue(5),
           std::nullopt,
           {{{{o1, 20, 15}}}}));
   EXPECT_EQ(3, aggregator1.getGlobalStats().getTotalMoves());
@@ -236,9 +246,7 @@ TEST(MoveStatsAggregatorTest, NoContainerTracking) {
       std::make_shared<MoveStatsAggregatorConfig>(false), precision);
   aggregator.add(
       MoveResult::makeValid(
-          std::move(moves),
-          GlobalObjectiveValue({10}),
-          GlobalObjectiveValue({5})));
+          std::move(moves), globalOnlyValue(10), globalOnlyValue(5)));
   EXPECT_EQ(1, aggregator.getGlobalStats().getTotalMoves());
   EXPECT_EQ(
       0, aggregator.getStatsForSourceContainer(container(100)).getTotalMoves());
@@ -257,9 +265,7 @@ TEST(MoveStatsAggregatorTest, Clear) {
       std::make_shared<MoveStatsAggregatorConfig>(true, true), precision);
   aggregator.add(
       MoveResult::makeValid(
-          std::move(moves),
-          GlobalObjectiveValue({10}),
-          GlobalObjectiveValue({10})));
+          std::move(moves), globalOnlyValue(10), globalOnlyValue(10)));
   EXPECT_EQ(1, aggregator.getGlobalStats().getTotalMoves());
   EXPECT_EQ(
       1, aggregator.getStatsForSourceContainer(container(100)).getTotalMoves());
@@ -291,17 +297,13 @@ TEST(MoveStatsAggregatorTest, ObjectWhitelist) {
   move1.insert(Move(object(1000), container(100), container(200)));
   aggregator.add(
       MoveResult::makeValid(
-          std::move(move1),
-          GlobalObjectiveValue({10}),
-          GlobalObjectiveValue({10})));
+          std::move(move1), globalOnlyValue(10), globalOnlyValue(10)));
 
   MoveSet move2;
   move2.insert(Move(object(2000), container(100), container(200)));
   aggregator.add(
       MoveResult::makeValid(
-          std::move(move2),
-          GlobalObjectiveValue({10}),
-          GlobalObjectiveValue({10})));
+          std::move(move2), globalOnlyValue(10), globalOnlyValue(10)));
 
   EXPECT_EQ(2, aggregator.getGlobalStats().getTotalMoves());
   EXPECT_EQ(0, aggregator.getStatsForObject(object(1000)).getTotalMoves());
@@ -365,13 +367,13 @@ TEST(MoveStatsAggregatorTest, ClobberAndAggregate) {
       aggregator1.add(
           MoveResult::makeValid(
               moves,
-              GlobalObjectiveValue({10}),
-              GlobalObjectiveValue({10}))); // neutral
+              globalOnlyValue(10),
+              globalOnlyValue(10))); // neutral
       aggregator1.add(
           MoveResult::makeValid(
               moves,
-              GlobalObjectiveValue({10}),
-              GlobalObjectiveValue({15}))); // worse
+              globalOnlyValue(10),
+              globalOnlyValue(15))); // worse
     }
   });
 

@@ -308,6 +308,10 @@ folly::coro::Task<void> Materializer::materializeConstraintCoro(
     if (softConstraint) {
       wlockedMaterialized.softConstraints.emplace(constraintId, softConstraint);
     }
+    if (constraintPenalty) {
+      wlockedMaterialized.softConstraintPenalties.emplace(
+          constraintId, constraintPenalty);
+    }
     any_positive_add(wlockedMaterialized.finalConstraint, hardConstraint);
     wlockedMaterialized.userConstraints.emplace(constraintId, userConstraint);
     inplace_add(
@@ -437,6 +441,9 @@ folly::coro::Task<void> Materializer::materializeGoalCoro(
         goalInfo,
         *universe_);
     wlockedMaterialized.userGoals.emplace(goalId, goalInfo.objectiveExpr);
+    if (goalInfo.penaltyExpr != nullptr) {
+      wlockedMaterialized.userPenalties.emplace(goalId, goalInfo.penaltyExpr);
+    }
   });
 
   logger_->log(
@@ -537,13 +544,22 @@ void Materializer::buildGlobalObjectiveAndLabeledObjectives() {
   GlobalObjective::Builder penaltyObjectiveBuilder;
   // build labeled objectives
   GlobalLabeledObjectives::Builder globalLabeledObjectivesBuilder;
+  GlobalLabeledObjectives::Builder globalLabeledPenaltiesBuilder;
   materialized_.withWLock([&](auto& wlockedMaterialized) {
+    // All objective expression roots are finalized before this method runs.
+    // Solving updates their values but never adds another Penalty expression.
+    const bool hasPenaltyObjective = useSeparatedLocalSearchPenaltyObjective_ &&
+        std::any_of(wlockedMaterialized.finalGoals.begin(),
+                    wlockedMaterialized.finalGoals.end(),
+                    [](const GoalInfo& goalInfo) {
+                      return goalInfo.penaltyExpr != nullptr;
+                    });
     for (const auto pos :
          folly::irange(wlockedMaterialized.finalGoals.size())) {
       const auto& goalInfo = wlockedMaterialized.finalGoals.at(pos);
       globalObjectiveBuilder.setObjective(
           static_cast<int>(pos), goalInfo.objectiveExpr);
-      if (useSeparatedLocalSearchPenaltyObjective_) {
+      if (hasPenaltyObjective) {
         penaltyObjectiveBuilder.setObjective(
             static_cast<int>(pos),
             goalInfo.penaltyExpr ? goalInfo.penaltyExpr
@@ -552,9 +568,14 @@ void Materializer::buildGlobalObjectiveAndLabeledObjectives() {
     }
     wlockedMaterialized.globalObjective =
         globalObjectiveBuilder.build(*universe_);
-    if (useSeparatedLocalSearchPenaltyObjective_) {
+    if (hasPenaltyObjective) {
       wlockedMaterialized.penaltyObjective =
           penaltyObjectiveBuilder.build(*universe_);
+      for (const auto pos :
+           folly::irange(wlockedMaterialized.penaltyObjective.size())) {
+        globalLabeledPenaltiesBuilder.setRoot(
+            pos, wlockedMaterialized.penaltyObjective.getObjectiveAt(pos));
+      }
     }
 
     // if there are no userGoals or softConstraints, then just set a
@@ -568,6 +589,9 @@ void Materializer::buildGlobalObjectiveAndLabeledObjectives() {
 
   auto& userGoals = materialized_.rlock()->userGoals;
   auto& softConstraints = materialized_.rlock()->softConstraints;
+  auto& userPenalties = materialized_.rlock()->userPenalties;
+  auto& softConstraintPenalties =
+      materialized_.rlock()->softConstraintPenalties;
   for (auto& [goalId, expr] : userGoals) {
     auto& goal = universe_->getGoals().getGoal(goalId);
     auto& name = universe_->getEntityName(goalId);
@@ -583,10 +607,28 @@ void Materializer::buildGlobalObjectiveAndLabeledObjectives() {
         tuplePos, name, expr, 1 /* weight */);
   }
 
+  for (auto& [goalId, expr] : userPenalties) {
+    const auto& goal = universe_->getGoals().getGoal(goalId);
+    globalLabeledPenaltiesBuilder.addSingle(
+        goal.getTupleIndex(), universe_->getEntityName(goalId), expr);
+  }
+
+  for (auto& [constraintId, expr] : softConstraintPenalties) {
+    const auto tuplePos =
+        universe_->getConstraints().getConstraint(constraintId).getTupleIndex();
+    globalLabeledPenaltiesBuilder.addSingle(
+        tuplePos, universe_->getEntityName(constraintId), expr);
+  }
+
   materialized_.withWLock([&](auto& wlockedMaterialized) {
     wlockedMaterialized.labeledObjectives =
         globalLabeledObjectivesBuilder.build(
             wlockedMaterialized.globalObjective);
+    if (wlockedMaterialized.penaltyObjective.size() != 0) {
+      wlockedMaterialized.labeledPenalties =
+          globalLabeledPenaltiesBuilder.build(
+              wlockedMaterialized.penaltyObjective);
+    }
   });
 }
 

@@ -55,17 +55,20 @@ struct MaterializedProblem {
 
   // Raw user-provided goals and constraints.
   entities::Map<entities::GoalId, ExprPtr> userGoals;
+  entities::Map<entities::GoalId, ExprPtr> userPenalties;
   entities::Map<entities::ConstraintId, ExprPtr> userConstraints;
   ExprPtr userConstraintSum;
 
   // User-provided constraints broken into soft and hard components.
   entities::Map<entities::ConstraintId, ExprPtr> softConstraints;
+  entities::Map<entities::ConstraintId, ExprPtr> softConstraintPenalties;
   entities::Map<entities::ConstraintId, ExprPtr> hardConstraints;
 
   // globalObjective and penaltyObjective are built from finalGoals.
   GlobalObjective globalObjective;
   GlobalObjective penaltyObjective;
   GlobalLabeledObjectives labeledObjectives;
+  GlobalLabeledObjectives labeledPenalties;
 
   LabeledConstraints labeledHardConstraints;
   LabeledConstraints labeledUserConstraints;

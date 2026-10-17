@@ -87,10 +87,19 @@ MoveResult makeMoveResult(const ObjectiveDeltaSet& deltaSet) {
     oldSum += delta.oldValue;
     newSum += delta.newValue;
   }
+  const entities::Universe universe;
+  GlobalObjective::Builder oldBuilder;
+  oldBuilder.setObjective(0, const_expr(oldSum, universe));
+  GlobalObjective::Builder newBuilder;
+  newBuilder.setObjective(0, const_expr(newSum, universe));
   return MoveResult::makeValid(
       /*moveSet=*/{},
-      GlobalObjectiveValue({oldSum}),
-      GlobalObjectiveValue({newSum}),
+      LocalSearchObjective(
+          oldBuilder.build(universe), GlobalObjective(universe), universe)
+          .getValue(),
+      LocalSearchObjective(
+          newBuilder.build(universe), GlobalObjective(universe), universe)
+          .getValue(),
       /*arbiterValue=*/std::nullopt,
       ObjectiveDeltaSets{deltaSet});
 }
@@ -125,8 +134,11 @@ TEST(
   EXPECT_TRUE(moveResult.isBetter(precision));
 
   const MoveStatsAggregator moveStats(precision);
-  const auto summary =
-      MovesSummaryHelper::makeMovesSummary(*problem, moveResult, moveStats);
+  const auto summary = MovesSummaryHelper::makeMovesSummary(
+      *problem,
+      moveResult.getMoveSet(),
+      &moveResult.getObjectiveDeltas(),
+      moveStats);
 
   // All changed sub-objectives are recorded, despite each being sub-tolerance.
   EXPECT_EQ(kNumObjectives, summary.objectives()->size());
@@ -144,11 +156,36 @@ TEST(MovesSummaryHelperTest, RecordsObjectiveWhenChangeExceedsTolerance) {
   EXPECT_TRUE(moveResult.isBetter(precision));
 
   const MoveStatsAggregator moveStats(precision);
-  const auto summary =
-      MovesSummaryHelper::makeMovesSummary(*problem, moveResult, moveStats);
+  const auto summary = MovesSummaryHelper::makeMovesSummary(
+      *problem,
+      moveResult.getMoveSet(),
+      &moveResult.getObjectiveDeltas(),
+      moveStats);
 
   ASSERT_TRUE(summary.objectives()->contains("objective_0"));
   EXPECT_EQ(0, summary.objectives()->at("objective_0").tuplePos().value());
+}
+
+TEST(MovesSummaryHelperTest, LabelsPenaltyDelta) {
+  const auto problem = makeProblem();
+  const MoveStatsAggregator moveStats(problem->getUniverse().getPrecision());
+  ObjectiveDeltaSet deltaSet;
+  deltaSet.emplace_back(
+      std::make_shared<LabeledExpression>(
+          "soft_constraint", nullptr, /*weight=*/1),
+      /*oldValue=*/2,
+      /*newValue=*/1,
+      /*isPenalty=*/true);
+  const ObjectiveDeltaSets deltas{std::move(deltaSet)};
+
+  const auto summary = MovesSummaryHelper::makeMovesSummary(
+      *problem, MoveSet{}, &deltas, moveStats);
+
+  ASSERT_TRUE(summary.objectives()->contains("soft_constraint [penalty]"));
+  const auto& penaltyChange =
+      summary.objectives()->at("soft_constraint [penalty]");
+  EXPECT_EQ(1, *penaltyChange.newValue());
+  EXPECT_EQ(1, *penaltyChange.change());
 }
 
 } // namespace facebook::rebalancer::packer::tests

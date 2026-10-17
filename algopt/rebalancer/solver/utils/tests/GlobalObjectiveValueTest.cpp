@@ -114,6 +114,7 @@ TEST(GlobalObjectiveValueTest, Partial) {
   EXPECT_GT(GlobalObjectiveValue::precisionCompare(val1, val2, precision), 0);
 
   EXPECT_EQ("(0, __)", val2.toString());
+  EXPECT_EQ("__", GlobalObjectiveValue::makeWithFixedSize(1).toString());
 }
 
 TEST(GlobalObjectiveValueTest, AdditionAndSubtractionError) {

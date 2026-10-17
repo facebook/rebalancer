@@ -65,11 +65,6 @@ class MoveType {
       const SearchHints& hints,
       double timeLimit) = 0;
 
-  static MoveResult findBestWithValidator(
-      Problem& evaluator,
-      std::vector<MoveResult> results,
-      const MoveStatsAggregator& stats);
-
   const ParallelExecutionSelector& parallelExecutionSelector() const {
     return parallelExecutionSelector_;
   }

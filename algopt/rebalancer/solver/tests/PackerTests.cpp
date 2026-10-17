@@ -132,7 +132,7 @@ void PackerTests::basic(
   {
     auto result = evaluator.evaluate({});
     EXPECT_TRUE(result.isValid());
-    EXPECT_EQ(before, result.getValue().get(0));
+    EXPECT_EQ(before, result.getValue().get(0).objective);
   }
   EXPECT_EQ(container(0), p.assignment.getContainer(object(0)));
 
@@ -145,7 +145,7 @@ void PackerTests::basic(
   {
     auto result = evaluator.evaluate({});
     EXPECT_TRUE(result.isValid());
-    EXPECT_EQ(after, result.getValue().get(0));
+    EXPECT_EQ(after, result.getValue().get(0).objective);
   }
   EXPECT_EQ(container(6), p.assignment.getContainer(object(0)));
 
@@ -176,7 +176,7 @@ void PackerTests::mipbasic(
   {
     auto result = evaluator.evaluate({});
     EXPECT_TRUE(result.isValid());
-    EXPECT_EQ(before, result.getValue().get(0));
+    EXPECT_EQ(before, result.getValue().get(0).objective);
   }
   EXPECT_EQ(container(0), p.assignment.getContainer(object(0)));
 
@@ -188,7 +188,7 @@ void PackerTests::mipbasic(
   {
     auto result = evaluator.evaluate({});
     EXPECT_TRUE(result.isValid());
-    EXPECT_EQ(after, result.getValue().get(0));
+    EXPECT_EQ(after, result.getValue().get(0).objective);
   }
 
   EXPECT_EQ(container(6), p.assignment.getContainer(object(0)));
@@ -311,7 +311,7 @@ TEST_F(PackerTests, BrokenConstraintStats) {
   {
     auto result = evaluator.evaluate({});
     EXPECT_TRUE(result.isValid());
-    EXPECT_EQ(0, result.getValue().get(0));
+    EXPECT_EQ(0, result.getValue().get(0).objective);
   }
   EXPECT_EQ(container(6), p.assignment.getContainer(object(0)));
 
@@ -468,7 +468,7 @@ TEST_F(PackerTests, MipExprLinearSum) {
   {
     auto result = evaluator.evaluate({});
     EXPECT_TRUE(result.isValid());
-    EXPECT_EQ(-5, result.getValue().get(0));
+    EXPECT_EQ(-5, result.getValue().get(0).objective);
   }
   EXPECT_EQ(container(0), p.assignment.getContainer(object(1)));
   EXPECT_EQ(container(1), p.assignment.getContainer(object(0)));
@@ -524,7 +524,7 @@ TEST_F(PackerTests, MipExprMax) {
   {
     auto result = evaluator.evaluate({});
     EXPECT_TRUE(result.isValid());
-    EXPECT_EQ(-2, result.getValue().get(0));
+    EXPECT_EQ(-2, result.getValue().get(0).objective);
   }
   EXPECT_EQ(container(0), p.assignment.getContainer(object(1)));
   EXPECT_EQ(container(0), p.assignment.getContainer(object(0)));
@@ -564,7 +564,7 @@ TEST_F(PackerTests, MipExprBinaryMax) {
   {
     auto result = evaluator.evaluate({});
     EXPECT_TRUE(result.isValid());
-    EXPECT_EQ(0, result.getValue().get(0));
+    EXPECT_EQ(0, result.getValue().get(0).objective);
   }
   EXPECT_EQ(container(1), p.assignment.getContainer(object(0)));
   EXPECT_EQ(container(1), p.assignment.getContainer(object(1)));
@@ -688,7 +688,7 @@ TEST_F(PackerTests, MipExprBinary) {
   {
     auto result = evaluator.evaluate({});
     EXPECT_TRUE(result.isValid());
-    EXPECT_EQ(0, result.getValue().get(0));
+    EXPECT_EQ(0, result.getValue().get(0).objective);
   }
   EXPECT_EQ(container(0), p.assignment.getContainer(object(0)));
   EXPECT_EQ(container(1), p.assignment.getContainer(object(1)));
@@ -717,7 +717,7 @@ TEST_F(PackerTests, MipExprSwaps) {
   solverT.skipInitialAssignmentHint() = true;
   OptimalSolver solver(solverT);
   EXPECT_EQ(true, solver.solve(p));
-  EXPECT_EQ(-1, evaluator.evaluate({}).getValue().get(0));
+  EXPECT_EQ(-1, evaluator.evaluate({}).getValue().get(0).objective);
 }
 
 TEST_F(PackerTests, MipQuotient) {
@@ -746,7 +746,7 @@ TEST_F(PackerTests, MipQuotient) {
   solverT.skipInitialAssignmentHint() = true;
   OptimalSolver solver(solverT);
   EXPECT_EQ(true, solver.solve(p));
-  EXPECT_EQ(0.5, evaluator.evaluate({}).getValue().get(0));
+  EXPECT_EQ(0.5, evaluator.evaluate({}).getValue().get(0).objective);
 }
 
 CO_TEST_F(PackerTests, MipExprObjParLookup) {
@@ -796,7 +796,7 @@ CO_TEST_F(PackerTests, MipExprObjParLookup) {
   solverT.skipInitialAssignmentHint() = true;
   OptimalSolver solver(solverT);
   EXPECT_EQ(true, solver.solve(p));
-  EXPECT_EQ(0, evaluator.evaluate({}).getValue().get(0));
+  EXPECT_EQ(0, evaluator.evaluate({}).getValue().get(0).objective);
   EXPECT_EQ(
       true,
       (int(p.assignment.getContainer(object(1)) == container(0)) +
@@ -935,15 +935,15 @@ TEST_F(PackerTests, StableStayedMultipleSolves) {
   auto solverT = facebook::algopt::makeAvailableOptimalSolverSpec();
   solverT.skipInitialAssignmentHint() = true;
   OptimalSolver solver(solverT);
-  EXPECT_EQ(3, evaluator.evaluate({}).getValue().get(0));
+  EXPECT_EQ(3, evaluator.evaluate({}).getValue().get(0).objective);
 
   solver.solve(p, {container(2), container(3)});
-  EXPECT_EQ(2, evaluator.evaluate({}).getValue().get(0));
+  EXPECT_EQ(2, evaluator.evaluate({}).getValue().get(0).objective);
   EXPECT_EQ(p.assignment.getContainer(object(1)), container(1));
   EXPECT_EQ(p.assignment.getContainer(object(2)), container(3));
 
   solver.solve(p, {container(1), container(2)});
-  EXPECT_EQ(1, evaluator.evaluate({}).getValue().get(0));
+  EXPECT_EQ(1, evaluator.evaluate({}).getValue().get(0).objective);
   EXPECT_EQ(p.assignment.getContainer(object(1)), container(3));
   EXPECT_EQ(p.assignment.getContainer(object(2)), container(2));
 }

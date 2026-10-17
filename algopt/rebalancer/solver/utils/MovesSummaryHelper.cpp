@@ -50,14 +50,15 @@ namespace facebook::rebalancer {
  */
 interface::MovesSummary MovesSummaryHelper::makeMovesSummary(
     const Problem& p,
-    const MoveResult& move_result,
+    const MoveSet& moves,
+    const ObjectiveDeltaSets* objectiveDeltas,
     const MoveStatsAggregator& move_stats,
     const std::optional<int> stageId,
     std::optional<int> cycleId) {
   interface::MovesSummary summary;
 
   // Add all the moves performed to the summary
-  for (const auto& move : move_result.getMoveSet()) {
+  for (const auto& move : moves) {
     auto single = interface::SingleMove{};
     *single.object() = p.objectName(move.getObject());
     *single.srcContainer() = p.containerName(move.getSourceContainer());
@@ -75,8 +76,8 @@ interface::MovesSummary MovesSummaryHelper::makeMovesSummary(
   }
 
   // Process objective value changes if available
-  if (move_result.hasObjectiveDeltas()) {
-    const auto& objDeltas = move_result.getObjectiveDeltas();
+  if (objectiveDeltas != nullptr) {
+    const auto& objDeltas = *objectiveDeltas;
     for (const auto pos : folly::irange(objDeltas.size())) {
       for (const auto& delta : objDeltas.at(pos)) {
         // Record any objective change. Do not use precision
@@ -93,8 +94,14 @@ interface::MovesSummary MovesSummaryHelper::makeMovesSummary(
         objChangeSummary.newValue() = delta.newValue;
         objChangeSummary.change() = delta.oldValue - delta.newValue;
         objChangeSummary.tuplePos() = pos;
-        summary.objectives()[delta.objective->name] =
-            std::move(objChangeSummary);
+        if (delta.isPenalty) {
+          summary.objectives()[fmt::format(
+              "{} [penalty]", delta.objective->name)] =
+              std::move(objChangeSummary);
+        } else {
+          summary.objectives()[delta.objective->name] =
+              std::move(objChangeSummary);
+        }
       }
     }
   }

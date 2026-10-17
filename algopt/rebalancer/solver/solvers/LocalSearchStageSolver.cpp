@@ -289,8 +289,8 @@ bool LocalSearchStageSolver::solve(Problem& p, Profile /* unused */) {
 
     const SolveParams solveParams{
         .profiler = profiler,
-        .objectiveTupleStart = *stageConfig.begin(),
-        .objectiveTupleEnd = *stageConfig.end(),
+        .objectiveTupleStart = std::max(0, *stageConfig.begin()),
+        .objectiveTupleEnd = std::min(*stageConfig.end(), p.objective.size()),
         .solveTime = stageSolveTime_,
         .stopAfterMoves = stageMaxMoves,
         .solveEventName = stage_name,

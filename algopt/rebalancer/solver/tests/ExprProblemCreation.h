@@ -83,10 +83,17 @@ inline std::unique_ptr<Problem> createTestProblem(
     ProblemConfigs config = {},
     bool performInitialFullApply = true,
     bool enableParallelizedBoundsComputing = false,
-    std::unique_ptr<InvalidMoveFilter> invalidMoveFilter = nullptr) {
+    std::unique_ptr<InvalidMoveFilter> invalidMoveFilter = nullptr,
+    const std::vector<ExprPtr>& penaltyObjectiveTuple = {}) {
   auto materializedProblem = std::make_shared<MaterializedProblem>(*universe);
   materializedProblem->globalObjective =
       makeGlobalObjective(objectiveTuple, *universe);
+  if (!penaltyObjectiveTuple.empty()) {
+    materializedProblem->penaltyObjective =
+        makeGlobalObjective(penaltyObjectiveTuple, *universe);
+    materializedProblem->labeledPenalties =
+        makeGlobalLabeledObjectives(materializedProblem->penaltyObjective);
+  }
   materializedProblem->labeledObjectives =
       makeGlobalLabeledObjectives(materializedProblem->globalObjective);
   materializedProblem->finalConstraint = std::move(constraint);
@@ -113,6 +120,8 @@ inline std::unique_ptr<Problem> createTestProblem(
     const Assignment initialAssignment(assignment);
     materializedProblem->globalObjective.fullApply(
         evaluator, initialAssignment);
+    materializedProblem->penaltyObjective.fullApply(
+        evaluator, initialAssignment);
     materializedProblem->finalConstraint->fullApply(
         evaluator, initialAssignment);
 
@@ -123,6 +132,11 @@ inline std::unique_ptr<Problem> createTestProblem(
     for (auto& tupleItem : materializedProblem->labeledObjectives) {
       for (auto& labeledObjective : tupleItem) {
         labeledObjective->expression->fullApply(evaluator, initialAssignment);
+      }
+    }
+    for (auto& tupleItem : materializedProblem->labeledPenalties) {
+      for (auto& labeledPenalty : tupleItem) {
+        labeledPenalty->expression->fullApply(evaluator, initialAssignment);
       }
     }
   }

@@ -98,7 +98,7 @@ class SwapMoveTypeTest : public MoveTestBaseWithTwoBinaryParams {
     co_return buildUniverse();
   }
 
-  ExprPtr getLookupExprOn(PackerSet<entities::ContainerId> containers) {
+  ExprPtr getLookupExprOn(const PackerSet<entities::ContainerId>& containers) {
     auto objectValues = PackerMap<entities::ObjectId, double>();
     for (const auto id : folly::irange(1, 9)) {
       objectValues.emplace(object(id), id);
@@ -196,7 +196,7 @@ CO_TEST_P(SwapMoveTypeTest, CheckMoveCounts) {
   // we expect improvement in all cases
   const auto& precision = getUniverse().getPrecision();
   EXPECT_TRUE(bestResult.isBetter(precision));
-  auto lookupValue = bestResult.getValue().get(0);
+  auto lookupValue = bestResult.getValue().get(0).objective;
   if (greedyOnSrc && greedyOnDst) {
     EXPECT_TRUE(bestResult.isBetter(precision));
     // The first hot object will yield improvement
@@ -268,7 +268,7 @@ CO_TEST_P(SwapMoveTypeTest, Sampled) {
     bestResult.aggregate(std::move(result));
   }
 
-  auto lookupValue = bestResult.getValue().get(0);
+  auto lookupValue = bestResult.getValue().get(0).objective;
   XLOG(INFO) << fmt::format(
       "Attempted {} moves, objective: {} ", totalEvals, lookupValue);
   // after sufficient number of trials, we expect at least one SWAP to succeed.
@@ -315,7 +315,7 @@ CO_TEST_P(SwapMoveTypeTest, DestinationsToExplore) {
   // swap moves with container(4)
   const auto& precision = getUniverse().getPrecision();
   EXPECT_TRUE(bestResult.isBetter(precision));
-  auto lookupValue = bestResult.getValue().get(0);
+  auto lookupValue = bestResult.getValue().get(0).objective;
   if (greedyOnSrc && greedyOnDst) {
     EXPECT_TRUE(bestResult.isBetter(precision));
     // The first hot object will yield improvement

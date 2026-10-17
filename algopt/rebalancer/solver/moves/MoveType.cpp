@@ -16,11 +16,7 @@
 
 #include "algopt/rebalancer/solver/moves/DestinationsToExploreGenerator.h"
 #include "algopt/rebalancer/solver/moves/ObjectsToExploreGenerator.h"
-#include "algopt/rebalancer/solver/utils/MovesSummaryHelper.h"
 
-#include <folly/logging/xlog.h>
-
-#include <algorithm>
 #include <stdexcept>
 
 namespace facebook::rebalancer {
@@ -38,46 +34,6 @@ int MoveType::getBundleSize(
 }
 
 MoveType::~MoveType() = default;
-
-MoveResult MoveType::findBestWithValidator(
-    Problem& problem,
-    std::vector<MoveResult> results,
-    const MoveStatsAggregator& stats) {
-  const auto& precision = problem.getUniverse().getPrecision();
-  // sort by best value, will go in order to find first valid move
-  std::sort(
-      results.begin(),
-      results.end(),
-      [](const MoveResult& first, const MoveResult& second) {
-        return GlobalObjectiveValue::unsafeCompare(
-                   first.getValue(), second.getValue()) < 0;
-      });
-
-  for (auto& result : results) {
-    if (!result.isBetter(precision)) {
-      // no need to check further, as results are sorted by objective value
-      break;
-    }
-
-    bool allMovable = true;
-    for (auto& move : result.getMoveSet()) {
-      if (problem.fixed_objects.contains(move.getObject())) {
-        allMovable = false;
-        break;
-      }
-    }
-
-    if (allMovable) {
-      auto moveSummary =
-          MovesSummaryHelper::makeMovesSummary(problem, result, stats);
-      XLOG_EVERY_MS(DBG1, 1000)
-          << "Move " << result.toString(problem.getUniverse())
-          << " not applied.";
-    }
-  }
-
-  return MoveResult::makeEmpty();
-}
 
 std::string MoveType::getMoveDescription(
     const interface::MovesSummary& moveSummary) {

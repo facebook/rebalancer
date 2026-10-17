@@ -77,6 +77,7 @@ struct SolveState {
   double lastImprovedTime = 0.0;
   GlobalObjectiveValue objectiveAtCycleStart;
   Problem& problem;
+  GlobalObjective userObjective;
   MovesEvaluator evaluator;
   HotContainerSelector hotContainerSelector_;
   SearchHints hints;
@@ -91,6 +92,9 @@ struct SolveState {
       : cyclesStarted(0),
         movesInCycle(0),
         problem(problem),
+        userObjective(problem.objective.getRange(
+            std::max(0, solveParams.objectiveTupleStart),
+            std::min(solveParams.objectiveTupleEnd, problem.objective.size()))),
         evaluator(MovesEvaluator(
             problem,
             std::max(0, solveParams.objectiveTupleStart),
@@ -102,7 +106,7 @@ struct SolveState {
             *spec.randomSeed(),
             solveParams.enableObjectPotentialSorting,
             solveParams.exploreMovesFromContainersNotInObjective,
-            evaluator.getObjective().getView(),
+            userObjective.getView(),
             *spec.hottestTraversalConfig())},
         hints(SearchHintsFactory::create(spec)) {}
 

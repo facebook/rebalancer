@@ -14,8 +14,6 @@
 
 #include "algopt/rebalancer/solver/moves/MoveResult.h"
 
-#include <folly/container/irange.h>
-
 #include <sstream>
 
 namespace facebook::rebalancer {
@@ -28,10 +26,11 @@ MoveResult MoveResult::makeEmpty() {
 
 MoveResult MoveResult::makeValid(
     MoveSet moveSet,
-    GlobalObjectiveValue oldValue,
-    GlobalObjectiveValue newValue,
+    LocalSearchObjectiveValue oldValue,
+    LocalSearchObjectiveValue newValue,
     std::optional<GlobalObjectiveValue> arbiterValue,
-    std::optional<ObjectiveDeltaSets> objectiveDeltas) {
+    std::optional<ObjectiveDeltaSets> objectiveDeltas,
+    int objectiveDeltaIndexOffset) {
   MoveResult result;
   result.valid_ = true;
   result.oldValue_ = std::move(oldValue);
@@ -40,6 +39,7 @@ MoveResult MoveResult::makeValid(
   result.evalsCount_ = 1;
   result.moveSet_ = std::move(moveSet);
   result.objectiveDeltas_ = std::move(objectiveDeltas);
+  result.objectiveDeltaIndexOffset_ = objectiveDeltaIndexOffset;
   return result;
 }
 
@@ -63,7 +63,8 @@ bool MoveResult::isValid() const {
 
 bool MoveResult::isBetter(const Precision& precision) const {
   return valid_ &&
-      GlobalObjectiveValue::isStrictlyBetter(newValue_, oldValue_, precision);
+      LocalSearchObjectiveValue::isStrictlyBetter(
+             newValue_, oldValue_, precision);
 }
 
 bool MoveResult::isNeutral(const Precision& precision) const {
@@ -73,7 +74,8 @@ bool MoveResult::isNeutral(const Precision& precision) const {
 
 bool MoveResult::isWorse(const Precision& precision) const {
   return valid_ &&
-      GlobalObjectiveValue::isStrictlyBetter(oldValue_, newValue_, precision);
+      LocalSearchObjectiveValue::isStrictlyBetter(
+             oldValue_, newValue_, precision);
 }
 
 const MoveSet& MoveResult::getMoveSet() const {
@@ -90,12 +92,16 @@ bool MoveResult::hasObjectiveDeltas() const {
 
 const ObjectiveDeltaSet& MoveResult::getFirstChangedObjectiveDelta(
     const Precision& precision) const {
-  for (const auto pos : folly::irange(newValue_.size())) {
-    if (precision.compare(newValue_.get(pos), oldValue_.get(pos)) != 0) {
-      return objectiveDeltas_->at(pos);
-    }
+  // Select the objective that explains this stage's move classification.
+  // showAllChangedObjectivesInMovesSummary may collect deltas outside the
+  // stage for reporting, but those objectives do not drive stage acceptance.
+  if (const auto pos = LocalSearchObjectiveValue::firstChangedPosition(
+          newValue_, oldValue_, precision)) {
+    return objectiveDeltas_->at(objectiveDeltaIndexOffset_ + *pos);
   }
-  return objectiveDeltas_->at(0);
+  // Numerical differences below precision do not identify a position. Keep
+  // the legacy fallback to the first objective in the stage.
+  return objectiveDeltas_->at(objectiveDeltaIndexOffset_);
 }
 
 const ObjectiveDeltaSets& MoveResult::getObjectiveDeltas() const {
@@ -156,30 +162,26 @@ LabeledExpressionPtr MoveResult::getFirstInvalidConstraint() const {
 
 void MoveResult::aggregate(MoveResult&& other) {
   evalsCount_ += other.evalsCount_;
-  auto compare =
-      GlobalObjectiveValue::unsafeCompare(other.newValue_, newValue_);
+  const auto compare =
+      LocalSearchObjectiveValue::unsafeCompare(other.newValue_, newValue_);
   auto arbitersImproved = false;
   auto arbiterCompare = 0;
-  auto hasArbiterValue =
+  const auto hasArbiterValue =
       arbiterValue_.has_value() && other.arbiterValue_.has_value();
   if (hasArbiterValue) {
     arbiterCompare = GlobalObjectiveValue::unsafeCompare(
         *other.arbiterValue_, *arbiterValue_);
     arbitersImproved = arbiterCompare < 0;
   }
-  auto needsTieBreak = [&]() {
-    if (compare == 0) {
-      if (hasArbiterValue) {
-        return arbiterCompare == 0;
-      } else {
-        return true;
-      }
+  const auto needsTieBreak = [&]() {
+    if (compare != 0) {
+      return false;
     }
-    return false;
+    return !hasArbiterValue || arbiterCompare == 0;
   };
   if (compare < 0 || (compare == 0 && arbitersImproved) ||
-      (compare == 0 &&
-       (needsTieBreak() && MoveSet::compare(moveSet_, other.moveSet_) < 0))) {
+      (compare == 0 && needsTieBreak() &&
+       MoveSet::compare(moveSet_, other.moveSet_) < 0)) {
     empty_ = other.empty_;
     valid_ = other.valid_;
     oldValue_ = std::move(other.oldValue_);
@@ -187,15 +189,16 @@ void MoveResult::aggregate(MoveResult&& other) {
     arbiterValue_ = std::move(other.arbiterValue_);
     moveSet_ = std::move(other.moveSet_);
     objectiveDeltas_ = std::move(other.objectiveDeltas_);
+    objectiveDeltaIndexOffset_ = other.objectiveDeltaIndexOffset_;
     invalidConstraints_ = std::move(other.invalidConstraints_);
   }
 }
 
-const GlobalObjectiveValue& MoveResult::getOldValue() const {
+const LocalSearchObjectiveValue& MoveResult::getOldValue() const {
   return oldValue_;
 }
 
-const GlobalObjectiveValue& MoveResult::getValue() const {
+const LocalSearchObjectiveValue& MoveResult::getValue() const {
   return newValue_;
 }
 

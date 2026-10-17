@@ -15,6 +15,8 @@
 #include "algopt/rebalancer/algopt_common/TestUtils.h"
 #include "algopt/rebalancer/algopt_common/thrift/gen-cpp2/Types_types.h"
 #include "algopt/rebalancer/entities/Identifiers.h"
+#include "algopt/rebalancer/entities/Universe.h"
+#include "algopt/rebalancer/solver/expressions/Operators.h"
 #include "algopt/rebalancer/solver/tests/IdConverterTestUtils.h"
 #include "algopt/rebalancer/solver/utils/Precision.h"
 #include "algopt/rebalancer/solver/utils/SimilarContainers.h"
@@ -50,6 +52,19 @@ Precision createPrecision() {
   facebook::algopt::common::thrift::PrecisionTolerances tolerances;
   return Precision(tolerances);
 }
+
+LocalSearchObjectiveValue makeGlobalValue(
+    std::initializer_list<double> global) {
+  const entities::Universe universe;
+  GlobalObjective::Builder globalBuilder;
+  int pos = 0;
+  for (const auto value : global) {
+    globalBuilder.setObjective(pos++, const_expr(value, universe));
+  }
+  return LocalSearchObjective(
+             globalBuilder.build(universe), GlobalObjective(universe), universe)
+      .getValue();
+}
 } // namespace
 
 static std::vector<entities::ContainerId> make_class(
@@ -84,37 +99,33 @@ setContainerPotentials() {
   // just add some contributionPotentials for each of the 10 containers
   containerPotentials.emplace(
       container(1),
-      ContainerPotential(GlobalObjectiveValue({5, -10}), 10, precision));
+      ContainerPotential(makeGlobalValue({5, -10}), 10, precision));
   containerPotentials.emplace(
       container(2),
-      ContainerPotential(GlobalObjectiveValue({-15, -1}), 7, precision));
+      ContainerPotential(makeGlobalValue({-15, -1}), 7, precision));
   containerPotentials.emplace(
       container(3),
-      ContainerPotential(GlobalObjectiveValue({50, -100}), 9, precision));
+      ContainerPotential(makeGlobalValue({50, -100}), 9, precision));
   containerPotentials.emplace(
-      container(4),
-      ContainerPotential(GlobalObjectiveValue({5, 10}), 0, precision));
+      container(4), ContainerPotential(makeGlobalValue({5, 10}), 0, precision));
 
   containerPotentials.emplace(
-      container(5),
-      ContainerPotential(GlobalObjectiveValue({0, -1}), 8, precision));
+      container(5), ContainerPotential(makeGlobalValue({0, -1}), 8, precision));
   containerPotentials.emplace(
-      container(6),
-      ContainerPotential(GlobalObjectiveValue({0, -1}), 2, precision));
+      container(6), ContainerPotential(makeGlobalValue({0, -1}), 2, precision));
   containerPotentials.emplace(
       container(7),
-      ContainerPotential(GlobalObjectiveValue({-50, -100}), 2, precision));
+      ContainerPotential(makeGlobalValue({-50, -100}), 2, precision));
 
   containerPotentials.emplace(
-      container(8),
-      ContainerPotential(GlobalObjectiveValue({5, 10}), 3, precision));
+      container(8), ContainerPotential(makeGlobalValue({5, 10}), 3, precision));
 
   containerPotentials.emplace(
       container(9),
-      ContainerPotential(GlobalObjectiveValue({90, -100}), 4, precision));
+      ContainerPotential(makeGlobalValue({90, -100}), 4, precision));
   containerPotentials.emplace(
       container(10),
-      ContainerPotential(GlobalObjectiveValue({89, -1000}), 8, precision));
+      ContainerPotential(makeGlobalValue({89, -1000}), 8, precision));
 
   return containerPotentials;
 }
@@ -237,7 +248,7 @@ TEST(SimilarContainersTest, OrderedGroupsNotInitialized) {
   const PackerMap<entities::ContainerId, ContainerPotential>
       containerPotentials = {
           {container(1),
-           ContainerPotential(GlobalObjectiveValue({-50, -100}), 2, precision)},
+           ContainerPotential(makeGlobalValue({-50, -100}), 2, precision)},
       };
   similarContainers.setOrderedGroups(containerPotentials);
 
@@ -339,16 +350,13 @@ TEST(SimilarContainersTest, UpdateOrderedGroupsTest) {
   PackerMap<entities::ContainerId, ContainerPotential>
       changesInContainerPotentials;
   changesInContainerPotentials.emplace(
-      container(4),
-      ContainerPotential(GlobalObjectiveValue({-7, 1}), 8, precision));
+      container(4), ContainerPotential(makeGlobalValue({-7, 1}), 8, precision));
   // after the change containerPotential of container4 is ((-2, 11), 8)
   changesInContainerPotentials.emplace(
-      container(2),
-      ContainerPotential(GlobalObjectiveValue({15, 1}), 0, precision));
+      container(2), ContainerPotential(makeGlobalValue({15, 1}), 0, precision));
   // after the change containerPotential of container2 is ((0, 0), 7)
   changesInContainerPotentials.emplace(
-      container(5),
-      ContainerPotential(GlobalObjectiveValue({0, 0}), -7, precision));
+      container(5), ContainerPotential(makeGlobalValue({0, 0}), -7, precision));
   // after the change containerPotential of container5 is ((0, -1), 1)
 
   similarContainers.updateOrderedGroups(changesInContainerPotentials);

@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "algopt/rebalancer/solver/expressions/Operators.h"
 #include "algopt/rebalancer/solver/moves/MoveStatsAggregator.h"
 #include "algopt/rebalancer/solver/tests/IdConverterTestUtils.h"
 #include "algopt/rebalancer/solver/utils/Precision.h"
@@ -32,6 +33,15 @@ using namespace facebook::rebalancer::packer::tests;
 Precision createPrecision() {
   facebook::algopt::common::thrift::PrecisionTolerances tolerances;
   return Precision(tolerances);
+}
+
+LocalSearchObjectiveValue globalOnlyValue(double value) {
+  const entities::Universe universe;
+  GlobalObjective::Builder builder;
+  builder.setObjective(0, const_expr(value, universe));
+  return LocalSearchObjective(
+             builder.build(universe), GlobalObjective(universe), universe)
+      .getValue();
 }
 
 const int nThreads = folly::available_concurrency();
@@ -75,13 +85,13 @@ BENCHMARK(MoveStatsAggregatorBenchmark) {
         aggregator1.add(
             MoveResult::makeValid(
                 moves,
-                GlobalObjectiveValue({10}),
-                GlobalObjectiveValue({10}))); // neutral
+                globalOnlyValue(10),
+                globalOnlyValue(10))); // neutral
         aggregator1.add(
             MoveResult::makeValid(
                 moves,
-                GlobalObjectiveValue({10}),
-                GlobalObjectiveValue({15}))); // worse
+                globalOnlyValue(10),
+                globalOnlyValue(15))); // worse
       }
     });
   }

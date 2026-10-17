@@ -47,7 +47,7 @@ size_t GlobalObjectiveValue::size() const {
   return values_.size();
 }
 
-double GlobalObjectiveValue::get(int idx) const {
+double GlobalObjectiveValue::get(size_t idx) const {
   return values_.at(idx);
 }
 
@@ -207,7 +207,7 @@ string GlobalObjectiveValue::toString() const {
       tupleSize_ && *tupleSize_ > values_.size() ? *tupleSize_ - values_.size()
                                                  : 0;
   if (values_.size() + numUnInitializedPositions == 1) {
-    return fmt::format("{}", values_.at(0));
+    return values_.empty() ? "__" : fmt::format("{}", values_.at(0));
   }
 
   std::stringstream ss;

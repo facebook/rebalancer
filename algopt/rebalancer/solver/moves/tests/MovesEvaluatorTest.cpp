@@ -21,6 +21,18 @@
 
 namespace facebook::rebalancer::packer::tests {
 
+namespace {
+LocalSearchObjectiveValue globalOnlyValue(
+    double value,
+    const entities::Universe& universe) {
+  GlobalObjective::Builder builder;
+  builder.setObjective(0, const_expr(value, universe));
+  return LocalSearchObjective(
+             builder.build(universe), GlobalObjective(universe), universe)
+      .getValue();
+}
+} // namespace
+
 struct AllowedWorsening {
   double percent;
   double absolute;
@@ -137,6 +149,113 @@ TEST_F(MovesEvaluatorTest, DoNotWorsenGoalConfigNoHigherPriorityObjConfig) {
         doNotWorsenGoalConfig.getFirstWorseTuplePos(
             context, problem.getOrchestrator()));
   }
+}
+
+TEST_F(MovesEvaluatorTest, PreviousStagePenaltyDoesNotBlockCurrentPenalty) {
+  setInitialAssignment(
+      {{"container1", {"object1"}}, {"container2", {"object2"}}});
+
+  const auto universe = buildUniverse();
+  const auto objectVector = makeObjectVector(
+      PackerMap<entities::ObjectId, double>{}, 1, 2, *universe);
+  const auto container1Objects = makeObjectLookup(objectVector, {container(1)});
+  const auto container2Objects = makeObjectLookup(objectVector, {container(2)});
+  const auto previousGlobal = container1Objects + container2Objects;
+  const auto currentGlobal = const_expr(0, *universe);
+
+  createProblem(
+      /*objectiveTuple=*/{previousGlobal, currentGlobal},
+      /*constraint=*/const_expr(0, *universe));
+
+  auto& problem = getProblem();
+  GlobalObjective::Builder globalBuilder;
+  globalBuilder.setObjective(0, previousGlobal);
+  globalBuilder.setObjective(1, currentGlobal);
+  GlobalObjective::Builder penaltyBuilder;
+  penaltyBuilder.setObjective(0, container2Objects);
+  penaltyBuilder.setObjective(1, container1Objects);
+  problem.objective = globalBuilder.build(*universe);
+  problem.penaltyObjective = penaltyBuilder.build(*universe);
+  const MovesEvaluator evaluator(problem, 1, 2, "stage 1");
+
+  MoveSet moves;
+  moves.insert(Move(object(1), container(1), container(2)));
+  const auto result = evaluator.evaluate(std::move(moves));
+
+  ASSERT_TRUE(result.isValid());
+  EXPECT_TRUE(result.isBetter(universe->getPrecision()));
+  EXPECT_EQ(
+      std::vector<double>({0}),
+      std::vector<double>({result.getOldValue().get(0).objective}));
+  EXPECT_EQ(
+      std::vector<double>({1}),
+      std::vector<double>({*result.getOldValue().get(0).penalty}));
+  EXPECT_EQ(
+      std::vector<double>({0}),
+      std::vector<double>({result.getValue().get(0).objective}));
+  EXPECT_EQ(
+      std::vector<double>({0}),
+      std::vector<double>({*result.getValue().get(0).penalty}));
+}
+
+TEST_F(MovesEvaluatorTest, EarlierPenaltyPrecedesLaterGlobal) {
+  setInitialAssignment(
+      {{"container1", {"object1"}}, {"container2", {"object2"}}});
+
+  const auto universe = buildUniverse();
+  const auto objectVector = makeObjectVector(
+      PackerMap<entities::ObjectId, double>{}, 1, 2, *universe);
+  const auto container1Objects = makeObjectLookup(objectVector, {container(1)});
+  const auto container2Objects = makeObjectLookup(objectVector, {container(2)});
+  const auto allObjects = container1Objects + container2Objects;
+  const auto zero = const_expr(0, *universe);
+  createProblem(
+      /*objectiveTuple=*/{allObjects, container2Objects, zero},
+      /*constraint=*/zero);
+
+  GlobalObjective::Builder globalBuilder;
+  globalBuilder.setObjective(0, allObjects);
+  globalBuilder.setObjective(1, container2Objects);
+  globalBuilder.setObjective(2, zero);
+  GlobalObjective::Builder penaltyBuilder;
+  penaltyBuilder.setObjective(0, container1Objects);
+  penaltyBuilder.setObjective(1, zero);
+  penaltyBuilder.setObjective(2, zero);
+  auto& problem = getProblem();
+  problem.objective = globalBuilder.build(*universe);
+  problem.penaltyObjective = penaltyBuilder.build(*universe);
+  const MovesEvaluator evaluator(problem, 0, 3, "stage");
+
+  MoveSet moves;
+  moves.insert(Move(object(1), container(1), container(2)));
+  const auto result = evaluator.evaluate(std::move(moves));
+
+  ASSERT_TRUE(result.isValid());
+  EXPECT_TRUE(result.isBetter(universe->getPrecision()));
+  EXPECT_EQ(
+      std::vector<double>({2, 1, 0}),
+      std::vector<double>(
+          {result.getOldValue().get(0).objective,
+           result.getOldValue().get(1).objective,
+           result.getOldValue().get(2).objective}));
+  EXPECT_EQ(
+      std::vector<double>({1, 0, 0}),
+      std::vector<double>(
+          {*result.getOldValue().get(0).penalty,
+           *result.getOldValue().get(1).penalty,
+           *result.getOldValue().get(2).penalty}));
+  EXPECT_EQ(
+      std::vector<double>({2, 2, 0}),
+      std::vector<double>(
+          {result.getValue().get(0).objective,
+           result.getValue().get(1).objective,
+           result.getValue().get(2).objective}));
+  EXPECT_EQ(
+      std::vector<double>({0, 0, 0}),
+      std::vector<double>(
+          {*result.getValue().get(0).penalty,
+           *result.getValue().get(1).penalty,
+           *result.getValue().get(2).penalty}));
 }
 
 TEST_F(MovesEvaluatorTest, DoNotWorsenGoalConfigHigherPriorityObjConfig1) {
@@ -454,7 +573,9 @@ TEST_F(MovesEvaluatorTest, TryApplyUndoesConstraintViolation) {
   MoveSet moves;
   moves.insert(Move(object(2), container(2), container(1)));
   const auto moveResult = MoveResult::makeValid(
-      std::move(moves), GlobalObjectiveValue({-1}), GlobalObjectiveValue({-2}));
+      std::move(moves),
+      globalOnlyValue(-1, *universe),
+      globalOnlyValue(-2, *universe));
 
   EXPECT_EQ(ApplyStatus::VIOLATES_CONSTRAINT, evaluator.tryApply(moveResult));
   EXPECT_EQ(container(2), problem.assignment.getContainer(object(2)));
@@ -480,7 +601,9 @@ TEST_F(MovesEvaluatorTest, TryApplySkipsValidationWhenDisabled) {
   MoveSet moves;
   moves.insert(Move(object(2), container(2), container(1)));
   const auto moveResult = MoveResult::makeValid(
-      std::move(moves), GlobalObjectiveValue({-1}), GlobalObjectiveValue({-2}));
+      std::move(moves),
+      globalOnlyValue(-1, *universe),
+      globalOnlyValue(-2, *universe));
 
   EXPECT_EQ(ApplyStatus::APPLIED, evaluator.tryApply(moveResult));
   EXPECT_EQ(container(1), problem.assignment.getContainer(object(2)));
@@ -506,7 +629,9 @@ TEST_F(MovesEvaluatorTest, TryApplyUndoesEarlierGoalWorsening) {
   MoveSet moves;
   moves.insert(Move(object(2), container(2), container(1)));
   const auto moveResult = MoveResult::makeValid(
-      std::move(moves), GlobalObjectiveValue({1}), GlobalObjectiveValue({0}));
+      std::move(moves),
+      globalOnlyValue(1, *universe),
+      globalOnlyValue(0, *universe));
 
   EXPECT_EQ(
       ApplyStatus::WORSENS_HIGHER_PRIORITY_OBJECTIVE,
@@ -552,8 +677,8 @@ TEST_F(MovesEvaluatorTest, TryApplyHonorsAllowedWorsening) {
   rejectedMove.insert(Move(object(3), container(2), container(1)));
   const auto rejectedResult = MoveResult::makeValid(
       std::move(rejectedMove),
-      GlobalObjectiveValue({1}),
-      GlobalObjectiveValue({0}));
+      globalOnlyValue(1, *universe),
+      globalOnlyValue(0, *universe));
   EXPECT_EQ(
       ApplyStatus::WORSENS_HIGHER_PRIORITY_OBJECTIVE,
       evaluator.tryApply(rejectedResult));

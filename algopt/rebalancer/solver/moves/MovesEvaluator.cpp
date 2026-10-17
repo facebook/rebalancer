@@ -133,7 +133,12 @@ MovesEvaluator::MovesEvaluator(
           objTupleBegin_,
           stageName,
           higherPriorityObjConfig)),
-      minimizingGoal_(problem.getUniverse()) {
+      minimizingGoal_(
+          problem.objective,
+          problem.penaltyObjective,
+          objTupleBegin,
+          objTupleEnd,
+          problem.getUniverse()) {
   if (objTupleBegin_ < 0 || objTupleEnd_ > problem.objective.size()) {
     throw std::runtime_error(
         fmt::format(
@@ -142,8 +147,6 @@ MovesEvaluator::MovesEvaluator(
             objTupleBegin_,
             objTupleEnd_));
   }
-
-  minimizingGoal_ = problem.objective.getRange(objTupleBegin_, objTupleEnd_);
 
   if (objTupleEnd_ < problem.objective.size()) {
     arbiterGoal_.emplace(
@@ -225,8 +228,9 @@ MoveResult MovesEvaluator::evaluate(MoveSet&& moves) const {
   // Step 3: evaluate minimizing goal.
   auto currentValue = minimizingGoal_.getValue();
   auto newValue = minimizingGoal_.evaluate(context, problem_.getOrchestrator());
-  auto objIdxEvaluatedUpto = objTupleBegin_ + newValue.size();
-  if (GlobalObjectiveValue::unsafeCompare(newValue, currentValue) < 0) {
+  const auto objIdxEvaluatedUpto =
+      objTupleBegin_ + static_cast<int>(newValue.size());
+  if (LocalSearchObjectiveValue::unsafeCompare(newValue, currentValue) < 0) {
     // The new value is better than the current. Evaluate the arbiter to
     // disambiguate.
     std::optional<GlobalObjectiveValue> arbiterValue;
@@ -249,20 +253,26 @@ MoveResult MovesEvaluator::evaluate(MoveSet&& moves) const {
           true /*evaluateAllTuplePositions*/);
     }
 
+    auto [objectiveDeltas, objectiveDeltasTupleBegin] =
+        getObjectiveDeltas(context, objIdxEvaluatedUpto);
     return MoveResult::makeValid(
         std::move(moves),
         std::move(currentValue),
         std::move(newValue),
         std::move(arbiterValue),
-        getObjectiveDeltas(context, objIdxEvaluatedUpto));
+        std::move(objectiveDeltas),
+        objTupleBegin_ - objectiveDeltasTupleBegin);
   }
 
+  auto [objectiveDeltas, objectiveDeltasTupleBegin] =
+      getObjectiveDeltas(context, objIdxEvaluatedUpto);
   return MoveResult::makeValid(
       std::move(moves),
       std::move(currentValue),
       std::move(newValue),
       std::nullopt,
-      getObjectiveDeltas(context, objIdxEvaluatedUpto));
+      std::move(objectiveDeltas),
+      objTupleBegin_ - objectiveDeltasTupleBegin);
 }
 
 ApplyStatus MovesEvaluator::tryApply(const MoveResult& moveResult) const {
@@ -281,16 +291,12 @@ ApplyStatus MovesEvaluator::tryApply(const MoveResult& moveResult) const {
             oldDoNotWorsenGoalValue, doNotWorsenGoalConfig_.goal.getValue())) {
       return ApplyStatus::WORSENS_HIGHER_PRIORITY_OBJECTIVE;
     }
-    if (!GlobalObjectiveValue::isStrictlyBetter(
+    if (!LocalSearchObjectiveValue::isStrictlyBetter(
             minimizingGoal_.getValue(), moveResult.getOldValue(), precision_)) {
       return ApplyStatus::DOES_NOT_IMPROVE_OBJECTIVE;
     }
     return ApplyStatus::APPLIED;
   });
-}
-
-const GlobalObjective& MovesEvaluator::getObjective() const {
-  return minimizingGoal_;
 }
 
 Problem& MovesEvaluator::getProblem() const {
@@ -316,11 +322,11 @@ bool MovesEvaluator::shouldCollectMoveStats() const {
       problem_.moveStatsAggregatorConfig->trackObjects;
 }
 
-std::optional<ObjectiveDeltaSets> MovesEvaluator::getObjectiveDeltas(
+MovesEvaluator::ObjectiveDeltasResult MovesEvaluator::getObjectiveDeltas(
     Context& context,
     int objIdxEvaluatedUpto) const {
   if (!shouldCollectMoveStats()) {
-    return std::nullopt;
+    return {.deltas = std::nullopt, .tupleBegin = objTupleBegin_};
   }
 
   int objIdxToEvalBegin = objTupleBegin_;
@@ -333,11 +339,18 @@ std::optional<ObjectiveDeltaSets> MovesEvaluator::getObjectiveDeltas(
 
   auto& orchestrator = problem_.getOrchestrator();
   auto& labeledObjectives = problem_.getLabeledObjectives();
+  const auto& labeledPenalties = problem_.getLabeledPenalties();
   ObjectiveDeltaSets objectiveDeltas(objIdxToEvalEnd - objIdxToEvalBegin);
   for (const auto idx : folly::irange(objIdxToEvalBegin, objIdxToEvalEnd)) {
     auto& labeledObjectiveExprs = labeledObjectives.getObjectiveAt(idx);
     auto& myObjectiveDeltas = objectiveDeltas.at(idx - objIdxToEvalBegin);
-    myObjectiveDeltas.reserve(labeledObjectiveExprs.size());
+    const auto* labeledPenaltyExprs =
+        idx < static_cast<int>(labeledPenalties.size())
+        ? &labeledPenalties.getObjectiveAt(idx)
+        : nullptr;
+    myObjectiveDeltas.reserve(
+        labeledObjectiveExprs.size() +
+        (labeledPenaltyExprs ? labeledPenaltyExprs->size() : 0));
     for (auto& labeledObjectiveExpr : labeledObjectiveExprs) {
       auto expression = labeledObjectiveExpr->expression;
       const double value = orchestrator.evaluate(expression.get(), context);
@@ -345,9 +358,21 @@ std::optional<ObjectiveDeltaSets> MovesEvaluator::getObjectiveDeltas(
       myObjectiveDeltas.emplace_back(
           labeledObjectiveExpr, expression->value, value);
     }
+    if (labeledPenaltyExprs != nullptr) {
+      for (const auto& labeledPenaltyExpr : *labeledPenaltyExprs) {
+        const auto& expression = labeledPenaltyExpr->expression;
+        const auto value = orchestrator.evaluate(expression.get(), context);
+        myObjectiveDeltas.emplace_back(
+            labeledPenaltyExpr,
+            expression->value,
+            value,
+            /*isPenalty=*/true);
+      }
+    }
   }
 
-  return objectiveDeltas;
+  return {
+      .deltas = std::move(objectiveDeltas), .tupleBegin = objIdxToEvalBegin};
 }
 
 std::optional<LabeledExpressionSet> MovesEvaluator::getInvalidConstraints(
@@ -386,8 +411,8 @@ const entities::ContainerId MovesEvaluator::getContainer(
 
 PackerMap<entities::ContainerId, ContainerPotential>
 MovesEvaluator::computeContainerPotentials() const {
-  const auto& minimizingGoal = this->getObjective();
-  auto& problem = this->getProblem();
+  const auto& minimizingGoal = minimizingGoal_;
+  auto& problem = problem_;
   const auto& precision = problem.getUniverse().getPrecision();
 
   PackerMap<entities::ContainerId, ContainerPotential> containerPotentials;
@@ -413,10 +438,10 @@ MovesEvaluator::computeContainerPotentials() const {
                 minimizingGoal.evaluate(
                     context,
                     problem.getOrchestrator(),
-                    true /*evaluateAllTuples*/);
+                    /*evaluateAllTuples=*/true);
 
             const auto containerContributionToGoal =
-                GlobalObjectiveValue::subtract(
+                LocalSearchObjectiveValue::subtract(
                     minimizingGoal.getValue(),
                     goalValIfAllObjectsRemovedFromContainer,
                     precision);
@@ -462,7 +487,7 @@ MovesEvaluator::updateContainerPotentialsAfterMove(
 
   const auto& newGoalVal = appliedMoveResult.getValue();
   const auto& previousGoalVal = appliedMoveResult.getOldValue();
-  const auto& minimizingGoal = this->getObjective();
+  const auto& minimizingGoal = minimizingGoal_;
 
   // Note: We are updating the containers' contributionToGoal after the move has
   // been applied. Therefore, the value of 'minimizingGoal' will be the
@@ -470,7 +495,7 @@ MovesEvaluator::updateContainerPotentialsAfterMove(
 
   PackerMap<entities::ContainerId, ContainerPotential>
       changesInContainerPotentials;
-  auto& problem = this->getProblem();
+  auto& problem = problem_;
   const auto& precision = problem.getUniverse().getPrecision();
 
   for (const auto& move : appliedMoveResult.getMoveSet()) {
@@ -487,11 +512,13 @@ MovesEvaluator::updateContainerPotentialsAfterMove(
     Context context;
     context.changes() = ChangeSet({Change(object, destinationContainer, -1)});
     const auto& goalValIfObjectRemoved = minimizingGoal.evaluate(
-        context, problem.getOrchestrator(), /*evaluateAllTuples=*/true);
+        context,
+        problem.getOrchestrator(),
+        /*evaluateAllTuples=*/true);
 
-    auto contributionChangeForDestination = GlobalObjectiveValue::subtract(
+    auto contributionChangeForDestination = LocalSearchObjectiveValue::subtract(
         newGoalVal, goalValIfObjectRemoved, precision);
-    auto contributionChangeForSource = GlobalObjectiveValue::subtract(
+    auto contributionChangeForSource = LocalSearchObjectiveValue::subtract(
         goalValIfObjectRemoved, previousGoalVal, precision);
 
     // Note that we are only considering one move here. So the change w.r.t.

@@ -366,6 +366,11 @@ CO_TEST_P(MaterializerTest, MaterializesGlobalAndPenaltyObjectives) {
       /*continuousExpressions=*/true,
       /*useSeparatedLocalSearchPenaltyObjective=*/true);
 
+  // This case has a separated penalty only from the SOFT constraint. It
+  // verifies that such a penalty still builds both the Penalty objective and
+  // its labels without relying on a user-goal penalty.
+  EXPECT_TRUE(materialized->userPenalties.empty());
+  EXPECT_EQ(1, materialized->softConstraintPenalties.size());
   EXPECT_EQ(3, materialized->globalObjective.size());
   EXPECT_EQ(3, materialized->penaltyObjective.size());
   // job0 is present on two hosts, so its violation is 1. Its normalized
@@ -402,8 +407,38 @@ CO_TEST_P(MaterializerTest, MaterializesGlobalAndPenaltyObjectives) {
   EXPECT_EQ(
       materialized->globalObjective.getObjectiveAt(1)->getId(),
       materialized->labeledObjectives.getObjectiveAt(1).getRoot()->getId());
+  EXPECT_EQ(3, materialized->labeledPenalties.size());
+  EXPECT_EQ(
+      materialized->penaltyObjective.getObjectiveAt(1)->getId(),
+      materialized->labeledPenalties.getObjectiveAt(1).getRoot()->getId());
+  const auto& labeledPenaltyExpressions =
+      materialized->labeledPenalties.getObjectiveAt(1).getExpressions();
+  EXPECT_EQ(1, labeledPenaltyExpressions.size());
+  if (!labeledPenaltyExpressions.empty()) {
+    EXPECT_EQ("constraint0", labeledPenaltyExpressions.front()->name);
+    EXPECT_NEAR(
+        evaluate(
+            materialized->finalGoals.at(1).penaltyExpr, deltaFromInitial({})),
+        evaluate(
+            labeledPenaltyExpressions.front()->expression,
+            deltaFromInitial({})),
+        1e-8);
+  }
   verifyGlobalObjective(
       materialized->finalGoals, materialized->globalObjective);
+}
+
+CO_TEST_P(MaterializerTest, OmitsPenaltyObjectiveWhenNoPenaltyExists) {
+  const auto universe = buildUniverse();
+  const auto materialized = getMaterializedProblem(
+      universe,
+      MaterializerTest::GetParam(),
+      /*continuousExpressions=*/true,
+      /*useSeparatedLocalSearchPenaltyObjective=*/true);
+
+  EXPECT_EQ(3, materialized->globalObjective.size());
+  EXPECT_EQ(0, materialized->penaltyObjective.size());
+  co_return;
 }
 
 CO_TEST_P(MaterializerTest, HardConstraintPolicy) {

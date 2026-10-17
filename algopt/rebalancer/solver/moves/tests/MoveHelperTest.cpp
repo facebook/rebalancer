@@ -50,7 +50,7 @@ TEST(MoveHelperTest, FindBest) {
   auto best = MoveHelper::findBest(
       &executor, inputs, evaluate, 10, executionSelector, "test");
   EXPECT_EQ(5, best.getEvalsCount());
-  EXPECT_EQ(-0.2, best.getValue().get(0));
+  EXPECT_EQ(-0.2, best.getValue().get(0).objective);
   ASSERT_EQ(1, best.getMoveSet().size());
   EXPECT_EQ(object(1), best.getMoveSet().begin()->getObject());
   EXPECT_EQ(container(2), best.getMoveSet().begin()->getSourceContainer());
@@ -118,7 +118,7 @@ TEST(MoveHelperTest, FindBestWithBatchingStrategy) {
   auto best = MoveHelper::findBest(
       &executor, inputs, evaluate, 10, executionSelector, "test");
   EXPECT_EQ(5, best.getEvalsCount());
-  EXPECT_EQ(-0.2, best.getValue().get(0));
+  EXPECT_EQ(-0.2, best.getValue().get(0).objective);
   ASSERT_EQ(1, best.getMoveSet().size());
   EXPECT_EQ(object(1), best.getMoveSet().begin()->getObject());
 }
@@ -172,7 +172,7 @@ TEST(MoveHelperTest, FindBestWithSlidingWindowStrategy) {
   auto best = MoveHelper::findBest(
       &executor, inputs, evaluate, 10, executionSelector, "test");
   EXPECT_EQ(5, best.getEvalsCount());
-  EXPECT_EQ(-0.2, best.getValue().get(0));
+  EXPECT_EQ(-0.2, best.getValue().get(0).objective);
   ASSERT_EQ(1, best.getMoveSet().size());
   EXPECT_EQ(object(1), best.getMoveSet().begin()->getObject());
 }
@@ -273,7 +273,7 @@ TEST(MoveHelperTest, FindBestWithNulloptUsesDefault) {
   auto best = MoveHelper::findBest(
       &executor, inputs, evaluate, 10, executionSelector, "test");
   EXPECT_EQ(5, best.getEvalsCount());
-  EXPECT_EQ(-0.2, best.getValue().get(0));
+  EXPECT_EQ(-0.2, best.getValue().get(0).objective);
   ASSERT_EQ(1, best.getMoveSet().size());
   EXPECT_EQ(object(1), best.getMoveSet().begin()->getObject());
 }

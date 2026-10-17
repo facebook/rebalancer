@@ -24,7 +24,6 @@
 #include "algopt/rebalancer/solver/expressions/Expression.h"
 #include "algopt/rebalancer/solver/expressions/Orchestrator.h"
 #include "algopt/rebalancer/solver/moves/InvalidMoveFilter.h"
-#include "algopt/rebalancer/solver/moves/MoveResult.h"
 #include "algopt/rebalancer/solver/moves/MoveStatsAggregator.h"
 #include "algopt/rebalancer/solver/solvers/LPStore.h"
 #include "algopt/rebalancer/solver/summary/GlobalLabeledObjectives.h"
@@ -36,6 +35,7 @@
 #include "algopt/rebalancer/solver/utils/equivalence_sets/EquivalenceSets.h"
 #include "algopt/rebalancer/solver/utils/equivalence_sets/EquivalenceSetsStore.h"
 #include "algopt/rebalancer/solver/utils/GlobalObjective.h"
+#include "algopt/rebalancer/solver/utils/LocalSearchObjective.h"
 #include "algopt/rebalancer/solver/utils/MaterializedProblem.h"
 #include "algopt/rebalancer/solver/utils/ObjectStore.h"
 #include "algopt/rebalancer/solver/utils/ProblemConfigs.h"
@@ -64,6 +64,13 @@ enum class ApplyStatus {
   DOES_NOT_IMPROVE_OBJECTIVE,
 };
 
+// values of objective (the user objective, without local-search penalties)
+// before and after the changes
+struct ApplyResult {
+  GlobalObjectiveValue objectiveBefore;
+  GlobalObjectiveValue objectiveAfter;
+};
+
 // If we partition the problem expression-tree variables into subproblems,
 // we can have variables that are not resolved (because they are complicating).
 // Depending on the partitioning approach, they need to be handled differently:
@@ -80,7 +87,8 @@ class ObjectsToExploreGenerator;
 class OptimalSolver;
 class LocalSearchSolver;
 class Problem {
-  // Declared first so it is destroyed last, after orchestrator_/objective,
+  // Declared first so it is destroyed last, after orchestrator_ and the
+  // objective expressions.
   // which hold non-owning pointers to the Universe.
   const std::shared_ptr<const rebalancer::entities::Universe> universe_;
 
@@ -90,12 +98,17 @@ class Problem {
       const std::shared_ptr<const MaterializedProblem> materializedProblem,
       const ProblemConfigs& configs = ProblemConfigs(),
       std::shared_ptr<LogCollector> logger = std::make_shared<LogCollector>());
+  ~Problem() = default;
+  Problem(const Problem&) = delete;
+  Problem& operator=(const Problem&) = delete;
+  Problem(Problem&&) = delete;
+  Problem& operator=(Problem&&) = delete;
 
   friend class OptimalSolver;
   friend class LocalSearchSolver;
   friend class LocalSearchStageSolver;
 
-  MoveResult apply(const ChangeSet& changes);
+  ApplyResult apply(const ChangeSet& changes);
   // Applies changes and restores them if validation rejects the resulting
   // state.
   ApplyStatus tryApply(
@@ -116,6 +129,8 @@ class Problem {
   Orchestrator& getOrchestrator();
 
   GlobalObjective objective;
+  // local-search penalty for each position of objective; empty if there is none
+  GlobalObjective penaltyObjective;
 
   std::shared_ptr<Expression> constraint;
 
@@ -153,6 +168,7 @@ class Problem {
   // TODO: remove access to labeled constraints and objectives
   const LabeledConstraints& getLabeledConstraints() const;
   const GlobalLabeledObjectives& getLabeledObjectives() const;
+  const GlobalLabeledObjectives& getLabeledPenalties() const;
 
   LPStore lp_store;
   algopt::lp::Expression lp_assignment_var(
@@ -265,7 +281,7 @@ class Problem {
   interface::EquivalenceSetInfo makeEquivalenceSetInfo() const;
 
  private:
-  MoveResult applyChanges(const ChangeSet& changes);
+  ApplyResult applyChanges(const ChangeSet& changes);
   void maybeFixMovedObjects(const ChangeSet& changes);
   void log_node_summary(size_t numFixedNodes, size_t nodeCount);
 

@@ -56,7 +56,7 @@ TEST(MoveResultTest, Basic) {
   EXPECT_TRUE(result.isBetter(precision));
   EXPECT_FALSE(result.isNeutral(precision));
   EXPECT_FALSE(result.isWorse(precision));
-  EXPECT_EQ(-1, result.getValue().get(0));
+  EXPECT_EQ(-1, result.getValue().get(0).objective);
   ASSERT_EQ(1, result.getMoveSet().size());
   EXPECT_EQ(object(1000), result.getMoveSet().at(0).getObject());
   EXPECT_EQ(container(200), result.getMoveSet().at(0).getSourceContainer());
@@ -190,7 +190,7 @@ TEST(
 
     EXPECT_EQ(1, result1.getMoveSet().size());
     EXPECT_EQ(2, result1.getEvalsCount());
-    EXPECT_EQ(1, result1.getValue().get(0));
+    EXPECT_EQ(1, result1.getValue().get(0).objective);
     EXPECT_EQ(object(1), result1.getMoveSet().at(0).getObject());
     EXPECT_EQ(container(2), result1.getMoveSet().at(0).getSourceContainer());
     EXPECT_EQ(
@@ -229,7 +229,7 @@ TEST(
 
     EXPECT_EQ(1, result1.getMoveSet().size());
     EXPECT_EQ(2, result1.getEvalsCount());
-    EXPECT_EQ(1, result1.getValue().get(0));
+    EXPECT_EQ(1, result1.getValue().get(0).objective);
     EXPECT_EQ(object(1), result1.getMoveSet().at(0).getObject());
     EXPECT_EQ(container(2), result1.getMoveSet().at(0).getSourceContainer());
     EXPECT_EQ(
@@ -238,7 +238,7 @@ TEST(
     result1.aggregate(std::move(result3));
     EXPECT_EQ(1, result1.getMoveSet().size());
     EXPECT_EQ(3, result1.getEvalsCount());
-    EXPECT_EQ(1, result1.getValue().get(0));
+    EXPECT_EQ(1, result1.getValue().get(0).objective);
     EXPECT_EQ(object(1), result1.getMoveSet().at(0).getObject());
     EXPECT_EQ(container(2), result1.getMoveSet().at(0).getSourceContainer());
     EXPECT_EQ(
@@ -268,7 +268,7 @@ TEST(
     // The final moveset is the one with the smallest hash value
     EXPECT_EQ(1, results[0].getMoveSet().size());
     EXPECT_EQ(1000, results[0].getEvalsCount());
-    EXPECT_EQ(1, results[0].getValue().get(0));
+    EXPECT_EQ(1, results[0].getValue().get(0).objective);
 
     // Verify the winner has the minimum hash across all candidates
     const auto& winnerMove = results[0].getMoveSet().at(0);

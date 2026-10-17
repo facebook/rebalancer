@@ -13,7 +13,7 @@
 // limitations under the License.
 
 #pragma once
-#include <algopt/rebalancer/solver/utils/GlobalObjectiveValue.h>
+#include <algopt/rebalancer/solver/utils/LocalSearchObjective.h>
 #include <algopt/rebalancer/solver/utils/Precision.h>
 
 namespace facebook::rebalancer {
@@ -29,7 +29,7 @@ class ContainerPotential {
   explicit ContainerPotential(const Precision& precision);
 
   explicit ContainerPotential(
-      GlobalObjectiveValue contributionToGoal,
+      LocalSearchObjectiveValue contributionToGoal,
       int nObjects,
       const Precision& precision);
 
@@ -42,12 +42,12 @@ class ContainerPotential {
 
   ContainerPotential operator+(const ContainerPotential& other) const;
 
-  const GlobalObjectiveValue& getContributionToGoal() const;
+  const LocalSearchObjectiveValue& getContributionToGoal() const;
 
   const Precision& getPrecision() const;
 
  private:
-  GlobalObjectiveValue contributionToGoal_;
+  LocalSearchObjectiveValue contributionToGoal_;
   int nObjects_ = 0;
   Precision precision_;
 };

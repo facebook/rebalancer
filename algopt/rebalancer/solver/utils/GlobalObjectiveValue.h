@@ -33,8 +33,6 @@ const size_t expected_tuple_size = 10;
 class GlobalObjectiveValue {
  public:
   using objective_values = folly::small_vector<double, expected_tuple_size>;
-
- public:
   static GlobalObjectiveValue makeWithFixedSize(size_t size);
 
   GlobalObjectiveValue() : values_({}) {}
@@ -45,7 +43,7 @@ class GlobalObjectiveValue {
   // get size of the objective tuple value
   size_t size() const;
   // get value for objective at position idx in objective tuple value
-  double get(int idx) const;
+  double get(size_t idx) const;
   // add a value to objective tuple value
   void append(double value);
   // is the vector only partially populated because objective value is only

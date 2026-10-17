@@ -725,7 +725,7 @@ void OptimalSolver::applyChanges(Problem& p, const ChangeSet& changes) {
   // Therefore, Optimal solver will use its own function
   // 'checkValidityAndprintBrokenConstraint' to verify if the result is invalid
   // because of broken constraints.
-  auto result = p.apply(changes);
+  const auto [oldValue, newValue] = p.apply(changes);
   bool appliedChanges = !changes.empty();
   const auto& precision = p.getUniverse().getPrecision();
 
@@ -754,21 +754,27 @@ void OptimalSolver::applyChanges(Problem& p, const ChangeSet& changes) {
   // Revert the moves if the constraint is initially valid and the solution
   // found is worse or neutral.
   if (initiallyValid && appliedChanges) {
-    if (result.isNeutral(precision)) {
+    const auto improved =
+        GlobalObjectiveValue::isStrictlyBetter(newValue, oldValue, precision);
+    const auto worsened =
+        GlobalObjectiveValue::isStrictlyBetter(oldValue, newValue, precision);
+    if (!improved && !worsened) {
       XLOG(INFO)
           << "Reverting " << changes.size()
           << " useless changes, that optimal produced due to precision differences.";
       p.apply(reverseChanges(changes));
       appliedChanges = false;
-    } else if (result.isWorse(precision)) {
+    } else if (worsened) {
       auto isWorse = true;
       auto higherPriorityObjConfigOpt =
           configs.multiObjSolveSettings()->higherPriorityObjConfig();
-      if (higherPriorityObjConfigOpt.has_value()) {
+      // An uninitialized value represents +inf. It is always worse than an
+      // initialized value, but there are no tuple positions on which to apply
+      // an allowed-worsening override.
+      if (higherPriorityObjConfigOpt.has_value() &&
+          newValue.size() == oldValue.size()) {
         const auto& higherPriorityObjConfig =
             higherPriorityObjConfigOpt.value();
-        const auto& oldValue = result.getOldValue();
-        const auto& newValue = result.getValue();
         const auto& tuplePosToAllowedWorsening =
             *higherPriorityObjConfig.tuplePosToAllowedWorsening();
         for (const auto i : folly::irange(static_cast<int>(oldValue.size()))) {
@@ -800,8 +806,8 @@ void OptimalSolver::applyChanges(Problem& p, const ChangeSet& changes) {
             WARNING,
             "Reverting {} changes, optimal solver found solution {}, which is worse than initial {}",
             changes.size(),
-            result.getValue().toString(),
-            result.getOldValue().toString());
+            newValue.toString(),
+            oldValue.toString());
         p.apply(reverseChanges(changes));
         appliedChanges = false;
       }
@@ -811,7 +817,10 @@ void OptimalSolver::applyChanges(Problem& p, const ChangeSet& changes) {
   if (appliedChanges) {
     p.configs.logger->log(
         MovesSummaryHelper::makeMovesSummary(
-            p, result, MoveStatsAggregator(precision)));
+            p,
+            MoveSet::fromChangeSet(changes),
+            /*objectiveDeltas=*/nullptr,
+            MoveStatsAggregator(precision)));
   }
 }
 

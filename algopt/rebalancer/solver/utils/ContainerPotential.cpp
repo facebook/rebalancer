@@ -23,7 +23,7 @@ ContainerPotential::ContainerPotential(const Precision& precision)
     : contributionToGoal_(), nObjects_(0), precision_(precision) {}
 
 ContainerPotential::ContainerPotential(
-    GlobalObjectiveValue contributionToGoal,
+    LocalSearchObjectiveValue contributionToGoal,
     int nObjects,
     const Precision& precision)
     : contributionToGoal_(std::move(contributionToGoal)),
@@ -36,13 +36,12 @@ int ContainerPotential::precisionCompare(
     const ContainerPotential& potential1,
     const ContainerPotential& potential2,
     const Precision& precision) {
-  const int compare = GlobalObjectiveValue::precisionCompare(
+  const auto contributionCompare = LocalSearchObjectiveValue::precisionCompare(
       potential1.contributionToGoal_,
       potential2.contributionToGoal_,
       precision);
-
-  if (compare != 0) {
-    return compare;
+  if (contributionCompare != 0) {
+    return contributionCompare;
   }
 
   // if contributionToGoals are identical in potential1 and potential2, then
@@ -56,15 +55,15 @@ int ContainerPotential::precisionCompare(
 
 ContainerPotential ContainerPotential::operator+(
     const ContainerPotential& other) const {
-  auto sumOfContributions = GlobalObjectiveValue::add(
-      this->contributionToGoal_, other.contributionToGoal_, precision_);
-  auto sumOfObjects = this->nObjects_ + other.nObjects_;
-
   return ContainerPotential(
-      std::move(sumOfContributions), sumOfObjects, precision_);
+      LocalSearchObjectiveValue::add(
+          contributionToGoal_, other.contributionToGoal_, precision_),
+      nObjects_ + other.nObjects_,
+      precision_);
 }
 
-const GlobalObjectiveValue& ContainerPotential::getContributionToGoal() const {
+const LocalSearchObjectiveValue& ContainerPotential::getContributionToGoal()
+    const {
   return contributionToGoal_;
 }
 

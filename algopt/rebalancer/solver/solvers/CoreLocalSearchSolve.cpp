@@ -414,7 +414,9 @@ bool CoreLocalSearchSolve::improveHotContainer(
     const auto numMoves = moveResult.getMoveSet().size();
     auto movesSummary = MovesSummaryHelper::makeMovesSummary(
         problem_,
-        moveResult,
+        moveResult.getMoveSet(),
+        moveResult.hasObjectiveDeltas() ? &moveResult.getObjectiveDeltas()
+                                        : nullptr,
         perMoveStatsAggregator_,
         solveParams_.stageId,
         solveState_.cyclesStarted);
@@ -479,7 +481,8 @@ std::string CoreLocalSearchSolve::getStopLog(const std::string& stopEventName) {
 
 bool CoreLocalSearchSolve::reachedGlobalOptimum() {
   pruneTimer_.start();
-  const auto& objective = solveState_.evaluator.getObjective();
+  const auto objective = problem_.objective.getRange(
+      solveParams_.objectiveTupleStart, solveParams_.objectiveTupleEnd);
   const auto& precision = problem_.getUniverse().getPrecision();
   if (isObjectiveWithinBounds(
           objective.getValue(),
@@ -497,7 +500,7 @@ bool CoreLocalSearchSolve::reachedGlobalOptimum() {
 
 bool CoreLocalSearchSolve::reachedLocalOptimum() {
   pruneTimer_.start();
-  const auto& objective = solveState_.evaluator.getObjective();
+  const auto& objective = solveState_.userObjective;
   if (!(*spec_.enableConstrainedBoundsOptimization())) {
     pruneTimer_.stop();
     return false;
