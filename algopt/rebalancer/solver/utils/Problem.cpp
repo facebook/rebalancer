@@ -29,6 +29,7 @@
 #include "algopt/rebalancer/solver/expressions/Expression.h"
 #include "algopt/rebalancer/solver/expressions/ObjectLookup.h"
 #include "algopt/rebalancer/solver/expressions/Orchestrator.h"
+#include "algopt/rebalancer/solver/expressions/TopToBottomEvaluator.h"
 #include "algopt/rebalancer/solver/moves/DestinationsToExploreGenerator.h"
 #include "algopt/rebalancer/solver/moves/InvalidMoveFilter.h"
 #include "algopt/rebalancer/solver/moves/MoveStatsAggregator.h"
@@ -392,6 +393,14 @@ void Problem::partialApply(const ChangeSet& changes) {
 
 Orchestrator& Problem::getOrchestrator() {
   return orchestrator_;
+}
+
+double Problem::fullApplyReusingOrchestratorValues(Expression& expr) {
+  Context context;
+  for (const auto* node : orchestrator_.getNodesInPostorder()) {
+    context.apply().save(node->getId(), node->value);
+  }
+  return expr.fullApply(TopToBottomEvaluator(context), assignment);
 }
 
 const std::string& Problem::containerName(ContainerId containerId) const {

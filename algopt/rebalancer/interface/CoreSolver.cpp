@@ -24,7 +24,6 @@
 #include "algopt/rebalancer/common/RebalancerExcep.h"
 #include "algopt/rebalancer/interface/thrift/gen-cpp2/Types_types.h"
 #include "algopt/rebalancer/materializer/Materializer.h"
-#include "algopt/rebalancer/solver/expressions/TopToBottomEvaluator.h"
 #include "algopt/rebalancer/solver/if/gen-cpp2/packer_types.h"
 #include "algopt/rebalancer/solver/solvers/SolverFactory.h"
 #include "algopt/rebalancer/solver/utils/Assignment.h"
@@ -361,8 +360,10 @@ AssignmentSolution CoreSolver::materializeAndSolve(
   solution.problemProfile()->solveSec() = timer.resetSeconds();
 
   // Update user constraints with final assignment.
-  materialized->userConstraintSum->fullApply(
-      TopToBottomEvaluator(problem.apply_context), problem.assignment);
+  algopt::treeprof::EventRecorder updateUserConstraintsEvent(
+      "Update user constraints with final assignment");
+  problem.fullApplyReusingOrchestratorValues(*materialized->userConstraintSum);
+  updateUserConstraintsEvent.stop();
 
   // Final summary.
   const algopt::treeprof::EventRecorder logEvent("log solution summary");

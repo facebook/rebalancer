@@ -20,6 +20,7 @@
 #include "algopt/rebalancer/solver/expressions/Orchestrator.h"
 #include "algopt/rebalancer/solver/expressions/tests/ExpressionUtils.h"
 #include "algopt/rebalancer/solver/expressions/TopToBottomEvaluator.h"
+#include "algopt/rebalancer/solver/tests/ExprProblemCreation.h"
 #include "algopt/rebalancer/solver/utils/Assignment.h"
 #include <algopt/rebalancer/solver/utils/equivalence_sets/EquivalenceSets.h>
 
@@ -1201,6 +1202,46 @@ BENCHMARK(ObjectPartitionLookupEvaluateManyGroups) {
     context.clear();
     context.changes() = changeSet;
     evaluate(orchestrator, lookup.get(), context);
+  }
+}
+
+BENCHMARK(UpdateUserConstraints, iters) {
+  folly::BenchmarkSuspender suspend;
+  // As in the materializer, the constraints are orchestrator nodes through the
+  // hard constraint, while the user constraint sum on top of them is not.
+  static const auto userConstraints = [] {
+    constexpr int objectCount = 1e6;
+    constexpr int containerCount = 10e3;
+    constexpr int constraintCount = 300e3;
+    const auto universe = buildUniverse(objectCount, containerCount);
+    const Assignment assignment(
+        universe->getContainers().getInitialAssignment());
+    std::vector<ExprPtr> constraints;
+    auto userConstraintSum = const_expr(0, *universe);
+    for (const auto i : folly::irange(constraintCount)) {
+      auto constraint = createObjectLookup(
+          objectCount,
+          containerCount,
+          100 /*nObjectsToLookup*/,
+          10 /*nContainersToLookup*/,
+          i,
+          universe,
+          assignment);
+      inplace_add(userConstraintSum, max(0, constraint));
+      constraints.push_back(std::move(constraint));
+    }
+    return std::pair{
+        packer::tests::createTestProblem(
+            universe,
+            {const_expr(0, *universe)},
+            any_positive(constraints, *universe)),
+        std::move(userConstraintSum)};
+  }();
+  const auto& [problem, userConstraintSum] = userConstraints;
+  suspend.dismiss();
+  for ([[maybe_unused]] const auto _ : folly::irange(iters)) {
+    folly::doNotOptimizeAway(
+        problem->fullApplyReusingOrchestratorValues(*userConstraintSum));
   }
 }
 

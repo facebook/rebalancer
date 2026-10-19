@@ -128,6 +128,11 @@ class Problem {
 
   Orchestrator& getOrchestrator();
 
+  // Fully applies expr for the current assignment. Orchestrator nodes already
+  // hold their values for it, so only the nodes of expr above them are
+  // recomputed.
+  double fullApplyReusingOrchestratorValues(Expression& expr);
+
   GlobalObjective objective;
   // local-search penalty for each position of objective; empty if there is none
   GlobalObjective penaltyObjective;
