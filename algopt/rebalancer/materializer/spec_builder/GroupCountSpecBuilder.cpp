@@ -14,6 +14,7 @@
 
 #include "algopt/rebalancer/materializer/spec_builder/GroupCountSpecBuilder.h"
 
+#include "algopt/rebalancer/common/CoroUtils.h"
 #include "algopt/rebalancer/entities/Universe.h"
 #include "algopt/rebalancer/materializer/utils/LimitWrapper.h"
 #include "algopt/rebalancer/solver/expressions/Operators.h"
@@ -109,7 +110,7 @@ ExprPtr GroupCountSpecBuilder::buildObjectPartition(
       std::move(utilScopeParams));
 }
 
-std::vector<ConstraintInfo>
+folly::coro::Task<std::vector<ConstraintInfo>>
 GroupCountSpecBuilder::buildOptimizedGroupCountExprs(
     ExpressionBuilder& expressionBuilder,
     const std::vector<ScopeItemId>& scopeItemIds,
@@ -123,11 +124,11 @@ GroupCountSpecBuilder::buildOptimizedGroupCountExprs(
     // per scopeItem, since objectPartition has the dimension values of the
     // objects and also the limits there can depend on the scopeItem (if they
     // are relative)
-    return buildOptimizedGroupCountExprsForDynamicDimensions(
+    co_return co_await buildOptimizedGroupCountExprsForDynamicDimensions(
         expressionBuilder, scopeItemIds, definition, bound);
   }
 
-  return buildOptimizedGroupCountExprsForStaticDimensions(
+  co_return buildOptimizedGroupCountExprsForStaticDimensions(
       expressionBuilder, scopeItemIds, definition, bound);
 }
 
@@ -162,7 +163,7 @@ GroupCountSpecBuilder::buildOptimizedGroupCountExprsForStaticDimensions(
   return exprs;
 }
 
-std::vector<ConstraintInfo>
+folly::coro::Task<std::vector<ConstraintInfo>>
 GroupCountSpecBuilder::buildOptimizedGroupCountExprsForDynamicDimensions(
     ExpressionBuilder& expressionBuilder,
     const std::vector<ScopeItemId>& scopeItemIds,
@@ -172,28 +173,31 @@ GroupCountSpecBuilder::buildOptimizedGroupCountExprsForDynamicDimensions(
   // per scopeItem, since objectPartition has the dimension values of the
   // objects and also the limits there can depend on the scopeItem (if they
   // are relative)
-  std::vector<ConstraintInfo> exprs;
-  exprs.reserve(scopeItemIds.size());
-  for (auto scopeItemId : scopeItemIds) {
-    auto objectPartition = buildObjectPartition(expressionBuilder, scopeItemId);
+  std::vector<ConstraintInfo> exprs(
+      scopeItemIds.size(), ConstraintInfo(nullptr));
+  co_await CoroUtils::runEachFunc(
+      size_t{0}, scopeItemIds.size(), [&](size_t i) {
+        const auto scopeItemId = scopeItemIds[i];
+        auto objectPartition =
+            buildObjectPartition(expressionBuilder, scopeItemId);
 
-    auto groupLimitOverrides = limits_.getGroupsOverride(scopeItemId);
-    processFinalGroupLimits(
-        groupLimitOverrides, scopeItemId, limits_.getType());
+        auto groupLimitOverrides = limits_.getGroupsOverride(scopeItemId);
+        processFinalGroupLimits(
+            groupLimitOverrides, scopeItemId, limits_.getType());
 
-    auto expr = expressionBuilder.getObjectPartitionLookup(
-        toUtilMetric(definition),
-        scopeId_,
-        scopeItemId,
-        objectPartition,
-        groupLimitOverrides,
-        *spec_.squares() ? ObjectPartitionLookupPenaltyTransform::SQUARE
-                         : ObjectPartitionLookupPenaltyTransform::IDENTITY,
-        0,
-        bound == GroupCountSpecBound::MIN);
-    exprs.emplace_back(expr);
-  }
-  return exprs;
+        auto expr = expressionBuilder.getObjectPartitionLookup(
+            toUtilMetric(definition),
+            scopeId_,
+            scopeItemId,
+            objectPartition,
+            groupLimitOverrides,
+            *spec_.squares() ? ObjectPartitionLookupPenaltyTransform::SQUARE
+                             : ObjectPartitionLookupPenaltyTransform::IDENTITY,
+            0,
+            bound == GroupCountSpecBound::MIN);
+        exprs[i] = ConstraintInfo(expr);
+      });
+  co_return exprs;
 }
 
 folly::coro::Task<std::vector<ConstraintInfo>>
@@ -222,7 +226,7 @@ GroupCountSpecBuilder::buildIndividualGroupRequirement(
        (bound == interface::GroupCountSpecBound::MIN && !zeroAllowed)) &&
       limitRelativeTo == GroupCountSpecLimitRelativeTo::GROUP_SIZE &&
       definition != GroupCountSpecDefinition::STAYED) {
-    co_return buildOptimizedGroupCountExprs(
+    co_return co_await buildOptimizedGroupCountExprs(
         expressionBuilder, scopeFilter_.getScopeItemIds(), definition, bound);
   }
 

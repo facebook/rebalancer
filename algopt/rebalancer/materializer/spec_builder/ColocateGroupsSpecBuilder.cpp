@@ -14,6 +14,7 @@
 
 #include "algopt/rebalancer/materializer/spec_builder/ColocateGroupsSpecBuilder.h"
 
+#include "algopt/rebalancer/common/CoroUtils.h"
 #include "algopt/rebalancer/entities/Universe.h"
 #include "algopt/rebalancer/solver/expressions/GroupScopeItemTransformUtil.h"
 #include "algopt/rebalancer/solver/expressions/Operators.h"
@@ -104,10 +105,12 @@ folly::coro::Task<GoalInfo> ColocateGroupsSpecBuilder::goal(
 folly::coro::Task<std::vector<ConstraintInfo>>
 ColocateGroupsSpecBuilder::constraints(
     ExpressionBuilder& expressionBuilder) const {
-  std::vector<ConstraintInfo> result;
   const auto& updatedInitialAssignment =
       expressionBuilder.getUpdatedInitialAssignment();
-  for (const auto groupId : partition_.getGroupIds()) {
+  const auto& groupIds = partition_.getGroupIds();
+  std::vector<ConstraintInfo> result(groupIds.size(), ConstraintInfo(nullptr));
+  co_await CoroUtils::runEachFunc(size_t{0}, groupIds.size(), [&](size_t i) {
+    const auto groupId = groupIds[i];
     const auto groupWeight = folly::get_default(
         *spec_.groupToWeight(), universe_->getEntityName(groupId), 1);
     auto [constraintExpr, additionalPenaltyExpr] =
@@ -116,8 +119,8 @@ ColocateGroupsSpecBuilder::constraints(
     if (additionalPenaltyExpr) {
       additionalPenaltyExpr *= std::abs(groupWeight);
     }
-    result.emplace_back(constraintExpr, additionalPenaltyExpr);
-  }
+    result[i] = ConstraintInfo(constraintExpr, additionalPenaltyExpr);
+  });
   co_return result;
 }
 

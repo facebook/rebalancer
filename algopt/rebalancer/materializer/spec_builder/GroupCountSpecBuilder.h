@@ -50,7 +50,7 @@ class GroupCountSpecBuilder : public SpecBuilder {
       const Assignment& updatedInitialAssignment) const override;
 
  private:
-  std::vector<ConstraintInfo> buildOptimizedGroupCountExprs(
+  folly::coro::Task<std::vector<ConstraintInfo>> buildOptimizedGroupCountExprs(
       ExpressionBuilder& expressionBuilder,
       const std::vector<entities::ScopeItemId>& scopeItemIds,
       interface::GroupCountSpecDefinition definition,
@@ -62,7 +62,8 @@ class GroupCountSpecBuilder : public SpecBuilder {
       interface::GroupCountSpecDefinition definition,
       interface::GroupCountSpecBound bound) const;
 
-  std::vector<ConstraintInfo> buildOptimizedGroupCountExprsForDynamicDimensions(
+  folly::coro::Task<std::vector<ConstraintInfo>>
+  buildOptimizedGroupCountExprsForDynamicDimensions(
       ExpressionBuilder& expressionBuilder,
       const std::vector<entities::ScopeItemId>& scopeItemIds,
       interface::GroupCountSpecDefinition definition,
