@@ -14,18 +14,13 @@
 
 #include "algopt/rebalancer/solver/utils/EntityAttributes.h"
 
+#include "algopt/rebalancer/common/CoroUtils.h"
 #include "algopt/rebalancer/entities/Identifiers.h"
 #include "algopt/rebalancer/entities/Partition.h"
 #include "algopt/rebalancer/entities/Scope.h"
-#include "algopt/rebalancer/entities/Set.h"
 #include "algopt/rebalancer/solver/utils/Change.h"
 #include "algopt/rebalancer/solver/utils/ChangeSet.h"
 
-#include "multifeed/hash/HeterogeneousAccess.h"
-#include "multifeed/hash/QuickHashMap.h"
-
-#include <boost/iterator/iterator_facade.hpp>
-#include <fmt/core.h>
 #include <fmt/format.h>
 #include <folly/container/MapUtil.h>
 
@@ -51,8 +46,6 @@ entities::GroupId getOnlyGroupId(
   return *groupIds.begin();
 }
 
-entities::Set<entities::ScopeItemId> emptyScopeItemSet = {};
-
 } // namespace
 
 void EntityAttributes::updateOnApply(const ChangeSet& changes) {
@@ -71,25 +64,40 @@ void EntityAttributes::updateOnApply(const ChangeSet& changes) {
 AllowedScopeItemsPerGroup::AllowedScopeItemsPerGroup(
     const entities::Scope& scope,
     const entities::Partition& partition,
-    std::function<size_t(entities::GroupId, entities::ScopeItemId)> evaluate)
+    std::function<size_t(entities::GroupId, entities::ScopeItemId)> evaluate,
+    std::shared_ptr<folly::Executor> executor)
     : scope_(scope), partition_(partition), evaluate_(std::move(evaluate)) {
-  for (auto groupId : partition_.getGroupIds()) {
-    recomputeAllowedScopeItemsForGroup(groupId);
+  if (!executor) {
+    throw std::invalid_argument("AllowedScopeItemsPerGroup needs an executor");
   }
+  const auto& groupIds = partition_.getGroupIds();
+  folly::coro::blockingWait(
+      CoroUtils::runEachFuncAndUpdate(
+          groupIds.begin(),
+          groupIds.end(),
+          [this](const auto& it) { return evaluateAllowedScopeItems(*it); },
+          [this](auto&& groupCounts, const auto& it) {
+            allowedCounts_[*it] = std::move(groupCounts);
+          },
+          std::move(executor)));
 }
 
 void AllowedScopeItemsPerGroup::recomputeAllowedScopeItemsForGroup(
     entities::GroupId groupId) {
-  // Clear existing counts for this group
-  auto& groupCounts = allowedCounts_[groupId];
-  groupCounts.clear();
+  allowedCounts_[groupId] = evaluateAllowedScopeItems(groupId);
+}
 
+entities::Map<entities::ScopeItemId, size_t>
+AllowedScopeItemsPerGroup::evaluateAllowedScopeItems(
+    entities::GroupId groupId) const {
+  entities::Map<entities::ScopeItemId, size_t> groupCounts;
   for (auto scopeItemId : scope_.getScopeItemIds()) {
     const auto count = evaluate_(groupId, scopeItemId);
     if (count > 0) {
       groupCounts[scopeItemId] = count;
     }
   }
+  return groupCounts;
 }
 
 void AllowedScopeItemsPerGroup::setOn(

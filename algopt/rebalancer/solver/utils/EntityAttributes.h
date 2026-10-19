@@ -17,11 +17,12 @@
 #include "algopt/rebalancer/entities/Partition.h"
 #include "algopt/rebalancer/entities/Scope.h"
 
+#include <folly/executors/CPUThreadPoolExecutor.h>
+
 #include <functional>
 #include <memory>
 #include <optional>
 #include <stddef.h>
-#include <utility>
 #pragma once
 
 namespace facebook::rebalancer {
@@ -58,10 +59,12 @@ class EntityAttributes {
 // how many objects from a group can be moved to a scopeitem.
 class AllowedScopeItemsPerGroup : public EntityAttributes {
  public:
+  // Evaluates the initial counts in parallel on executor
   explicit AllowedScopeItemsPerGroup(
       const entities::Scope& scope,
       const entities::Partition& partition,
-      std::function<size_t(entities::GroupId, entities::ScopeItemId)> evaluate);
+      std::function<size_t(entities::GroupId, entities::ScopeItemId)> evaluate,
+      std::shared_ptr<folly::Executor> executor);
 
   // Returns the count of objects that can be moved from groupId to scopeItemId
   // Returns nullopt if no object of groupId can be moved to scopeItemId
@@ -80,6 +83,8 @@ class AllowedScopeItemsPerGroup : public EntityAttributes {
       entities::ContainerId srcContainer) override;
 
   void recomputeAllowedScopeItemsForGroup(entities::GroupId groupId);
+  entities::Map<entities::ScopeItemId, size_t> evaluateAllowedScopeItems(
+      entities::GroupId groupId) const;
   const entities::Scope& scope_;
   const entities::Partition& partition_;
   std::function<size_t(entities::GroupId, entities::ScopeItemId)> evaluate_;

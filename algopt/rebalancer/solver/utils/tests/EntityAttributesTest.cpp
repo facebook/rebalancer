@@ -21,25 +21,18 @@
 #include "algopt/rebalancer/solver/utils/Assignment.h"
 #include "algopt/rebalancer/solver/utils/EntityAttributes.h"
 #include "algopt/rebalancer/solver/utils/EntityAttributesStore.h"
-#include "algopt/rebalancer/solver/utils/ObjectStore.h"
-
-#include "multifeed/hash/HeterogeneousAccess.h"
 
 #include "gtest/gtest.h"
-#include <boost/iterator/iterator_facade.hpp>
-#include <fmt/core.h>
-#include <folly/container/MapUtil.h>
 #include <folly/coro/GtestHelpers.h>
 #include <folly/coro/Task.h>
 #include <folly/ExceptionWrapper.h>
+#include <folly/executors/CPUThreadPoolExecutor.h>
 #include <folly/tracing/AsyncStack.h>
 
-#include <coroutine>
 #include <memory>
 #include <optional>
 #include <stddef.h>
 #include <string>
-#include <utility>
 #include <vector>
 namespace facebook::rebalancer::packer::tests {
 // Test setup:
@@ -117,7 +110,7 @@ CO_TEST_F(AllowedScopeItemsPerGroupTest, ReturnsCountOfUnassignedObjects) {
     }
 
     size_t oddCount = 0, evenCount = 0;
-    for (const auto& obj : allUnassignedObjects) {
+    for (const auto obj : allUnassignedObjects) {
       if (obj == obj1 || obj == obj3) {
         oddCount++;
       } else {
@@ -134,7 +127,8 @@ CO_TEST_F(AllowedScopeItemsPerGroupTest, ReturnsCountOfUnassignedObjects) {
       std::make_shared<AllowedScopeItemsPerGroup>(
           universe_->getScope(parityScope),
           universe_->getPartition(oddEvenPartitionId),
-          evaluateFn));
+          evaluateFn,
+          std::make_shared<folly::CPUThreadPoolExecutor>(4)));
 
   // Test initial state: All 4 objects are unassigned.
   // Fetch attributes and verify counts for valid and invalid group-scope pairs.
