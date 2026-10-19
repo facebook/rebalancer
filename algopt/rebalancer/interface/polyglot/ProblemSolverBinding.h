@@ -60,6 +60,12 @@ class ProblemSolverBinding {
       std::unordered_map<std::string, double> objectToValue,
       double defaultValue);
 
+  void addObjectDimensionByPartition(
+      const std::string& dimensionName,
+      const std::string& partitionName,
+      std::unordered_map<std::string, double> groupToValue,
+      double defaultValue);
+
   void addObjectDimensionVector(
       const std::string& dimensionName,
       std::unordered_map<std::string, std::vector<double>> objectToValues,

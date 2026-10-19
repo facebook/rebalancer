@@ -169,6 +169,32 @@ TEST_P(
   EXPECT_EQ(4, dimension.getValue(universe->getObjectId("object_2"), si1));
 }
 
+TEST_P(UniverseProblemBuilderAsyncTest, GroupBasedStaticDimension) {
+  auto builder = getBuilder();
+  builder.setAssignment(
+      folly::F14FastMap<std::string, std::vector<std::string>>{
+          {"container_0", {"object_0", "object_2"}},
+          {"container_1", {"object_1"}}});
+  builder.addPartition(
+      "partition",
+      folly::F14FastMap<std::string, std::vector<std::string>>{
+          {"group_0", {"object_0", "object_1"}}, {"group_1", {"object_2"}}});
+  builder.addObjectDimension(
+      "compact_dim",
+      "partition",
+      folly::F14FastMap<std::string, double>{{"group_0", 7}},
+      /*defaultValue=*/1);
+
+  const auto universe = builder.build();
+  const auto& dimension =
+      universe->getObjects()
+          .getDimension(universe->getDimensionId("compact_dim"))
+          .only();
+  EXPECT_EQ(7, dimension.getValue(universe->getObjectId("object_0")));
+  EXPECT_EQ(7, dimension.getValue(universe->getObjectId("object_1")));
+  EXPECT_EQ(1, dimension.getValue(universe->getObjectId("object_2")));
+}
+
 TEST_P(UniverseProblemBuilderAsyncTest, GroupBackedDynamicDimensionStorage) {
   auto builder = getBuilder();
   builder.setGroupBackedDynamicDimensions(/*enable=*/true);

@@ -283,6 +283,19 @@ class ProblemSolver {
     requires IsIterableOverPairs<ObjectToValue, std::string, double>;
 
   /**
+      GroupToValue is an iterable over a (string, double) pair, e.g.,:
+          folly::F14FastMap<std::string, double>
+      Each object takes the value of its group in the disjoint partition.
+    */
+  template <typename GroupToValue>
+  ProblemSolver& addObjectDimension(
+      const std::string& dimensionName,
+      const std::string& partitionName,
+      GroupToValue groupToValue,
+      double defaultValue = 0)
+    requires IsIterableOverPairs<GroupToValue, std::string, double>;
+
+  /**
       ObjectToValues is a map of the following form:
           map<std::string, vector<double>>
           (e.g., map = folly::F14FastMap or std::map or std::unordered_map)
@@ -808,6 +821,21 @@ ProblemSolver& ProblemSolver::addObjectDimension(
       std::move(objectToValue),
       defaultValue,
       std::move(scaleByUsageMap));
+  return *this;
+}
+
+template <typename GroupToValue>
+ProblemSolver& ProblemSolver::addObjectDimension(
+    const std::string& dimensionName,
+    const std::string& partitionName,
+    GroupToValue groupToValue,
+    double defaultValue)
+  requires IsIterableOverPairs<GroupToValue, std::string, double>
+{
+  REBALANCER_PROBLEM_SETUP_TIMER_SCOPE();
+  checker.addObjectDimension(dimensionName, partitionName, groupToValue);
+  getProblemBuilder().addObjectDimension(
+      dimensionName, partitionName, std::move(groupToValue), defaultValue);
   return *this;
 }
 

@@ -121,6 +121,14 @@ class UniverseProblemBuilder {
       std::optional<ObjectToValue> scaleByUsageMap = std::nullopt)
     requires IsIterableOverPairs<ObjectToValue, std::string, double>;
 
+  template <typename GroupToValue>
+  void addObjectDimension(
+      const std::string& dimensionName,
+      const std::string& partitionName,
+      GroupToValue groupToValue,
+      double defaultValue)
+    requires IsIterableOverPairs<GroupToValue, std::string, double>;
+
   template <typename ObjectToValues>
   void addObjectDimension(
       const std::string& dimensionName,
@@ -321,6 +329,21 @@ class UniverseProblemBuilder {
       std::optional<ObjectToValue> scaleByUsageMap)
     requires IsIterableOverPairs<ObjectToValue, std::string, double>;
 
+  template <typename GroupToValue>
+  static entities::ObjectIdToDoubleMap expandGroupValues(
+      const entities::PartitionData& partitionData,
+      const GroupToValue& groupToValue,
+      double defaultValue,
+      std::size_t totalObjects);
+
+  template <typename GroupToValue>
+  folly::coro::Task<void> addObjectDimensionImpl(
+      entities::DimensionId dimensionId,
+      entities::PartitionId partitionId,
+      GroupToValue groupToValue,
+      double defaultValue)
+    requires IsIterableOverPairs<GroupToValue, std::string, double>;
+
   template <typename ObjectToValues>
   folly::coro::Task<void> addObjectDimensionImpl(
       entities::DimensionId dimensionId,
@@ -520,31 +543,8 @@ folly::coro::Task<void> UniverseProblemBuilder::addDynamicObjectDimensionImpl(
       scopeItemToGroupToValue.end(),
       [&](const auto& it) {
         const auto& [scopeItemName, groupToValue] = *it;
-        std::size_t expectedNonDefault = 0;
-        for (const auto& [groupName, value] : groupToValue) {
-          if (value == defaultValue) {
-            continue;
-          }
-          expectedNonDefault +=
-              partitionData->partition
-                  ->getObjectIds(partitionData->getGroupId(groupName))
-                  .size();
-        }
-
-        entities::ObjectIdToDoubleMap objectIdToValue(
-            totalObjects, defaultValue, expectedNonDefault);
-        for (const auto& [groupName, value] : groupToValue) {
-          if (value == defaultValue) {
-            continue;
-          }
-          const auto groupId = partitionData->getGroupId(groupName);
-          const auto& objectIds =
-              partitionData->partition->getObjectIds(groupId);
-          for (const auto objectId : objectIds) {
-            objectIdToValue.emplace(objectId, value);
-          }
-        }
-        return objectIdToValue;
+        return expandGroupValues(
+            *partitionData, groupToValue, defaultValue, totalObjects);
       },
       [&](auto&& objectIdToValue, const auto& it) {
         const auto& [scopeItemName, _] = *it;
@@ -707,6 +707,79 @@ folly::coro::Task<void> UniverseProblemBuilder::addObjectDimensionImpl(
       entities::ObjectDimensionData{
           .dimension = std::make_unique<const entities::ObjectDimension>(
               std::move(objectValues))});
+}
+
+template <typename GroupToValue>
+entities::ObjectIdToDoubleMap UniverseProblemBuilder::expandGroupValues(
+    const entities::PartitionData& partitionData,
+    const GroupToValue& groupToValue,
+    double defaultValue,
+    std::size_t totalObjects) {
+  std::size_t expectedNonDefault = 0;
+  for (const auto& [groupName, value] : groupToValue) {
+    if (value == defaultValue) {
+      continue;
+    }
+    expectedNonDefault +=
+        partitionData.partition
+            ->getObjectIds(partitionData.getGroupId(groupName))
+            .size();
+  }
+
+  entities::ObjectIdToDoubleMap objectIdToValue(
+      totalObjects, defaultValue, expectedNonDefault);
+  for (const auto& [groupName, value] : groupToValue) {
+    if (value == defaultValue) {
+      continue;
+    }
+    const auto groupId = partitionData.getGroupId(groupName);
+    const auto& objectIds = partitionData.partition->getObjectIds(groupId);
+    for (const auto objectId : objectIds) {
+      objectIdToValue.emplace(objectId, value);
+    }
+  }
+  return objectIdToValue;
+}
+
+template <typename GroupToValue>
+void UniverseProblemBuilder::addObjectDimension(
+    const std::string& dimensionName,
+    const std::string& partitionName,
+    GroupToValue groupToValue,
+    double defaultValue)
+  requires IsIterableOverPairs<GroupToValue, std::string, double>
+{
+  const auto dimensionId = universe_.makeObjectDimensionId(dimensionName);
+  const auto partitionId = universe_.getPartitionId(partitionName);
+  maybeExecuteAsync(addObjectDimensionImpl(
+      dimensionId, partitionId, std::move(groupToValue), defaultValue));
+}
+
+template <typename GroupToValue>
+folly::coro::Task<void> UniverseProblemBuilder::addObjectDimensionImpl(
+    entities::DimensionId dimensionId,
+    entities::PartitionId partitionId,
+    GroupToValue groupToValue,
+    double defaultValue)
+  requires IsIterableOverPairs<GroupToValue, std::string, double>
+{
+  const auto partitionData = co_await universe_.getPartition(partitionId);
+  if (!partitionData->partition->isDisjoint()) {
+    throw std::runtime_error(
+        "Group based object dimension is only supported for disjoint partition.");
+  }
+
+  // TODO: consider group-backed storage, like the dynamic API, after
+  // addressing its lookup performance.
+  co_return co_await universe_.addObjectDimension(
+      dimensionId,
+      entities::ObjectDimensionData{
+          .dimension = std::make_unique<const entities::ObjectDimension>(
+              expandGroupValues(
+                  *partitionData,
+                  groupToValue,
+                  defaultValue,
+                  universe_.getObjects()->numObjects))});
 }
 
 template <typename ObjectToValues>

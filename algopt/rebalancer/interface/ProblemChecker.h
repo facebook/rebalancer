@@ -80,6 +80,13 @@ class ProblemChecker {
         std::string,
         double>;
 
+  template <typename GroupToValue>
+  void addObjectDimension(
+      const std::string& dimensionName,
+      const std::string& partitionName,
+      const GroupToValue& groupToValue)
+    requires IsIterableOverPairs<GroupToValue, std::string, double>;
+
   template <typename ObjectToGroup>
   void addPartition(
       const std::string& partitionName,
@@ -297,6 +304,8 @@ class ProblemChecker {
   void addGlobalName(const std::string& name, EntityType type);
   void addPartition(const std::string& partition);
   void addGroup(const std::string& partition, const std::string& group);
+  // Registers an object dimension whose values are keyed by partition groups.
+  void addObjectDimensionName(const std::string& dimensionName);
 
   template <class T>
   void addDimension(
@@ -429,6 +438,21 @@ void ProblemChecker::addDynamicObjectDimension(
   }
   addObjectDimension(dimensionName, ScopeItemToGroupToValue());
   dynamicObjectDimensionToScope_.emplace(dimensionName, scope);
+}
+
+template <typename GroupToValue>
+void ProblemChecker::addObjectDimension(
+    const std::string& dimensionName,
+    const std::string& partitionName,
+    const GroupToValue& groupToValue)
+  requires IsIterableOverPairs<GroupToValue, std::string, double>
+{
+  checkPartitionExists(partitionName);
+  for (const auto& [group, value] : groupToValue) {
+    checkGroupExists(partitionName, group);
+  }
+  checkObjectNameIsSet();
+  addObjectDimensionName(dimensionName);
 }
 
 template <typename ObjectToGroup>

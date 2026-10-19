@@ -116,6 +116,15 @@ void ProblemSolverBinding::addObjectDimension(
       dimensionName, std::move(objectToValue), defaultValue);
 }
 
+void ProblemSolverBinding::addObjectDimensionByPartition(
+    const std::string& dimensionName,
+    const std::string& partitionName,
+    std::unordered_map<std::string, double> groupToValue,
+    double defaultValue) {
+  solver_->addObjectDimension(
+      dimensionName, partitionName, std::move(groupToValue), defaultValue);
+}
+
 void ProblemSolverBinding::addObjectDimensionVector(
     const std::string& dimensionName,
     std::unordered_map<std::string, std::vector<double>> objectToValues,

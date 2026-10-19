@@ -67,6 +67,14 @@ unique class ProblemSolverBinding {
     double defaultValue,
   ) throws;
 
+  @output_name(py="addObjectDimensionByPartition")
+  mut void addObjectDimensionByPartition(
+    string dimensionName,
+    string partitionName,
+    unordered_map<string, double> groupToValue,
+    double defaultValue,
+  ) throws;
+
   @output_name(py="addObjectDimensionVector")
   mut void addObjectDimensionVector(
     string dimensionName,

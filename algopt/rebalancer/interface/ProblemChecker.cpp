@@ -201,6 +201,10 @@ void ProblemChecker::addObjectPartitionRoutingDimension(
     checkGroupExists(partitionName, group);
   }
 
+  addObjectDimensionName(dimensionName);
+}
+
+void ProblemChecker::addObjectDimensionName(const std::string& dimensionName) {
   // Unlike for containers, where everything is defined as a ScopeDimension,
   // there is no explicit concept of PartitionDimension for Objects. So use
   // ObjectName as the entityType
