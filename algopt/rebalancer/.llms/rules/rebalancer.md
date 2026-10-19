@@ -1,6 +1,9 @@
 ---
-oncalls: ['algopt']
-apply_to_regex: 'algopt/rebalancer/.*'
+name: rebalancer
+metadata:
+  oncalls: ['algopt']
+  strict: true
+  apply_to_path: 'algopt/rebalancer/.*'
 ---
 
 # Rebalancer
