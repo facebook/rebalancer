@@ -242,9 +242,8 @@ std::shared_ptr<const MoveStatsAggregatorConfig> Problem::makeMoveStatsConfig()
       *moveStatsSpec.trackObjects(),
       *moveStatsSpec.showAllChangedObjectivesInMovesSummary());
 
-  auto& equivalenceSets = getEquivalenceSets();
-
   if (moveStatsSpec.trackObjectsWhitelist()) {
+    const auto& equivalenceSets = getEquivalenceSets();
     moveStatsConfig->trackObjectsWhitelist = PackerSet<ObjectId>();
 
     for (auto& objectName : *moveStatsSpec.trackObjectsWhitelist()) {
