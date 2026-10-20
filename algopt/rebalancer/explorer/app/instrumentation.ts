@@ -3,7 +3,6 @@
 // This file is automatically loaded by Next.js on startup.
 // Telemetry destinations are configured in .env via OTEL_RESOURCE_ATTRIBUTES:
 //   • fb.traces.scuba.table (default: nest_traces)
-//   • fb.logs.scuba.table (default: nest_logs)
 //   • fb.metrics.scuba.table (default: nest_metrics)
 //   • fb.traces.artillery (set to True to enable trace visualization in Tracery)
 //
