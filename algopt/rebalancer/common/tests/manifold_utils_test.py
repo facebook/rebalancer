@@ -142,8 +142,7 @@ class ManifoldUtilsTest(BaseFacebookTestCase):
         # pyre-fixme[2]: Parameter must be annotated.
         mock_asyncdownload,
         file_name: str,
-        # pyre-fixme[2]: Parameter must be annotated.
-        data,
+        data: str,
     ) -> None:
         mock_asyncdownload.side_effect = lambda *args: get_mock_manifold_download(
             file_name, data, *args
