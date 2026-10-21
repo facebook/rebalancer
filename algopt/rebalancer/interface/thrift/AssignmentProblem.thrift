@@ -59,7 +59,7 @@ struct AssignmentProblem {
   // solver loads the exported TorchScript model and prunes predicted-illegal
   // candidate moves before native evaluation. Presence of the spec enables the
   // filter; leave it unset to disable. Enabled via
-  // ProblemSolver::enableLearnedMoveFilter(), mirroring enableInvalidMoveFilter.
+  // ProblemSolver::enableLearnedMoveFilter().
   25: optional SolverSpecs.LearnedMoveFilterSpec learnedMoveFilterSpec;
 
   26: bool validateAppliedMoves = false;

@@ -378,10 +378,6 @@ void ProblemSolverBinding::shouldUseDynamicObjectOrdering(
   solver_->shouldUseDynamicObjectOrdering(useDynamicObjectOrdering);
 }
 
-void ProblemSolverBinding::enableInvalidMoveFilter(bool enable) {
-  solver_->enableInvalidMoveFilter(enable);
-}
-
 void ProblemSolverBinding::validateAppliedMoves(bool enable) {
   solver_->validateAppliedMoves(enable);
 }

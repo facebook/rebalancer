@@ -192,8 +192,6 @@ class ProblemSolverBinding {
 
   void shouldUseDynamicObjectOrdering(bool useDynamicObjectOrdering);
 
-  void enableInvalidMoveFilter(bool enable);
-
   void validateAppliedMoves(bool enable);
 
   void setPrecision(

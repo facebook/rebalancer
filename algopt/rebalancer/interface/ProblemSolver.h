@@ -496,10 +496,6 @@ class ProblemSolver {
   // exploring the same moves several times; this is no-op for optimal solver
   void shouldUseDynamicObjectOrdering(bool useDynamicObjectOrdering);
 
-  // Deprecated compatibility API. Invalid move filtering is solver-controlled.
-  // TODO(@yangsea): cleanup client side usage.
-  void enableInvalidMoveFilter(bool enable);
-
   void validateAppliedMoves(bool enable);
 
   // Scope used by the optimal solver to partition the problem into

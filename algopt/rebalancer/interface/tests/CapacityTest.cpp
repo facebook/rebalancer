@@ -1459,8 +1459,6 @@ TEST_P(CapacityTest, DuringInvalidMoveFilterAllowsWithinScopeItemBalance) {
   balanceSpec.formula() = BalanceSpecFormula::IDEAL;
   solver->addGoal(balanceSpec);
 
-  solver->enableInvalidMoveFilter(true);
-
   LocalSearchSolverSpec solverSpec;
   solverSpec.moveTypeList()->push_back(
       ProblemSolver::makeMoveTypeSpec(SingleFastMoveTypeSpec()));

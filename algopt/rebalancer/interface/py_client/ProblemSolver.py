@@ -366,10 +366,6 @@ class ProblemSolver:
         self._ps.shouldUseDynamicObjectOrdering(useDynamicObjectOrdering)
         return self
 
-    def enableInvalidMoveFilter(self, enable: bool) -> ProblemSolver:
-        self._ps.enableInvalidMoveFilter(enable)
-        return self
-
     def validateAppliedMoves(self, enable: bool) -> ProblemSolver:
         self._ps.validateAppliedMoves(enable)
         return self

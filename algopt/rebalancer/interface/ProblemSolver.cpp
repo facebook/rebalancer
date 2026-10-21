@@ -771,10 +771,6 @@ void ProblemSolver::shouldUseDynamicObjectOrdering(
   useDynamicObjectOrdering_ = useDynamicObjectOrdering;
 }
 
-void ProblemSolver::enableInvalidMoveFilter(bool /*enable*/) {
-  REBALANCER_PROBLEM_SETUP_TIMER_SCOPE();
-}
-
 void ProblemSolver::validateAppliedMoves(bool enable) {
   REBALANCER_PROBLEM_SETUP_TIMER_SCOPE();
   validateAppliedMoves_ = enable;

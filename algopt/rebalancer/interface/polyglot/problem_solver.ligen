@@ -240,9 +240,6 @@ unique class ProblemSolverBinding {
   @output_name(py="shouldUseDynamicObjectOrdering")
   mut void shouldUseDynamicObjectOrdering(bool useDynamicObjectOrdering) throws;
 
-  @output_name(py="enableInvalidMoveFilter")
-  mut void enableInvalidMoveFilter(bool enable) throws;
-
   @output_name(py="validateAppliedMoves")
   mut void validateAppliedMoves(bool enable) throws;
 

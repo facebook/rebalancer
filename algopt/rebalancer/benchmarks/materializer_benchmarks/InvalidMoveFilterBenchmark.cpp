@@ -110,7 +110,6 @@ void runImpl(
     solver->addScope("rack", inputs.containerToScopeItem);
     solver->addConstraint(
         makeCapacitySpec(inputs.zeroLimitScopeItems, definition));
-    solver->enableInvalidMoveFilter(true);
 
     interface::LocalSearchSolverSpec solverSpec;
     solverSpec.moveTypeList()->push_back(
