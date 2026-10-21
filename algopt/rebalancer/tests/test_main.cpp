@@ -17,9 +17,16 @@
 #include "gtest/gtest.h"
 #include <folly/init/Init.h>
 
+#ifdef REBALANCER_USE_XPRESS
+#include "algopt/lp/environment/XpressEnvironment.h"
+#endif
+
 int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   const folly::Init init(&argc, &argv);
-  // You can add custom initialization code here if needed
+#ifdef REBALANCER_XPRESS_LICENSE_PATH
+  facebook::algopt::lp::XpressEnvironment::makeFromLicenseFile(
+      REBALANCER_XPRESS_LICENSE_PATH);
+#endif
   return RUN_ALL_TESTS();
 }

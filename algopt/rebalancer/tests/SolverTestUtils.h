@@ -17,6 +17,10 @@
 #include "algopt/lp/environment/Environment.h"
 #include "algopt/rebalancer/interface/thrift/gen-cpp2/SolverSpecs_types.h"
 
+#ifdef REBALANCER_USE_XPRESS
+#include "algopt/lp/environment/XpressEnvironment.h"
+#endif
+
 #include <gtest/gtest.h>
 #include <thrift/lib/cpp2/FieldRef.h>
 
@@ -128,6 +132,20 @@ makeAvailableOptimalSolverSpec() {
   do {                                                            \
     if constexpr (!facebook::algopt::isHiGHSAvailable()) {                  \
       GTEST_SKIP() << "HiGHS not available";                      \
+    }                                                             \
+  } while (0)
+
+// Skips the current test if XPRESS is running under the free community
+// license, which caps problems at 5000 rows plus columns (Xpress error 120).
+// Call this in tests that build problems intentionally larger than that.
+#define REBALANCER_SKIP_IF_XPRESS_COMMUNITY_LICENSE()                       \
+  do {                                                            \
+    if constexpr (facebook::algopt::isXpressAvailable()) {                  \
+      if (facebook::algopt::lp::XpressEnvironment::isCommunityLicense()) {  \
+        GTEST_SKIP()                                              \
+            << "Problem exceeds the Xpress community license's "  \
+               "row+column limit";                                \
+      }                                                            \
     }                                                             \
   } while (0)
 

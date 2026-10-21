@@ -21,6 +21,7 @@
 #endif
 #ifdef REBALANCER_USE_XPRESS
 #include "algopt/lp/detail/xpress/XpressProblem.h"
+#include "algopt/lp/environment/XpressEnvironment.h"
 #endif
 #ifdef REBALANCER_USE_HIGHS
 #include "algopt/lp/detail/highs/HiGHSProblem.h"

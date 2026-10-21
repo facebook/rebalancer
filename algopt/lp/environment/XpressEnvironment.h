@@ -32,6 +32,9 @@ class XpressEnvironment {
   static void makeFromLicenseFile(std::string_view license_file_path);
   static std::shared_ptr<XpressEnvironment> get();
   static bool isInitialized();
+  /// Returns true if the current license is the free community license,
+  /// which is limited to problems with 5000 rows plus columns (Xpress error 120).
+  static bool isCommunityLicense();
   static constexpr std::string_view notInitializedMsg =
       "XpressEnvironment is not initialized; please use XpressEnvironment::makeFromLicenseFile().";
 

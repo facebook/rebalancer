@@ -20,6 +20,7 @@
 #include "algopt/lp/generic/Problem.h"
 #include "algopt/lp/generic/SolverError.h"
 #include "algopt/rebalancer/algopt_common/TestUtils.h"
+#include "algopt/rebalancer/tests/SolverTestUtils.h"
 
 #include <fmt/format.h>
 #include <folly/container/irange.h>
@@ -668,6 +669,7 @@ void verifyModelFingerprint(
 #ifdef REBALANCER_USE_XPRESS
 
 TEST(EndToEndTest, Xpress) {
+  REBALANCER_SKIP_IF_XPRESS_COMMUNITY_LICENSE();
   runTest(ProblemFactory::makeXpressProblem);
   testLogging(ProblemFactory::makeXpressProblem);
   testQuadraticExpressions(ProblemFactory::makeXpressProblem);
@@ -678,6 +680,7 @@ TEST(EndToEndTest, Xpress) {
 }
 
 TEST(EndToEndTest, XpressSimplified) {
+  REBALANCER_SKIP_IF_XPRESS_COMMUNITY_LICENSE();
   auto factory = []() {
     return ProblemFactory::makeSimplifiedProblem(
         ProblemFactory::makeXpressProblem);

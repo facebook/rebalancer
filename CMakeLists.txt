@@ -74,6 +74,161 @@ endif()
 option(USE_XPRESS "Build with FICO Xpress solver" OFF)
 if(USE_XPRESS)
     add_compile_definitions(REBALANCER_USE_XPRESS)
+
+    # The Xpress release family this connector supports: 9.9.x
+    # (XPVERSION_MAJOR 47, per xprs.h) is required of any local install.
+    set(_xpress_required_xpversion_major "47")
+    set(_xpress_required_version_family "9.9.x")
+    # 9.9.0 is the release downloaded from GitHub if the user does not
+    # provide a local Xpress installation.
+    set(_xpress_download_version "9.9.0")
+
+    # Locate the Xpress SDK:
+    # XPRESSDIR is the environment variable FICO's own xpvars.sh
+    # sets; XPRESS_ROOT is a CMake-only override for cases where XPRESSDIR
+    # isn't set in the invoking shell. If the user set either one, they're
+    # pointing at a specific install on purpose: fail loudly if it doesn't
+    # pan out instead of silently falling back to the GitHub auto-download
+    # below, which would mask whatever is wrong with that install.
+    if((DEFINED ENV{XPRESSDIR} AND NOT "$ENV{XPRESSDIR}" STREQUAL "") OR XPRESS_ROOT)
+        set(_xpress_user_specified_dir TRUE)
+    else()
+        set(_xpress_user_specified_dir FALSE)
+    endif()
+
+    find_path(XPRESS_INCLUDE_DIR xprs.h
+        HINTS "$ENV{XPRESSDIR}/include" "${XPRESS_ROOT}/include")
+    find_library(XPRESS_LIBRARY xprs
+        HINTS "$ENV{XPRESSDIR}/lib" "${XPRESS_ROOT}/lib")
+
+    if(XPRESS_INCLUDE_DIR AND XPRESS_LIBRARY)
+        # Found a pre-existing local install. Reject it up front if it's not
+        # the version this connector supports, rather than letting it fail
+        # later with a "#if XPVERSION == 47" #error deep inside
+        # XpressProblem.cpp part-way through compilation. XPVERSION_MAJOR is
+        # documented in xprs.h as identical to XPVERSION.
+        file(STRINGS "${XPRESS_INCLUDE_DIR}/xprs.h" _xpress_version_line
+            REGEX "^#define[ \t]+XPVERSION_MAJOR[ \t]+\\(?[0-9]+\\)?")
+        if(_xpress_version_line MATCHES "\\(?([0-9]+)\\)?$")
+            set(_xpress_found_version "${CMAKE_MATCH_1}")
+        endif()
+        if(NOT _xpress_found_version STREQUAL _xpress_required_xpversion_major)
+            if(_xpress_user_specified_dir)
+                message(FATAL_ERROR
+                    "XPRESSDIR/XPRESS_ROOT points at an Xpress install with "
+                    "XPVERSION_MAJOR=${_xpress_found_version} at "
+                    "${XPRESS_INCLUDE_DIR}, but this connector requires "
+                    "XPVERSION_MAJOR=${_xpress_required_xpversion_major} "
+                    "(Xpress ${_xpress_required_version_family}). Install "
+                    "Xpress ${_xpress_required_version_family} there, or "
+                    "unset XPRESSDIR/XPRESS_ROOT to use the auto-downloaded "
+                    "community edition instead.")
+            endif()
+            message(STATUS
+                "Found Xpress XPVERSION_MAJOR=${_xpress_found_version} at "
+                "${XPRESS_INCLUDE_DIR}, but this connector requires "
+                "XPVERSION_MAJOR=${_xpress_required_xpversion_major} "
+                "(Xpress ${_xpress_required_version_family}); ignoring this install.")
+            unset(XPRESS_INCLUDE_DIR CACHE)
+            unset(XPRESS_LIBRARY CACHE)
+        else()
+            # A full SDK install bundles a license file (xpauth.xpr for a
+            # commercial license, or community-xpauth.xpr for the public
+            # release) next to it; pick it up automatically so the test suite
+            # can use it without extra setup.
+            get_filename_component(_xpress_install_dir "${XPRESS_INCLUDE_DIR}" DIRECTORY)
+            find_file(XPRESS_LICENSE
+                NAMES xpauth.xpr community-xpauth.xpr
+                HINTS "${_xpress_install_dir}/bin")
+        endif()
+    elseif(_xpress_user_specified_dir)
+        message(FATAL_ERROR
+            "XPRESSDIR/XPRESS_ROOT was set, but no Xpress SDK (xprs.h / "
+            "libxprs) was found there. Fix the install at that location, or "
+            "unset XPRESSDIR/XPRESS_ROOT to use the auto-downloaded "
+            "community edition instead.")
+    endif()
+
+    if(NOT (XPRESS_INCLUDE_DIR AND XPRESS_LIBRARY))
+        # No usable local install found (missing, or the wrong version
+        # above). Auto-download the SDK (headers, libraries, and a bundled
+        # community license) from FICO's public GitHub release, for the
+        # platforms that ship a scriptable archive there. (The Windows and
+        # macOS Intel assets are installers with no scriptable payload, so
+        # they're excluded here; see the Xpress section of the README for
+        # manual installation instructions on those platforms.)
+        if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64")
+            set(_xpress_asset_name "xp${_xpress_download_version}_linux_x86_64.tar.gz")
+            set(_xpress_asset_sha256 "6dbbdbb25e9c8d8e2c7ce1577ad9a79037cccfc34c8bff2511bf561b95a9556d")
+            set(_xpress_dl_library_name "libxprs.so")
+        elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
+            set(_xpress_asset_name "xp${_xpress_download_version}_linux_aarch64.tar.gz")
+            set(_xpress_asset_sha256 "1348e31bdb0994bc8989797975141704b111d98dcad0a2342076685116c5a126")
+            set(_xpress_dl_library_name "libxprs.so")
+        elseif(APPLE AND CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64")
+            set(_xpress_asset_name "xp${_xpress_download_version}_macos_arm64.tar.gz")
+            set(_xpress_asset_sha256 "ec1ca76cb1417f15e6ae048a871803934c19f7c868189645c055989d000bea6e")
+            set(_xpress_dl_library_name "libxprs.dylib")
+        endif()
+    endif()
+
+    if(NOT (XPRESS_INCLUDE_DIR AND XPRESS_LIBRARY) AND _xpress_asset_name)
+        set(_xpress_dl_dir "${CMAKE_BINARY_DIR}/_deps/xpress-download")
+        set(_xpress_dl_include "${_xpress_dl_dir}/include")
+        set(_xpress_dl_library "${_xpress_dl_dir}/lib/${_xpress_dl_library_name}")
+        set(_xpress_dl_license "${_xpress_dl_dir}/bin/community-xpauth.xpr")
+
+        if(NOT EXISTS "${_xpress_dl_include}/xprs.h" OR NOT EXISTS "${_xpress_dl_library}"
+                OR NOT EXISTS "${_xpress_dl_license}")
+            set(_xpress_tar "${CMAKE_BINARY_DIR}/_deps/${_xpress_asset_name}")
+            message(STATUS "Xpress SDK not found locally; downloading FICO Xpress v${_xpress_download_version} from GitHub...")
+            file(DOWNLOAD
+                "https://github.com/fico-xpress/releases/releases/download/v${_xpress_download_version}/${_xpress_asset_name}"
+                "${_xpress_tar}"
+                EXPECTED_HASH SHA256=${_xpress_asset_sha256}
+                STATUS _xpress_dl_status)
+            list(GET _xpress_dl_status 0 _xpress_dl_code)
+            if(NOT _xpress_dl_code EQUAL 0)
+                list(GET _xpress_dl_status 1 _xpress_dl_msg)
+                message(FATAL_ERROR "Failed to download the Xpress SDK: ${_xpress_dl_msg}")
+            endif()
+
+            file(MAKE_DIRECTORY "${_xpress_dl_dir}")
+            execute_process(
+                COMMAND ${CMAKE_COMMAND} -E tar xzf "${_xpress_tar}"
+                WORKING_DIRECTORY "${_xpress_dl_dir}"
+                RESULT_VARIABLE _xpress_extract_result)
+            if(NOT _xpress_extract_result EQUAL 0)
+                message(FATAL_ERROR "Failed to extract the Xpress SDK payload.")
+            endif()
+
+            if(NOT EXISTS "${_xpress_dl_include}/xprs.h" OR NOT EXISTS "${_xpress_dl_library}"
+                    OR NOT EXISTS "${_xpress_dl_license}")
+                message(FATAL_ERROR
+                    "Downloaded the Xpress SDK but the expected files are missing "
+                    "under ${_xpress_dl_dir}. See the Xpress section of the README.")
+            endif()
+        endif()
+
+        set(XPRESS_INCLUDE_DIR "${_xpress_dl_include}")
+        set(XPRESS_LIBRARY "${_xpress_dl_library}")
+        set(XPRESS_LICENSE "${_xpress_dl_license}")
+    endif()
+
+    if(NOT XPRESS_INCLUDE_DIR OR NOT XPRESS_LIBRARY)
+        message(FATAL_ERROR
+            "USE_XPRESS=ON but the Xpress SDK could not be found and could not "
+            "be auto-downloaded on this platform. Set the XPRESSDIR environment "
+            "variable or pass -DXPRESS_ROOT=... pointing at your Xpress "
+            "installation. See the Xpress section of the README for per-platform "
+            "installation instructions.")
+    endif()
+
+    message(STATUS "Found Xpress headers: ${XPRESS_INCLUDE_DIR}")
+    message(STATUS "Found Xpress library: ${XPRESS_LIBRARY}")
+    if(XPRESS_LICENSE)
+        message(STATUS "Found Xpress license: ${XPRESS_LICENSE}")
+    endif()
 endif()
 
 option(REBALANCER_BUILD_WEBSITE_EXAMPLES
@@ -472,6 +627,11 @@ if(highs_FOUND OR USE_HIGHS)
     target_link_libraries(rebalancer PRIVATE highs::highs)
 endif()
 
+if(USE_XPRESS)
+    target_include_directories(rebalancer PRIVATE ${XPRESS_INCLUDE_DIR})
+    target_link_libraries(rebalancer PRIVATE ${XPRESS_LIBRARY})
+endif()
+
 if(REBALANCER_BUILD_EXPLORER)
     set(_exp_cpp algopt/rebalancer/explorer/cpp_server)
     set(rebalancer_explorer_sources
@@ -649,6 +809,18 @@ if(TESTS)
             Folly::folly
             GTest::gtest
     )
+    if(USE_XPRESS)
+        # test_main.cpp includes XpressEnvironment.h (and transitively
+        # xprb_cpp.h) whenever REBALANCER_USE_XPRESS is defined, so it needs
+        # the Xpress include dir to compile even though the symbols it calls
+        # are only resolved later, at rebalancer_tests.exe link time via the
+        # rebalancer target.
+        target_include_directories(test_main PRIVATE ${XPRESS_INCLUDE_DIR})
+        if(XPRESS_LICENSE)
+            target_compile_definitions(test_main PRIVATE
+                REBALANCER_XPRESS_LICENSE_PATH="${XPRESS_LICENSE}")
+        endif()
+    endif()
 endif()
 
 if(BENCHMARKS)
@@ -719,6 +891,12 @@ if(TESTS)
             ${CMAKE_CURRENT_BINARY_DIR}
             ${THRIFT_OUTPUT_DIR}
     )
+    if(USE_XPRESS)
+        # SolverTestUtils.h (included by most test files, not just Xpress
+        # ones) pulls in XpressEnvironment.h for the community-license skip
+        # check, so this target needs the Xpress include dir too.
+        target_include_directories(rebalancer_tests.exe PRIVATE ${XPRESS_INCLUDE_DIR})
+    endif()
     if(highs_FOUND OR USE_HIGHS)
         target_link_libraries(rebalancer_tests.exe PUBLIC highs::highs)
     endif()
