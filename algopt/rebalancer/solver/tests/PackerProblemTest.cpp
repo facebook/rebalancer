@@ -3226,7 +3226,10 @@ TEST(PackerProblemTest, TestBalanceWithUtilIncreaseCost) {
   BalanceSpec balanceSpec;
   balanceSpec.scope() = "container";
   balanceSpec.dimension() = "cpu"; // average is 0.59
-  balanceSpec.upperBound() = 0.21; // effectively 0.8 (average + 0.21)
+  Limit upperBounds;
+  upperBounds.type() = LimitType::ABSOLUTE;
+  upperBounds.globalLimit() = 0.21; // effectively 0.8 (average + 0.21)
+  balanceSpec.upperBounds() = upperBounds;
   balanceSpec.boundType() = BalanceSpecBoundType::ABSOLUTE;
   balanceSpec.formula() = BalanceSpecFormula::SQUARES;
   problem->addGoal(balanceSpec);
