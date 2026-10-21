@@ -1306,7 +1306,9 @@ TEST_P(
   balanceSpec.dimension() = "cpu";
   balanceSpec.formula() = BalanceSpecFormula::IDEAL;
   balanceSpec.ignoreUpperBoundForIdealWithAbsOrRelBoundTypes() = false;
-  balanceSpec.upperBound() = 1.5;
+  auto& upperBounds = balanceSpec.upperBounds().ensure();
+  upperBounds.type() = LimitType::ABSOLUTE;
+  upperBounds.globalLimit() = 1.5;
   balanceSpec.fixAverageToInitial() = false;
   balanceSpec.filter()->itemsBlacklist() = {"host4"};
 
