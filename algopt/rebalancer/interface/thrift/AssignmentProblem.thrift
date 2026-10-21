@@ -49,10 +49,10 @@ struct AssignmentProblem {
   21: bool publishMetrics = false;
   22: bool publishEquivalenceSetsInfo = false;
   23: bool useDynamicObjectOrdering = false;
-  // When enabled, we compute disallowed (Object, Container) pairs and skip them
-  // upfront. This improves latency when constraint violations invalidate many
-  // evaluations, but consumes extra memory proportional to the number of
-  // invalid (object, container) pairs.
+
+  // Deprecated: invalid move filtering is controlled automatically. This
+  // field is kept for source and serialization compatibility and is ignored.
+  @thrift.Deprecated{message = "Invalid move filtering is solver-controlled"}
   24: bool enableInvalidMoveFilter = false;
 
   // Learned (GNN) move-legality heuristic config (rebalancer-net). When set, the

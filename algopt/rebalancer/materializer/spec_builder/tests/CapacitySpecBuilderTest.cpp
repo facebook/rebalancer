@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "algopt/rebalancer/algopt_common/Precision.h"
 #include "algopt/rebalancer/algopt_common/TestUtils.h"
 #include "algopt/rebalancer/interface/thrift/gen-cpp2/ProblemSpecs_types.h"
 #include "algopt/rebalancer/materializer/spec_builder/CapacitySpecBuilder.h"
@@ -24,6 +25,7 @@
 #include <gtest/gtest.h>
 #include <thrift/lib/cpp/util/EnumUtils.h>
 
+#include <limits>
 #include <set>
 
 namespace facebook::rebalancer::materializer::tests {
@@ -977,6 +979,127 @@ TEST_F(CapacitySpecBuilderTest, PreFilterBlocksRelativeLimitWithZeroCapacity) {
   }
   expectedInvalidPairs.emplace(task(5), containerId("host1"));
   EXPECT_EQ(expectedInvalidPairs, collectInvalidPairsFor(spec));
+}
+
+CO_TEST_F(
+    CapacitySpecBuilderTest,
+    FilterSortedPrefixesHandleNaNAndInfiniteObjectValues) {
+  co_await addObjectDimension(
+      "nan_cpu",
+      {{task(1), std::numeric_limits<double>::infinity()},
+       {task(2), 0.2},
+       {task(3), 0.4},
+       {task(4), 0.8},
+       {task(5), 1.6}},
+      std::numeric_limits<double>::quiet_NaN());
+  co_await addScopeDimension(
+      "nan_cpu",
+      scopeId("host"),
+      {{"host0", 1}, {"host1", 1}, {"host2", 1}, {"host3", 1}},
+      0);
+
+  interface::CapacitySpec spec;
+  spec.scope() = "host";
+  spec.dimension() = "nan_cpu";
+  spec.bound() = interface::CapacitySpecBound::MAX;
+  spec.definition() = interface::CapacitySpecDefinition::AFTER;
+  spec.limit()->type() = interface::LimitType::ABSOLUTE;
+  spec.limit()->globalLimit() = 0.3;
+  spec.limit()->scopeItemLimits() = {
+      {"host1", 0.5}, {"host2", 1.0}, {"host3", 2.0}};
+
+  const std::set<InvalidPair> expected{
+      {task(1), containerId("host1")},
+      {task(1), containerId("host2")},
+      {task(1), containerId("host3")},
+      {task(3), containerId("host0")},
+      {task(4), containerId("host0")},
+      {task(4), containerId("host1")},
+      {task(5), containerId("host0")},
+      {task(5), containerId("host1")},
+      {task(5), containerId("host2")},
+  };
+  EXPECT_EQ(expected, collectInvalidPairsFor(spec));
+}
+
+CO_TEST_F(
+    CapacitySpecBuilderTest,
+    FilterSkipsNonPositiveNormalizationCoefficient) {
+  co_await addObjectDimension(
+      "negative_capacity",
+      {{task(0), 0},
+       {task(1), 0.1},
+       {task(2), 0.2},
+       {task(3), 0.4},
+       {task(4), 0.8},
+       {task(5), 1.6}},
+      0);
+  co_await addScopeDimension(
+      "negative_capacity",
+      scopeId("host"),
+      {{"host0", -1}, {"host1", 1}, {"host2", 2}, {"host3", 4}},
+      0);
+
+  interface::CapacitySpec spec;
+  spec.scope() = "host";
+  spec.dimension() = "negative_capacity";
+  spec.bound() = interface::CapacitySpecBound::MAX;
+  spec.definition() = interface::CapacitySpecDefinition::AFTER;
+  spec.useLegacyFormula() = true;
+  spec.limit()->type() = interface::LimitType::ABSOLUTE;
+  spec.limit()->globalLimit() = 0.3;
+  spec.limit()->scopeItemLimits() = {{"host0", 2.0}, {"host3", 4.0}};
+
+  const std::set<InvalidPair> expected{
+      {task(3), containerId("host1")},
+      {task(4), containerId("host1")},
+      {task(5), containerId("host1")},
+      {task(3), containerId("host2")},
+      {task(4), containerId("host2")},
+      {task(5), containerId("host2")},
+  };
+  EXPECT_EQ(expected, collectInvalidPairsFor(spec));
+}
+
+CO_TEST_F(
+    CapacitySpecBuilderTest,
+    FilterOrdersIncrementalThresholdsByExactInvalidPrefix) {
+  const auto tolerance = algopt::kEpsilon;
+  co_await addObjectDimension(
+      "fine_cpu",
+      {{task(0), 1},
+       {task(1), 0.4 + 0.75 * tolerance},
+       {task(2), 0},
+       {task(3), 0},
+       {task(4), 0},
+       {task(5), 0}},
+      0);
+  co_await addScopeDimension(
+      "fine_cpu",
+      scopeId("host"),
+      {{"host0", 0}, {"host1", 1}, {"host2", 2}, {"host3", 4}},
+      0);
+
+  interface::CapacitySpec spec;
+  spec.scope() = "host";
+  spec.dimension() = "fine_cpu";
+  spec.bound() = interface::CapacitySpecBound::MAX;
+  spec.definition() = interface::CapacitySpecDefinition::AFTER;
+  spec.useLegacyFormula() = true;
+  spec.filter()->itemsWhitelist() = {"host1", "host2", "host3"};
+  spec.limit()->type() = interface::LimitType::ABSOLUTE;
+  spec.limit()->globalLimit() = 0.4 - 0.5 * tolerance;
+  spec.limit()->scopeItemLimits() = {
+      {"host2", 0.4 - tolerance}, {"host3", 0.0}};
+
+  const std::set<InvalidPair> expected{
+      {task(0), containerId("host1")},
+      {task(1), containerId("host1")},
+      {task(0), containerId("host2")},
+      {task(0), containerId("host3")},
+      {task(1), containerId("host3")},
+  };
+  EXPECT_EQ(expected, collectInvalidPairsFor(spec));
 }
 
 TEST_F(CapacitySpecBuilderTest, FilterAfterUsesInitialUtilForBrokenScopeItem) {

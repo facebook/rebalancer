@@ -487,4 +487,48 @@ CO_TEST_F(SingleFastMoveTypeTest, FilterReducesEvaluatedMoves) {
   }
 }
 
+CO_TEST_F(SingleFastMoveTypeTest, FilterPrunesAllMovesBeforeEvaluation) {
+  const auto universe = co_await setUpUniverse();
+  const auto numObjects = universe->getObjects().getObjectIds().size();
+  const auto numContainers = universe->getContainers().getContainerIds().size();
+
+  const std::vector<entities::ObjectId> hotObjects = {
+      object(3), object(5), object(6), object(7)};
+  auto filter = std::make_unique<InvalidMoveFilter>(numObjects, numContainers);
+  for (const auto containerId : universe->getContainers().getContainerIds()) {
+    filter->markInvalid(hotObjects, containerId);
+  }
+
+  auto containers = std::make_shared<PackerSet<entities::ContainerId>>(
+      PackerSet<entities::ContainerId>{
+          container(1),
+          container(2),
+          container(3),
+          container(4),
+          container(5)});
+  createProblem(
+      /*objectiveTuple=*/
+      {object_lookup(
+          makeAllUnequalObjectVector(9),
+          containers,
+          Assignment(universe->getContainers().getInitialAssignment()))},
+      /*constraint=*/const_expr(0, *universe),
+      /*higherPriorityObjConfig=*/std::nullopt,
+      /*nonAcceptingContainers=*/{},
+      std::move(filter));
+
+  const auto result = SingleFastMoveType(
+                          interface::LocalSearchSolverSpec{},
+                          interface::SingleFastMoveTypeSpec{})
+                          .findBestMove(
+                              getMovesEvaluator(),
+                              container(3),
+                              getMoveStatsAggregator(),
+                              getEmptySearchHints(),
+                              std::numeric_limits<double>::max());
+
+  EXPECT_TRUE(result.getMoveSet().empty());
+  EXPECT_EQ(0, getTotalMovesEvaluated());
+}
+
 } // namespace facebook::rebalancer::packer::tests

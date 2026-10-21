@@ -34,7 +34,7 @@ constexpr std::array<Strategy, 4> kAbbaRound = {
     Strategy::Batching,
     Strategy::SlidingWindow,
 };
-constexpr size_t kExperimentRounds = 3;
+constexpr size_t kExperimentRounds = 6;
 constexpr size_t kExperimentSamples = kExperimentRounds * kAbbaRound.size();
 
 constexpr std::string_view strategyName(const Strategy strategy) {

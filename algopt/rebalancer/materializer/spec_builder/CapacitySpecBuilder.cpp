@@ -25,6 +25,7 @@
 #include "algopt/rebalancer/solver/moves/InvalidMoveFilter.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstddef>
 #include <iterator>
 #include <optional>
@@ -47,6 +48,83 @@ std::optional<GroupUtilizationBound> getGroupUtilizationBound(
     return spec.utilizationBound()->get_groupUtilizationBound();
   }
   return std::nullopt;
+}
+
+using ThresholdKey = std::pair<double, double>;
+using ThresholdToBlockedScopeItems =
+    Map<ThresholdKey, std::vector<ScopeItemId>>;
+
+template <
+    typename ObjectIds,
+    typename ScalarDimension,
+    typename IsInvalid,
+    typename MergeInvalidObjects>
+void markByScanningEachThreshold(
+    const ObjectIds& objectIds,
+    const ScalarDimension& scalarDim,
+    const ThresholdToBlockedScopeItems& thresholdToBlockedScopeItems,
+    const IsInvalid& isInvalid,
+    const MergeInvalidObjects& mergeInvalidObjects) {
+  for (const auto& [thresholdKey, blockedScopeItemIds] :
+       thresholdToBlockedScopeItems) {
+    algopt::DynamicBitSet invalidObjects(objectIds.size());
+    for (const auto objectId : objectIds) {
+      if (isInvalid(scalarDim.getValue(objectId), thresholdKey)) {
+        invalidObjects.set(objectId.asIndex());
+      }
+    }
+    mergeInvalidObjects(invalidObjects, blockedScopeItemIds);
+  }
+}
+
+template <
+    typename ObjectIds,
+    typename ScalarDimension,
+    typename IsInvalid,
+    typename MergeInvalidObjects>
+void markBySortedPrefixes(
+    const ObjectIds& objectIds,
+    const ScalarDimension& scalarDim,
+    const ThresholdToBlockedScopeItems& thresholdToBlockedScopeItems,
+    const IsInvalid& isInvalid,
+    const MergeInvalidObjects& mergeInvalidObjects) {
+  std::vector<std::pair<double, ObjectId>> objectsByValue;
+  objectsByValue.reserve(objectIds.size());
+  for (const auto objectId : objectIds) {
+    const auto value = scalarDim.getValue(objectId);
+    if (!std::isnan(value)) {
+      objectsByValue.emplace_back(value, objectId);
+    }
+  }
+  std::sort(
+      objectsByValue.begin(),
+      objectsByValue.end(),
+      [](const auto& lhs, const auto& rhs) { return lhs.first > rhs.first; });
+
+  std::vector<std::pair<std::size_t, ThresholdKey>> thresholdsByInvalidCount;
+  thresholdsByInvalidCount.reserve(thresholdToBlockedScopeItems.size());
+  for (const auto& [thresholdKey, _] : thresholdToBlockedScopeItems) {
+    const auto invalidEnd = std::partition_point(
+        objectsByValue.begin(), objectsByValue.end(), [&](const auto& object) {
+          return isInvalid(object.first, thresholdKey);
+        });
+    thresholdsByInvalidCount.emplace_back(
+        static_cast<std::size_t>(invalidEnd - objectsByValue.begin()),
+        thresholdKey);
+  }
+  std::sort(thresholdsByInvalidCount.begin(), thresholdsByInvalidCount.end());
+
+  algopt::DynamicBitSet invalidObjects(objectIds.size());
+  std::size_t invalidCount = 0;
+  for (const auto& [nextInvalidCount, thresholdKey] :
+       thresholdsByInvalidCount) {
+    while (invalidCount < nextInvalidCount) {
+      invalidObjects.set(objectsByValue.at(invalidCount).second.asIndex());
+      ++invalidCount;
+    }
+    mergeInvalidObjects(
+        invalidObjects, thresholdToBlockedScopeItems.at(thresholdKey));
+  }
 }
 
 } // namespace
@@ -535,8 +613,12 @@ void CapacitySpecBuilder::populateInvalidMoveFilter(
   }
 
   const auto objectIds = universe_->getObjects().getObjectIds();
-  using ThresholdKey = std::pair<double, double>;
-  Map<ThresholdKey, std::vector<ScopeItemId>> thresholdToBlockedScopeItems;
+  const auto isInvalid = [&](double value, const ThresholdKey& thresholdKey) {
+    const auto& [threshold, normCoef] = thresholdKey;
+    return !std::isnan(value) &&
+        precision.isStrictlyGtZero((value - threshold) * normCoef);
+  };
+  ThresholdToBlockedScopeItems thresholdToBlockedScopeItems;
   // Objects won't be blocked from a scope item they belonged to in either the
   // original or updated assignment, allowing moves within its containers.
   Map<ScopeItemId, std::vector<ObjectId>> scopeItemToExemptObjects;
@@ -578,28 +660,23 @@ void CapacitySpecBuilder::populateInvalidMoveFilter(
                                    : std::max(limit - initialUtil, 0.0);
     const auto normCoef =
         getNormalizationCoefficient(scopeItemId, averageCapacity);
-    if (!precision.isStrictlyGtZero((maxObjValue - threshold) * normCoef)) {
+    if (!(normCoef > 0)) {
+      continue;
+    }
+    const auto thresholdKey = ThresholdKey{threshold, normCoef};
+    if (!isInvalid(maxObjValue, thresholdKey)) {
       // No object exceeds this scope item's bound; nothing to block.
       continue;
     }
-    thresholdToBlockedScopeItems[{threshold, normCoef}].push_back(scopeItemId);
+    thresholdToBlockedScopeItems[thresholdKey].push_back(scopeItemId);
   }
 
   if (thresholdToBlockedScopeItems.empty()) {
     return;
   }
 
-  for (const auto& [thresholdKey, blockedScopeItemIds] :
-       thresholdToBlockedScopeItems) {
-    const auto& [threshold, normCoef] = thresholdKey;
-    algopt::DynamicBitSet invalidObjectsForThreshold(objectIds.size());
-    for (const auto objectId : objectIds) {
-      const auto value = scalarDim.getValue(objectId);
-      if (precision.isStrictlyGtZero((value - threshold) * normCoef)) {
-        invalidObjectsForThreshold.set(objectId.asIndex());
-      }
-    }
-
+  const auto mergeInvalidObjects = [&](const auto& invalidObjectsForThreshold,
+                                       const auto& blockedScopeItemIds) {
     for (const auto scopeItemId : blockedScopeItemIds) {
       auto invalidObjects = invalidObjectsForThreshold;
       if (const auto* exemptObjects =
@@ -612,6 +689,29 @@ void CapacitySpecBuilder::populateInvalidMoveFilter(
         invalidMoveFilter.markInvalid(invalidObjects, containerId);
       }
     }
+  };
+
+  // Threshold-major construction performs O(objectCount * numThresholds)
+  // predicate checks. Sorting is dominated by O(objectCount * log(objectCount))
+  // because objectCount generally exceeds numThresholds.
+  const auto shouldSort =
+      static_cast<double>(thresholdToBlockedScopeItems.size()) >
+      std::log2(
+          static_cast<double>(std::max<std::size_t>(objectIds.size(), 2)));
+  if (shouldSort) {
+    markBySortedPrefixes(
+        objectIds,
+        scalarDim,
+        thresholdToBlockedScopeItems,
+        isInvalid,
+        mergeInvalidObjects);
+  } else {
+    markByScanningEachThreshold(
+        objectIds,
+        scalarDim,
+        thresholdToBlockedScopeItems,
+        isInvalid,
+        mergeInvalidObjects);
   }
 }
 

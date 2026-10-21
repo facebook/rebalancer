@@ -496,10 +496,8 @@ class ProblemSolver {
   // exploring the same moves several times; this is no-op for optimal solver
   void shouldUseDynamicObjectOrdering(bool useDynamicObjectOrdering);
 
-  // Enable the invalid move filter which pre-computes disallowed (Object,
-  // Container) pairs and skips them upfront. This improves latency when
-  // constraint violations invalidate many evaluations, but consumes extra
-  // memory proportional to the number of invalid (object, container) pairs.
+  // Deprecated compatibility API. Invalid move filtering is solver-controlled.
+  // TODO(@yangsea): cleanup client side usage.
   void enableInvalidMoveFilter(bool enable);
 
   void validateAppliedMoves(bool enable);
@@ -619,9 +617,6 @@ class ProblemSolver {
 
   bool useDynamicObjectOrdering_ = true;
 
-  // When enabled, pre-compute invalid (object, container) pairs and skip them
-  // during move evaluation to improve performance.
-  bool enableInvalidMoveFilter_ = false;
   bool validateAppliedMoves_ = false;
 
   // if specified, optimal slover will use this scope to partition the problem

@@ -84,6 +84,20 @@ TEST(ParallelExecutionSelectorTest, PreservesExplicitBatchingOptions) {
   EXPECT_FALSE(selector.isExploring());
 }
 
+TEST(ParallelExecutionSelectorTest, AutoExploresSixAbbaRounds) {
+  ParallelExecutionSelector selector(autoConfig());
+  const Observation observation{.evaluations = 1'000, .durationSecs = 1.0};
+
+  constexpr size_t kExperimentSamples = 6 * kAbba.size();
+  for (size_t sample = 0; sample < kExperimentSamples; ++sample) {
+    ASSERT_TRUE(selector.isExploring());
+    ASSERT_EQ(selector.strategy(), kAbba.at(sample % kAbba.size()));
+    selector.record(observation, "test");
+  }
+
+  EXPECT_FALSE(selector.isExploring());
+}
+
 TEST(ParallelExecutionSelectorTest, AutoLocksBatchingWhenItIsFaster) {
   ParallelExecutionSelector selector(autoConfig());
 

@@ -143,8 +143,7 @@ std::shared_ptr<MaterializedProblem> Materializer::materialize() {
       "Materialize Constraints & Goals");
   const auto constraintIds = universe_->getConstraints().getConstraintIds();
   const auto goalIds = universe_->getGoals().getGoalIds();
-  auto* invalidMoveFilter = invalidMoveFilter_.get();
-
+  auto* const invalidMoveFilter = invalidMoveFilter_.get();
   std::vector<folly::coro::Task<void>> tasks;
   tasks.reserve(constraintIds.size() + goalIds.size());
   for (auto constraintId : constraintIds) {

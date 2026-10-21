@@ -38,7 +38,7 @@ namespace {
 const static auto nonDefaultLpTolerances = packer::tests::LpAssertOptions{
     .lpTolerances =
         algopt::lp::Tolerances{.constraint = 1e-7, .integer = 1e-6}};
-}
+} // namespace
 
 class MaterializerTest : public SpecBuilderTestBase<int> {
  protected:
@@ -192,17 +192,20 @@ class MaterializerTest : public SpecBuilderTestBase<int> {
       std::shared_ptr<const entities::Universe> universe,
       int numThreads,
       bool continuousExpressions = false,
-      bool useSeparatedLocalSearchPenaltyObjective = false) {
+      bool useSeparatedLocalSearchPenaltyObjective = false,
+      bool enableInvalidMoveFilter = true) {
     const std::shared_ptr<folly::CPUThreadPoolExecutor> executor =
         get_executor(numThreads);
 
+    auto wrappedExecutor =
+        std::make_shared<algopt::treeprof::ExecutorWrapper>(executor);
     return Materializer::materialize(
-        std::make_shared<algopt::treeprof::ExecutorWrapper>(executor),
+        std::move(wrappedExecutor),
         std::move(universe),
         continuousExpressions,
         std::make_shared<LogCollector>(),
-        false,
-        false,
+        /*shouldCollectMetrics=*/false,
+        enableInvalidMoveFilter,
         useSeparatedLocalSearchPenaltyObjective);
   }
 
@@ -213,6 +216,64 @@ INSTANTIATE_TEST_CASE_P(
     NumThreads,
     MaterializerTest,
     interface::testThreadCounts());
+
+CO_TEST_P(MaterializerTest, InvalidMoveFilterEnabledByDefault) {
+  interface::CapacitySpec spec;
+  spec.scope() = "host";
+  spec.dimension() = "cpu";
+  spec.bound() = interface::CapacitySpecBound::MAX;
+  spec.definition() = interface::CapacitySpecDefinition::DURING;
+  spec.limit()->globalLimit() = 0;
+
+  interface::ConstraintSpecs constraint;
+  constraint.capacitySpec() = std::move(spec);
+  co_await addConstraint(
+      "constraint0",
+      constraint,
+      interface::ConstraintPolicy::HARD,
+      100,
+      10000,
+      0);
+
+  const auto materialized =
+      getMaterializedProblem(buildUniverse(), MaterializerTest::GetParam());
+
+  EXPECT_NE(nullptr, materialized->invalidMoveFilter);
+  if (materialized->invalidMoveFilter) {
+    EXPECT_TRUE(materialized->invalidMoveFilter->isMarkedInvalid(
+        task(0), containerId("host1")));
+    EXPECT_FALSE(materialized->invalidMoveFilter->isMarkedInvalid(
+        task(0), containerId("host0")));
+  }
+}
+
+CO_TEST_P(MaterializerTest, InvalidMoveFilterDisabledByRollout) {
+  interface::CapacitySpec spec;
+  spec.scope() = "host";
+  spec.dimension() = "cpu";
+  spec.bound() = interface::CapacitySpecBound::MAX;
+  spec.definition() = interface::CapacitySpecDefinition::DURING;
+  spec.limit()->globalLimit() = 0;
+
+  interface::ConstraintSpecs constraint;
+  constraint.capacitySpec() = std::move(spec);
+  co_await addConstraint(
+      "constraint0",
+      constraint,
+      interface::ConstraintPolicy::HARD,
+      100,
+      10000,
+      0);
+
+  const auto materialized = getMaterializedProblem(
+      buildUniverse(),
+      MaterializerTest::GetParam(),
+      /*continuousExpressions=*/false,
+      /*useSeparatedLocalSearchPenaltyObjective=*/false,
+      /*enableInvalidMoveFilter=*/false);
+
+  EXPECT_EQ(nullptr, materialized->invalidMoveFilter);
+}
 
 CO_TEST_P(MaterializerTest, DefaultConstraintPolicy) {
   co_await addTestConstraint(

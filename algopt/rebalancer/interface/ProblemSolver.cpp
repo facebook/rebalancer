@@ -625,7 +625,6 @@ AssignmentSolution ProblemSolver::solve() {
   problem->descendingHotnessContainersOverride() =
       descendingHotnessContainersOverride;
   problem->useDynamicObjectOrdering() = useDynamicObjectOrdering_;
-  problem->enableInvalidMoveFilter() = enableInvalidMoveFilter_;
   problem->validateAppliedMoves() = validateAppliedMoves_;
   problem->rolloutConfig() = rolloutConfig_;
   if (decompositionScopeName_) {
@@ -772,9 +771,8 @@ void ProblemSolver::shouldUseDynamicObjectOrdering(
   useDynamicObjectOrdering_ = useDynamicObjectOrdering;
 }
 
-void ProblemSolver::enableInvalidMoveFilter(bool enable) {
+void ProblemSolver::enableInvalidMoveFilter(bool /*enable*/) {
   REBALANCER_PROBLEM_SETUP_TIMER_SCOPE();
-  enableInvalidMoveFilter_ = enable;
 }
 
 void ProblemSolver::validateAppliedMoves(bool enable) {
