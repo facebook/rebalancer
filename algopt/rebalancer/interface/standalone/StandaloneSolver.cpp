@@ -415,6 +415,9 @@ static void possiblyModifyRasHybridSolverSpec(
   if (FLAGS_solve_time >= 0) {
     rasHybridSolverSpec.localSearchSolveTime() = FLAGS_solve_time;
   }
+  if (FLAGS_move_limit >= 0) {
+    rasHybridSolverSpec.stopAfterMoves() = FLAGS_move_limit;
+  }
 }
 
 static void possiblyModifySolverSpec(AssignmentProblem& problem) {

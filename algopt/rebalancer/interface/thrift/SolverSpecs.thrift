@@ -149,6 +149,8 @@ struct RasHybridSolverSpec {
   10: optional RasLocalSearchMetadata rasLocalSearchMetadata;
   // Stores the stages we want for local search
   // @fb-only: 11: list<resourcepools.RasLocalSearchStageSpec> localSearchStages = [];
+  // If set, local search stops after this many moves in total, across all stages
+  12: optional i32 stopAfterMoves;
 }
 
 struct HottestTraversalConfig {
