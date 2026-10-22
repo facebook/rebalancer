@@ -143,8 +143,9 @@ DEFINE_int32(
 
 DEFINE_bool(
     enable_invalid_move_filter,
-    false,
-    "Enable invalid move filter for local search.");
+    true,
+    "Override rolloutConfig.enableInvalidMoveFilter: materialize "
+    "constraint-derived invalid move filters for local search.");
 
 DEFINE_bool(
     validate_applied_moves,
@@ -476,7 +477,8 @@ static void possiblyModifyProblem(AssignmentProblem& problem) {
   // explicitly, so replays preserve the value the problem was solved with.
   if (!gflags::GetCommandLineFlagInfoOrDie("enable_invalid_move_filter")
            .is_default) {
-    problem.enableInvalidMoveFilter() = FLAGS_enable_invalid_move_filter;
+    problem.rolloutConfig()->enableInvalidMoveFilter() =
+        FLAGS_enable_invalid_move_filter;
   }
   if (!gflags::GetCommandLineFlagInfoOrDie("validate_applied_moves")
            .is_default) {
