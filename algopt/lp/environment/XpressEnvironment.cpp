@@ -42,8 +42,6 @@ void XpressEnvironment::makeFromLicenseFile(
     throw std::runtime_error("XpressEnvironment already initialized");
   }
 
-  self_ = std::shared_ptr<XpressEnvironment>(new XpressEnvironment);
-
   // Set XPRESS env variable only if it's not already set.
   setenv("XPRESS", license_file_path.data(), DO_NOT_OVERWRITE_ENV_VAR);
 
@@ -64,6 +62,19 @@ void XpressEnvironment::makeFromLicenseFile(
     throw std::runtime_error(
         fmt::format("xpress license file not found at {}", filepath.string()));
   }
+
+  // Check the license here, where failure is a return code. Left to BCL, the
+  // check happens on the first XPRBprob and exits the process on failure.
+  // Nonzero includes 32, a community-license fallback that cannot solve
+  // production-sized models.
+  auto env = std::shared_ptr<XpressEnvironment>(new XpressEnvironment);
+  if (const int rc = XPRSinit(nullptr); rc != 0) {
+    char msg[512] = {};
+    XPRSgetlicerrmsg(msg, sizeof(msg));
+    throw std::runtime_error(
+        fmt::format("xpress license check failed ({}): {}", rc, msg));
+  }
+  self_ = std::move(env);
 }
 
 std::shared_ptr<XpressEnvironment> XpressEnvironment::get() {
