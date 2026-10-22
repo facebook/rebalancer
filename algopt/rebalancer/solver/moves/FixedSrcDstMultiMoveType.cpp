@@ -497,7 +497,14 @@ std::vector<ObjectBundle> FixedSrcDstMoveCandidateGenerator<MoveTypeSpecT>::
         auto allowedCount = allowedScopeItemsPerGroup->getAllowedCount(
             serverId, *dstContainerShape);
 
-        if (!allowedCount.has_value() || *allowedCount == 0) {
+        if (!allowedCount.has_value()) {
+          // Server exhausted - mark as fixed and skip
+          problem.assignment.markFixedAndRemoveFromDynamicIndices(
+              srcContainer, thisServerParts);
+          continue;
+        }
+
+        if (*allowedCount == 0) {
           // Not enough resources for this reservation type
           continue;
         }

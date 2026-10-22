@@ -64,7 +64,6 @@ class AllowedScopeItemsPerGroup : public EntityAttributes {
       const entities::Scope& scope,
       const entities::Partition& partition,
       std::function<size_t(entities::GroupId, entities::ScopeItemId)> evaluate,
-      std::function<void(entities::GroupId)> onGroupExhausted,
       std::shared_ptr<folly::Executor> executor);
 
   // Returns the count of objects that can be moved from groupId to scopeItemId
@@ -84,15 +83,11 @@ class AllowedScopeItemsPerGroup : public EntityAttributes {
       entities::ContainerId srcContainer) override;
 
   void recomputeAllowedScopeItemsForGroup(entities::GroupId groupId);
-  void notifyIfExhausted(
-      entities::GroupId groupId,
-      const entities::Map<entities::ScopeItemId, size_t>& groupCounts) const;
   entities::Map<entities::ScopeItemId, size_t> evaluateAllowedScopeItems(
       entities::GroupId groupId) const;
   const entities::Scope& scope_;
   const entities::Partition& partition_;
   std::function<size_t(entities::GroupId, entities::ScopeItemId)> evaluate_;
-  std::function<void(entities::GroupId)> onGroupExhausted_;
   // Store counts per group per scope item (items with count > 0)
   entities::Map<entities::GroupId, entities::Map<entities::ScopeItemId, size_t>>
       allowedCounts_;

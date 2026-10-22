@@ -31,7 +31,6 @@
 
 #include <memory>
 #include <optional>
-#include <set>
 #include <stddef.h>
 #include <string>
 #include <vector>
@@ -122,7 +121,6 @@ CO_TEST_F(AllowedScopeItemsPerGroupTest, ReturnsCountOfUnassignedObjects) {
     return groupId == oddGroup ? oddCount : evenCount;
   };
 
-  std::set<entities::GroupId> exhaustedGroups;
   auto store = EntityAttributesStore{};
   store.registerAttributes(
       "test",
@@ -130,7 +128,6 @@ CO_TEST_F(AllowedScopeItemsPerGroupTest, ReturnsCountOfUnassignedObjects) {
           universe_->getScope(parityScope),
           universe_->getPartition(oddEvenPartitionId),
           evaluateFn,
-          [&](entities::GroupId groupId) { exhaustedGroups.insert(groupId); },
           std::make_shared<folly::CPUThreadPoolExecutor>(4)));
 
   // Test initial state: All 4 objects are unassigned.
@@ -142,7 +139,6 @@ CO_TEST_F(AllowedScopeItemsPerGroupTest, ReturnsCountOfUnassignedObjects) {
     EXPECT_EQ(2, *attr.getAllowedCount(evenGroup, evenScope));
     EXPECT_EQ(0, *attr.getAllowedCount(evenGroup, oddScope));
     EXPECT_EQ(0, *attr.getAllowedCount(oddGroup, evenScope));
-    EXPECT_TRUE(exhaustedGroups.empty());
   }
 
   // Test after moving obj0 (even) to container0 (evenScope).
@@ -156,7 +152,6 @@ CO_TEST_F(AllowedScopeItemsPerGroupTest, ReturnsCountOfUnassignedObjects) {
 
     EXPECT_EQ(2, *attr.getAllowedCount(oddGroup, oddScope));
     EXPECT_EQ(1, *attr.getAllowedCount(evenGroup, evenScope));
-    EXPECT_TRUE(exhaustedGroups.empty());
   }
 
   // Test after moving obj2 (even) to container0 (evenScope).
@@ -175,7 +170,6 @@ CO_TEST_F(AllowedScopeItemsPerGroupTest, ReturnsCountOfUnassignedObjects) {
     // There is no evenGroup objects in unassigned
     EXPECT_FALSE(attr.getAllowedCount(evenGroup, evenScope));
     EXPECT_FALSE(attr.getAllowedCount(evenGroup, oddScope));
-    EXPECT_EQ(std::set<entities::GroupId>{evenGroup}, exhaustedGroups);
   }
 }
 

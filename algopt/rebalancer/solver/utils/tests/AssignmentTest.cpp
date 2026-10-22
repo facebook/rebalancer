@@ -329,14 +329,6 @@ CO_TEST_F(AssignmentTest, IndexedObjects) {
   checkExpectedMakeup(c0, {}, {objects.at(0), objects.at(2), objects.at(4)});
   checkExpectedMakeup(c1, {objects.at(1), objects.at(3)}, {});
   checkExpectedMakeup(c2, {objects.at(5)}, {});
-
-  // Fixing the even group in c0 removes its objects from every dynamic index
-  // and leaves the other containers as they are
-  assignment.fixDynamicObjectsOfGroup(c0, oddEvenPartitionId, evenGroup);
-  checkExpectedMakeup(c0, {}, {});
-  EXPECT_TRUE(assignment.getDynamicObjects(c0).empty());
-  checkExpectedMakeup(c1, {objects.at(1), objects.at(3)}, {});
-  checkExpectedMakeup(c2, {objects.at(5)}, {});
 }
 
 } // namespace facebook::rebalancer::packer::tests
