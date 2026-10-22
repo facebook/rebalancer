@@ -131,7 +131,7 @@ void ParallelExecutionSelector::record(
   measurements.durationSecs += observation.durationSecs;
   ++experiment.samples;
   XLOGF(
-      DBG1,
+      DBG2,
       "AUTO parallel execution sample: moveType={}, strategy={}, evaluations={}, durationSecs={:.6f}",
       moveTypeName,
       strategyName(strategy_),
