@@ -39,6 +39,7 @@
 #include <stdexcept>
 #include <string>
 #include <tuple>
+#include <vector>
 
 namespace facebook::rebalancer {
 
@@ -347,19 +348,23 @@ Assignment::getObjectsIndexedByEquivSetsAndPartition(
           partitionId));
 }
 
-void Assignment::markFixedAndRemoveFromDynamicIndices(
+void Assignment::fixDynamicObjectsOfGroup(
     entities::ContainerId containerId,
-    const PackerSet<entities::ObjectId>& containerObjects) {
-  for (auto objectId : containerObjects) {
-    if (objectToContainer_.at(objectId) != containerId) {
-      throw std::runtime_error(
-          "Object to fix must belong to provide container");
-    }
-    auto [_iter, inserted] = fixedObjects_.insert(objectId);
-    if (!inserted) {
-      // object already fixed, nothing to do
-      continue;
-    }
+    entities::PartitionId partitionId,
+    entities::GroupId groupId) {
+  const auto* const groupObjects = folly::get_ptr(
+      getObjectsIndexedByPartition(partitionId)
+          .getContainerObjects(containerId),
+      groupId);
+  if (!groupObjects) {
+    return;
+  }
+
+  // Collect first, because fixing an object removes it from this index
+  const std::vector<entities::ObjectId> objectsToFix(
+      groupObjects->begin(), groupObjects->end());
+  for (const auto objectId : objectsToFix) {
+    fixedObjects_.insert(objectId);
     containerToObjectsDynamic_.at(containerId).erase(objectId);
     // Remove from Index#1 : EquivSetId -> Objects
     if (containerToEquivSetsToObjects_) {

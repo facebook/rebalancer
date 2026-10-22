@@ -65,8 +65,12 @@ AllowedScopeItemsPerGroup::AllowedScopeItemsPerGroup(
     const entities::Scope& scope,
     const entities::Partition& partition,
     std::function<size_t(entities::GroupId, entities::ScopeItemId)> evaluate,
+    std::function<void(entities::GroupId)> onGroupExhausted,
     std::shared_ptr<folly::Executor> executor)
-    : scope_(scope), partition_(partition), evaluate_(std::move(evaluate)) {
+    : scope_(scope),
+      partition_(partition),
+      evaluate_(std::move(evaluate)),
+      onGroupExhausted_(std::move(onGroupExhausted)) {
   if (!executor) {
     throw std::invalid_argument("AllowedScopeItemsPerGroup needs an executor");
   }
@@ -80,11 +84,24 @@ AllowedScopeItemsPerGroup::AllowedScopeItemsPerGroup(
             allowedCounts_[*it] = std::move(groupCounts);
           },
           std::move(executor)));
+  for (const auto& [groupId, groupCounts] : allowedCounts_) {
+    notifyIfExhausted(groupId, groupCounts);
+  }
 }
 
 void AllowedScopeItemsPerGroup::recomputeAllowedScopeItemsForGroup(
     entities::GroupId groupId) {
-  allowedCounts_[groupId] = evaluateAllowedScopeItems(groupId);
+  const auto& groupCounts = allowedCounts_[groupId] =
+      evaluateAllowedScopeItems(groupId);
+  notifyIfExhausted(groupId, groupCounts);
+}
+
+void AllowedScopeItemsPerGroup::notifyIfExhausted(
+    entities::GroupId groupId,
+    const entities::Map<entities::ScopeItemId, size_t>& groupCounts) const {
+  if (groupCounts.empty()) {
+    onGroupExhausted_(groupId);
+  }
 }
 
 entities::Map<entities::ScopeItemId, size_t>
