@@ -24,7 +24,7 @@ include "thrift/annotation/thrift.thrift"
 namespace cpp2 facebook.rebalancer.interface
 namespace py3 rebalancer.interface.thrift
 
-@thrift.ReserveIds{ids = [4, 9, 11, 12, 18]}
+@thrift.ReserveIds{ids = [4, 9, 11, 12, 18, 24]}
 struct AssignmentProblem {
   1: string jsonSpecFilepath;
   2: packer.StrategyT strategy;
@@ -49,11 +49,6 @@ struct AssignmentProblem {
   21: bool publishMetrics = false;
   22: bool publishEquivalenceSetsInfo = false;
   23: bool useDynamicObjectOrdering = false;
-
-  // Deprecated: invalid move filtering is controlled automatically. This
-  // field is kept for source and serialization compatibility and is ignored.
-  @thrift.Deprecated{message = "Invalid move filtering is solver-controlled"}
-  24: bool enableInvalidMoveFilter = false;
 
   // Learned (GNN) move-legality heuristic config (rebalancer-net). When set, the
   // solver loads the exported TorchScript model and prunes predicted-illegal
