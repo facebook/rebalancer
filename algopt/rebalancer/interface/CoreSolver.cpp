@@ -320,7 +320,9 @@ AssignmentSolution CoreSolver::materializeAndSolve(
       solver->needs_continuous_expressions(),
       logCollector,
       *problemSpec.publishMetrics(),
-      *problemSpec.rolloutConfig()->enableInvalidMoveFilter());
+      *problemSpec.rolloutConfig()->enableInvalidMoveFilter(),
+      *problemSpec.rolloutConfig()->useSeparatedLocalSearchPenaltyObjective() &&
+          solver->needs_continuous_expressions());
   materialize.stop();
 
   // TODO: simplify the logic below this line once the old materializer is gone

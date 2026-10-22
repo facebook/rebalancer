@@ -154,7 +154,7 @@ DEFINE_bool(
 
 DEFINE_bool(
     use_separated_local_search_penalty_objective,
-    false,
+    true,
     "Use a separate tie-breaking penalty objective for local search.");
 
 DEFINE_bool(

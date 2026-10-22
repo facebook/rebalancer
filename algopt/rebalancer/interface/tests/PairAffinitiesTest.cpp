@@ -13,6 +13,9 @@
 // limitations under the License.
 
 #include "algopt/rebalancer/interface/tests/utils.h"
+#ifndef REBALANCER_OSS_BUILD
+#include "algopt/rebalancer/interface/tests/fb/ScopedSeparatedPenaltyObjectiveRollout.h"
+#endif
 #include "algopt/rebalancer/tests/SolverTestUtils.h"
 
 #include <gtest/gtest.h>
@@ -146,6 +149,9 @@ TEST_P(PairAffinitiesTest, Constraint) {
 }
 
 TEST_P(PairAffinitiesTest, Goal) {
+#ifndef REBALANCER_OSS_BUILD
+  const ScopedSeparatedPenaltyObjectiveRollout rollout;
+#endif
   const std::map<std::string, std::vector<std::string>> initialAssignment = {
       {"h1", {"t1", "t2", "t3"}}, {"h2", {"t4"}}};
   solver->setAssignment(initialAssignment);
@@ -186,9 +192,12 @@ TEST_P(PairAffinitiesTest, Goal) {
       EXPECT_NEAR(1, *solution.initialObjective()->value(), 1e-8);
       break;
     case LOCALSEARCH:
-      // when using local search, the initial objective is not the same as the
-      // optimal because of additional penalty terms
-      EXPECT_NEAR(1.95, *solution.initialObjective()->value(), 1e-8);
+      // Without separated penalty objectives, local search also reports the
+      // continuous penalty terms.
+      EXPECT_NEAR(
+          expectedLocalSearchGlobalObjective(1, 0.95),
+          *solution.initialObjective()->value(),
+          1e-8);
       break;
   }
   EXPECT_NEAR(-2, *solution.finalObjective()->value(), 1e-8);
