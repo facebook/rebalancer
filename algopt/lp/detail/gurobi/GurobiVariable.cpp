@@ -33,7 +33,7 @@ void GurobiVariable::setLB(double lb) try {
     throw SolverError(
         fmt::format(
             "cannot set lower bound on a {} variable. Did you mean to set threshold?",
-            type_));
+            fmt::underlying(type_)));
   }
   variable_.set(GRB_DoubleAttr::GRB_DoubleAttr_LB, lb);
 } catch (const GRBException& e) {
@@ -49,7 +49,8 @@ void GurobiVariable::setUB(double ub) try {
 void GurobiVariable::setThreshold(double threshold) try {
   if (!hasThreshold()) {
     throw SolverError(
-        fmt::format("cannot set threshold on a {} variable", type_));
+        fmt::format(
+            "cannot set threshold on a {} variable", fmt::underlying(type_)));
   }
   variable_.set(GRB_DoubleAttr::GRB_DoubleAttr_LB, threshold);
 } catch (const GRBException& e) {
