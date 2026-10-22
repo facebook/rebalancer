@@ -312,6 +312,30 @@ CO_TEST_P(
           SpecBuilder::getConstraintViolation(job1Constraint), evenlySplit));
 }
 
+CO_TEST_P(ColocateGroupsSpecBuilderTest, NegativeGroupWeightRemainsSignedGoal) {
+  setUpUniverse(
+      {{"host0", {"task0", "task1", "task2", "task3"}}, {"host1", {}}});
+  co_await addPartition(
+      "job", {{"job1", {"task0", "task1", "task2", "task3"}}});
+
+  interface::ColocateGroupsSpec spec;
+  spec.name() = "test";
+  spec.scope() = "host";
+  spec.partitionName() = "job";
+  spec.bound() = interface::ColocateGroupsSpecBound::MAX;
+  spec.limits()->globalLimit() = 1;
+  spec.groupToWeight() = {{"job1", -2}};
+
+  const ColocateGroupsSpecBuilder specBuilder(
+      buildUniverse(), spec, /*needContinuousExpressions=*/GetParam());
+  const auto goalInfo = co_await specBuilder.goal(expressionBuilder());
+
+  EXPECT_NEAR(
+      -2,
+      evaluate(goalInfo.objectiveExpr, deltaFromInitial({{"task3", "host1"}})),
+      1e-8);
+}
+
 CO_TEST_P(ColocateGroupsSpecBuilderTest, Filter) {
   co_await setUpBasicUniverse();
 

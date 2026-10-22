@@ -98,8 +98,31 @@ folly::coro::Task<GoalInfo> ColocateGroupsSpecBuilder::goal(
   // lower bound smaller than 0, so skip value requirement.
   // TODO(@yangsea): investigate if the formula can be improved to avoid
   // negative penalty.
-  co_return getSeparatedConstraintViolation(
-      co_await constraints(expressionBuilder), expressionBuilder);
+  ExprPtr objectiveExpr;
+  ExprPtr penaltyExpr;
+  const auto& initialAssignment =
+      expressionBuilder.getUpdatedInitialAssignment();
+  for (const auto groupId : partition_.getGroupIds()) {
+    const auto groupWeight = folly::get_default(
+        *spec_.groupToWeight(), universe_->getEntityName(groupId), 1);
+    auto separated = getSeparatedConstraintViolation(
+        {getConstraint(groupId, groupWeight, initialAssignment)},
+        expressionBuilder);
+    separated.objectiveExpr *= groupWeight;
+    inplace_add(objectiveExpr, separated.objectiveExpr);
+    if (separated.penaltyExpr != nullptr) {
+      // The weight sign already selects the effective MIN/MAX constraint
+      // direction in getContinuousPenaltyExpr(). The penalty represents
+      // progress in that direction, so scale its magnitude without reversing
+      // its incentive again for a negative weight.
+      separated.penaltyExpr *= std::abs(groupWeight);
+      inplace_add(penaltyExpr, separated.penaltyExpr);
+    }
+  }
+  co_return GoalInfo{
+      .objectiveExpr =
+          objectiveExpr ? std::move(objectiveExpr) : const_expr(0, *universe_),
+      .penaltyExpr = std::move(penaltyExpr)};
 }
 
 folly::coro::Task<std::vector<ConstraintInfo>>

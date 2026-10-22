@@ -65,6 +65,7 @@
 #include <boost/iterator/iterator_facade.hpp>
 #include <fmt/core.h>
 #include <fmt/format.h>
+#include <folly/container/irange.h>
 #include <folly/container/MapUtil.h>
 #include <folly/CppAttributes.h>
 #include <folly/executors/ThreadPoolExecutor.h>
@@ -158,12 +159,25 @@ Problem::Problem(
 
   roots.push_back(materializedProblem_->finalConstraint.get());
 
-  for (auto& obj : materializedProblem_->globalObjective) {
-    roots.push_back(obj.get());
+  // Local search compares each objective before its penalty, (G0, P0, G1,
+  // P1, ...). Evaluating a root first processes every earlier root, so roots
+  // must follow that order for the comparison to short-circuit.
+  const auto& materializedObjective = materializedProblem_->globalObjective;
+  const auto& materializedPenalty = materializedProblem_->penaltyObjective;
+  const bool hasPenalty = materializedPenalty.size() != 0;
+  if (hasPenalty &&
+      materializedPenalty.size() != materializedObjective.size()) {
+    throw std::runtime_error(
+        fmt::format(
+            "Global and Penalty objectives have different sizes: {} != {}",
+            materializedObjective.size(),
+            materializedPenalty.size()));
   }
-
-  for (auto& obj : materializedProblem_->penaltyObjective) {
-    roots.push_back(obj.get());
+  for (const auto pos : folly::irange(materializedObjective.size())) {
+    roots.push_back(materializedObjective.getObjectiveAt(pos).get());
+    if (hasPenalty) {
+      roots.push_back(materializedPenalty.getObjectiveAt(pos).get());
+    }
   }
 
   if (materializedProblem_->metrics && configs.addMetricsExprsToOrchestrator) {

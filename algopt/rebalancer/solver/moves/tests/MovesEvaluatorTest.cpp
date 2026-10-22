@@ -16,6 +16,7 @@
 #include "algopt/rebalancer/solver/expressions/Operators.h"
 #include "algopt/rebalancer/solver/expressions/tests/ExpressionUtils.h"
 #include "algopt/rebalancer/solver/moves/tests/MoveTestBase.h"
+#include "algopt/rebalancer/solver/tests/ExprProblemCreation.h"
 
 #include <gtest/gtest.h>
 
@@ -256,6 +257,61 @@ TEST_F(MovesEvaluatorTest, EarlierPenaltyPrecedesLaterGlobal) {
           {*result.getValue().get(0).penalty,
            *result.getValue().get(1).penalty,
            *result.getValue().get(2).penalty}));
+}
+
+TEST_F(MovesEvaluatorTest, PenaltyEvaluationSkipsLaterObjectives) {
+  setInitialAssignment(
+      {{"container1", {"object1"}}, {"container2", {"object2"}}});
+
+  const auto universe = buildUniverse();
+  const auto objectVector = makeObjectVector(
+      PackerMap<entities::ObjectId, double>{}, 1, 2, *universe);
+  const auto currentGlobal = makeObjectLookup(objectVector, {container(1)});
+  const auto currentPenalty = makeObjectLookup(objectVector, {container(2)});
+  const auto laterGlobal = makeObjectLookup(objectVector, {container(2)});
+  const auto zero = const_expr(0, *universe);
+  const auto problem = createTestProblem(
+      universe,
+      /*objectiveTuple=*/{currentGlobal, laterGlobal},
+      /*constraint=*/zero,
+      /*nonAcceptingContainers=*/{},
+      /*config=*/{},
+      /*performInitialFullApply=*/true,
+      /*enableParallelizedBoundsComputing=*/false,
+      /*invalidMoveFilter=*/nullptr,
+      /*penaltyObjectiveTuple=*/{currentPenalty, zero});
+  const LocalSearchObjective stageObjective(
+      problem->objective, problem->penaltyObjective, 0, 1, *universe);
+
+  Context context;
+  context.changes() = ChangeSet(
+      {Change(object(1), container(1), -1),
+       Change(object(1), container(2), 1)});
+  const auto value =
+      stageObjective.evaluate(context, problem->getOrchestrator());
+
+  EXPECT_EQ("(0 (2))", value.toString());
+  EXPECT_FALSE(context.val().contains(laterGlobal->getId()));
+}
+
+TEST_F(MovesEvaluatorTest, RejectsMismatchedPenaltyObjectiveSize) {
+  setInitialAssignment({{"container1", {"object1"}}, {"container2", {}}});
+
+  const auto universe = buildUniverse();
+  const auto zero = const_expr(0, *universe);
+
+  EXPECT_THROW(
+      createTestProblem(
+          universe,
+          /*objectiveTuple=*/{zero},
+          /*constraint=*/zero,
+          /*nonAcceptingContainers=*/{},
+          /*config=*/{},
+          /*performInitialFullApply=*/true,
+          /*enableParallelizedBoundsComputing=*/false,
+          /*invalidMoveFilter=*/nullptr,
+          /*penaltyObjectiveTuple=*/{zero, zero}),
+      std::runtime_error);
 }
 
 TEST_F(MovesEvaluatorTest, DoNotWorsenGoalConfigHigherPriorityObjConfig1) {
