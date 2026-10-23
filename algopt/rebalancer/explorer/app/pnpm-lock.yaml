@@ -33,16 +33,16 @@ importers:
         version: 7.29.10(@emotion/react@11.14.0(@types/react@19.2.7)(react@19.2.6))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.7)(react@19.2.6))(@types/react@19.2.7)(react@19.2.6))(@mui/material@6.5.0(@emotion/react@11.14.0(@types/react@19.2.7)(react@19.2.6))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.7)(react@19.2.6))(@types/react@19.2.7)(react@19.2.6))(@types/react@19.2.7)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(@mui/system@6.5.0(@emotion/react@11.14.0(@types/react@19.2.7)(react@19.2.6))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@19.2.7)(react@19.2.6))(@types/react@19.2.7)(react@19.2.6))(@types/react@19.2.7)(react@19.2.6))(@types/react@19.2.7)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
       '@nest/bugs':
         specifier: file:../../libs/bugs
-        version: file:../../libs/bugs(cdd561e5f8ff695e1316175b73af455f)
+        version: file:../../libs/bugs(edb3a44033b722d26acc7b7bf113710c)
       '@nest/eps':
         specifier: file:../../libs/eps
-        version: file:../../libs/eps(8b6058797ceda70926188514892b2de5)
+        version: file:../../libs/eps(6a5849d8b71febf6baeb49da28ea9f74)
       '@nest/falco-logger':
         specifier: file:../../libs/falco-logger
         version: file:../../libs/falco-logger(@nest/thrift-proxy@file:../../libs/thrift-proxy(@opentelemetry/api-logs@0.218.0)(@opentelemetry/api@1.9.1))
       '@nest/intern-auth':
         specifier: file:../../libs/intern-auth
-        version: file:../../libs/intern-auth(@meta/headers@0.1.6(next@16.3.3(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@types/node@25.3.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)))(@nest/interngraph@file:../../libs/interngraph(@nest/falco-logger@file:../../libs/falco-logger(@nest/thrift-proxy@file:../../libs/thrift-proxy(@opentelemetry/api-logs@0.218.0)(@opentelemetry/api@1.9.1)))(@nest/thrift-proxy@file:../../libs/thrift-proxy(@opentelemetry/api-logs@0.218.0)(@opentelemetry/api@1.9.1))(@opentelemetry/api-logs@0.218.0)(next@16.3.3(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@types/node@25.3.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)))(@nest/thrift-proxy@file:../../libs/thrift-proxy(@opentelemetry/api-logs@0.218.0)(@opentelemetry/api@1.9.1))(@types/react@19.2.7)(next@16.3.3(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@types/node@25.3.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(react@19.2.6)
+        version: file:../../libs/intern-auth(981255cc5f51e243f2653d7589535de6)
       '@nest/interngraph':
         specifier: file:../../libs/interngraph
         version: file:../../libs/interngraph(@nest/falco-logger@file:../../libs/falco-logger(@nest/thrift-proxy@file:../../libs/thrift-proxy(@opentelemetry/api-logs@0.218.0)(@opentelemetry/api@1.9.1)))(@nest/thrift-proxy@file:../../libs/thrift-proxy(@opentelemetry/api-logs@0.218.0)(@opentelemetry/api@1.9.1))(@opentelemetry/api-logs@0.218.0)(next@16.3.3(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@types/node@25.3.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))
@@ -54,16 +54,16 @@ importers:
         version: file:../../libs/nds(d96dc30060ec27514cd5ef95ff64a829)
       '@nest/next-core':
         specifier: file:../../libs/next-core
-        version: file:../../libs/next-core(babel-plugin-react-compiler@1.0.0)(lightningcss@1.31.1)(next@16.3.3(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@types/node@25.3.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
+        version: file:../../libs/next-core(@opentelemetry/api-logs@0.218.0)(@opentelemetry/api@1.9.1)(babel-plugin-react-compiler@1.0.0)(lightningcss@1.31.1)(next@16.3.3(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@types/node@25.3.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
       '@nest/otel':
         specifier: file:../../libs/otel
         version: file:../../libs/otel(@meta/headers@0.1.6(next@16.3.3(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@types/node@25.3.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)))(@nest/thrift-proxy@file:../../libs/thrift-proxy(@opentelemetry/api-logs@0.218.0)(@opentelemetry/api@1.9.1))(next@16.3.3(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@types/node@25.3.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))
       '@nest/pre':
         specifier: ^0.1.5
-        version: 0.1.24(1358c1840fe5c11afc3211c4923a9330)
+        version: 0.1.24(@nest/falco-logger@file:../../libs/falco-logger(@nest/thrift-proxy@file:../../libs/thrift-proxy(@opentelemetry/api-logs@0.218.0)(@opentelemetry/api@1.9.1)))(@nest/intern-auth@file:../../libs/intern-auth(981255cc5f51e243f2653d7589535de6))(next@16.3.3(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@types/node@25.3.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(react@19.2.6)
       '@nest/relay':
         specifier: file:../../libs/relay
-        version: file:../../libs/relay(1072ded7fbe6cd4ec40251b2ec025d70)
+        version: file:../../libs/relay(f8b41a70dd60e1d0d28741db221ec1fb)
       '@nest/thrift-proxy':
         specifier: file:../../libs/thrift-proxy
         version: file:../../libs/thrift-proxy(@opentelemetry/api-logs@0.218.0)(@opentelemetry/api@1.9.1)
@@ -93,13 +93,13 @@ importers:
         version: 8.14.1(@types/react@19.2.7)(react@19.2.6)(redux@5.0.1)
       react-relay:
         specifier: main
-        version: 0.0.0-main-d188e79d(react@19.2.6)
+        version: 0.0.0-main-b9e1c520(react@19.2.6)
       recharts:
         specifier: ^2.15.3
         version: 2.15.4(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
       relay-runtime:
         specifier: main
-        version: 0.0.0-main-d188e79d
+        version: 0.0.0-main-b9e1c520
       zod:
         specifier: ^4.3.6
         version: 4.5.4
@@ -151,7 +151,7 @@ importers:
         version: 0.6.14(prettier@3.8.1)
       relay-compiler:
         specifier: main
-        version: 0.0.0-main-d188e79d
+        version: 0.0.0-main-b9e1c520
       tailwindcss:
         specifier: ^4
         version: 4.2.1
@@ -1113,9 +1113,9 @@ packages:
       zod:
         optional: true
 
-  '@nest/falco-logger@0.1.16-dev.1':
-    resolution: {integrity: sha512-+is4LuPZzlDPIL5ADlZspgyVhFWlmI1SeQv7al3srhlp9mqOMRIPUzyfQI2M0xUGldO3lyEFs18IjxsH+mKhHg==}
-    version: 0.1.16-dev.1
+  '@nest/falco-logger@0.1.17-dev.1':
+    resolution: {integrity: sha512-hypRNKgztyv8tpc2irNrc7s4fNf3zgLRLJbF7IMBiA6k87xN762p2qztoD0p20Lm7r6vI3aOwEBZg9/2b/2EFA==}
+    version: 0.1.17-dev.1
     peerDependencies:
       '@nest/thrift-proxy': '*'
     peerDependenciesMeta:
@@ -1130,26 +1130,20 @@ packages:
       '@nest/thrift-proxy':
         optional: true
 
-  '@nest/graphql-thrift@0.1.6':
-    resolution: {integrity: sha512-2+vCaqaoeM7chAok9PH9FbA55/vCo8+wSF70iiXD1T6GfiW7PfsvJYzhMBRf2UbLiPAsBzUS0WW6ZIjE5YsoOw==}
-    peerDependencies:
-      '@nest/metaconfig': '*'
-      next: ^16
-    peerDependenciesMeta:
-      '@nest/metaconfig':
-        optional: true
-      next:
-        optional: true
-
   '@nest/intern-auth@file:../../libs/intern-auth':
     resolution: {directory: ../../libs/intern-auth, type: directory}
     peerDependencies:
       '@meta/cometjs': '*'
       '@nest/interngraph': '*'
+      '@stylexjs/stylex': ^0.17.4 || ^0.18.0 || ^0.19.0
       next: ^16.0.0
       react: ^19.2.0
     peerDependenciesMeta:
       '@meta/cometjs':
+        optional: true
+      '@stylexjs/stylex':
+        optional: true
+      next:
         optional: true
 
   '@nest/intern-preferences@0.1.4-dev.1':
@@ -1179,6 +1173,9 @@ packages:
 
   '@nest/justknobs@0.2.3':
     resolution: {integrity: sha512-7DIPlsxouCiqIWDvjhJL6QIzmIQs/k936vYcOiG7Ob7Rb58yOjKVCucLMcz8tP4DcoT97Qe6PeG7JsY46QUOiA==}
+
+  '@nest/justknobs@0.3.0-dev.1':
+    resolution: {integrity: sha512-jtMkoXTwZ1q+6KSULhyHZgtkMIjOP1CYIguot7CfLLXINk2FstD15PqVPQEfpNSZdc9qzAzTk0Xa+zp2c8tipA==}
 
   '@nest/logger@0.1.2':
     resolution: {integrity: sha512-UySlQKRypSXCnwh+tNNSBYoPd2uIrWT+KmdKHer3zYAxE0lwPHywUQIQwO3qWxVMUXskH+/HVYC/C/IYYUjx9Q==}
@@ -1257,6 +1254,18 @@ packages:
       next:
         optional: true
 
+  '@nest/nest-comments@0.7.4-dev.2':
+    resolution: {integrity: sha512-18vDQ98Xedl+6CjuaWCTOOcMekrSwWQtBOwk9HNbAb8t5LXhgASIgyo8/f94AF4BhZ2+tZU/3w6jhrrKpbR8zw==}
+    version: 0.7.4-dev.2
+    peerDependencies:
+      '@nest/intern-auth': '*'
+      lucide-react: '>=0.400.0'
+      next: '>=16.0.0'
+      react: '>=19.0.0'
+      react-dom: '>=19.0.0'
+      react-relay: '>=20.0.0'
+      relay-runtime: '>=20.0.0'
+
   '@nest/next-core@file:../../libs/next-core':
     resolution: {directory: ../../libs/next-core, type: directory}
     hasBin: true
@@ -1265,6 +1274,9 @@ packages:
       next: ^16.1.0
       react: ^19.2.0
       react-dom: ^19.2.0
+
+  '@nest/obc@0.2.4':
+    resolution: {integrity: sha512-NS675XSN9aCdm4nvz30FiUDmg+WMPamDT6yMxU4o6bV1Em+gM4LLbIwWrJtqq3SbWL/D4EcsRWJ/Wd1nCHiZtg==}
 
   '@nest/otel@0.6.2':
     resolution: {integrity: sha512-jTUayqZeugDIaQiMneNVyPBlK1ndjJ2OZ7xITPer+c5ACbOiglrIkEpd2S1Cl8k+66cdxA92F3warrbwzbYl/w==}
@@ -1279,6 +1291,7 @@ packages:
 
   '@nest/pre@0.1.24':
     resolution: {integrity: sha512-pphIyMkPFV+UOauA3gnUGJFBrC8u37X/N3VZslqqQfKel4ptVvJ0X1FPOvT1lIg2DRE0iSWUWeyhdbeO9tNRSg==}
+    version: 0.1.24
     peerDependencies:
       '@nest/falco-logger': '>=0.1.4'
       '@nest/intern-auth': '>=0.1.8'
@@ -1327,6 +1340,12 @@ packages:
 
   '@nest/thrift-proxy@1.4.1':
     resolution: {integrity: sha512-BG4VOVupkDIJdZU7/J0RHFSkCRnckVWM97AKxZw6d3HwTbbgtmhEe/AzZ0dZVlA/0YpmwPBGyz0nuBrLUoamSA==}
+    peerDependencies:
+      '@opentelemetry/api': ^1.9.0
+      '@opentelemetry/api-logs': '>=0.208.0 <0.219.0'
+
+  '@nest/thrift-proxy@1.5.0':
+    resolution: {integrity: sha512-tY7D7vaSXbLGFZ9fMAGb70u1L6/Zl9DcQpHOaDlOdg2s0qurbDlMDoiQudOYh7IKbYatLtxEy6HJu94UiJOgow==}
     peerDependencies:
       '@opentelemetry/api': ^1.9.0
       '@opentelemetry/api-logs': '>=0.208.0 <0.219.0'
@@ -2005,12 +2024,14 @@ packages:
   '@opentelemetry/propagator-jaeger@2.6.0':
     resolution: {integrity: sha512-KGWJuvp9X8X36bhHgIhWEnHAzXDInFr+Fvo9IQhhuu6pXLT8mF7HzFyx/X+auZUITvPaZhM39Phj3vK12MbhwA==}
     engines: {node: ^18.19.0 || >=20.6.0}
+    deprecated: Package no longer supported. See https://github.com/open-telemetry/opentelemetry-js/pull/7077
     peerDependencies:
       '@opentelemetry/api': '>=1.0.0 <1.10.0'
 
   '@opentelemetry/propagator-jaeger@2.7.1':
     resolution: {integrity: sha512-KMjVBHzP4N60bOzxja76M1F1hZZ43lGPga5ix+mkv9+kk1nx9SbkxSvJsMbuVUxdPQmsPTqGShmhN8ulrMOg6Q==}
     engines: {node: ^18.19.0 || >=20.6.0}
+    deprecated: Package no longer supported. See https://github.com/open-telemetry/opentelemetry-js/pull/7077
     peerDependencies:
       '@opentelemetry/api': '>=1.0.0 <1.10.0'
 
@@ -2129,48 +2150,56 @@ packages:
   '@opentelemetry/sdk-trace-base@2.12.0':
     resolution: {integrity: sha512-JOERgZCxRM06FEJ5kEWxlSRChah6MmXDx3KwCruqEv/iEyLkTokCSemf2y1w8oIHtfrr8EVTpzebq/31vn2Cpg==}
     engines: {node: ^18.19.0 || >=20.6.0}
+    deprecated: Use @opentelemetry/sdk-trace package
     peerDependencies:
       '@opentelemetry/api': '>=1.3.0 <1.10.0'
 
   '@opentelemetry/sdk-trace-base@2.2.0':
     resolution: {integrity: sha512-xWQgL0Bmctsalg6PaXExmzdedSp3gyKV8mQBwK/j9VGdCDu2fmXIb2gAehBKbkXCpJ4HPkgv3QfoJWRT4dHWbw==}
     engines: {node: ^18.19.0 || >=20.6.0}
+    deprecated: Use @opentelemetry/sdk-trace package
     peerDependencies:
       '@opentelemetry/api': '>=1.3.0 <1.10.0'
 
   '@opentelemetry/sdk-trace-base@2.6.0':
     resolution: {integrity: sha512-g/OZVkqlxllgFM7qMKqbPV9c1DUPhQ7d4n3pgZFcrnrNft9eJXZM2TNHTPYREJBrtNdRytYyvwjgL5geDKl3EQ==}
     engines: {node: ^18.19.0 || >=20.6.0}
+    deprecated: Use @opentelemetry/sdk-trace package
     peerDependencies:
       '@opentelemetry/api': '>=1.3.0 <1.10.0'
 
   '@opentelemetry/sdk-trace-base@2.7.1':
     resolution: {integrity: sha512-NAYIlsF8MPUsKqJMiDQJTMPOmlbawC1Iz/omMLygZ1C9am8fTKYjTaI+OZM+WTY3t3Glo0wnOg/6/pac6RGPPw==}
     engines: {node: ^18.19.0 || >=20.6.0}
+    deprecated: Use @opentelemetry/sdk-trace package
     peerDependencies:
       '@opentelemetry/api': '>=1.3.0 <1.10.0'
 
   '@opentelemetry/sdk-trace-node@2.12.0':
     resolution: {integrity: sha512-9DufH1IlmQMoKAfot5y/FhTP1RnmhLb5K6eKmJO/bvzPjYwPAazoiAUbTZFdPbqxOXN0FEbhZx/e6SB1Og4jmg==}
     engines: {node: ^18.19.0 || >=20.6.0}
+    deprecated: Use @opentelemetry/sdk-trace package
     peerDependencies:
       '@opentelemetry/api': '>=1.0.0 <1.10.0'
 
   '@opentelemetry/sdk-trace-node@2.6.0':
     resolution: {integrity: sha512-YhswtasmsbIGEFvLGvR9p/y3PVRTfFf+mgY8van4Ygpnv4sA3vooAjvh+qAn9PNWxs4/IwGGqiQS0PPsaRJ0vQ==}
     engines: {node: ^18.19.0 || >=20.6.0}
+    deprecated: Use @opentelemetry/sdk-trace package
     peerDependencies:
       '@opentelemetry/api': '>=1.0.0 <1.10.0'
 
   '@opentelemetry/sdk-trace-node@2.7.1':
     resolution: {integrity: sha512-pCpQxU68lV+I9s9svqMyVu5iHdDDUnqUpSxqwyCU8A9ejEsSnMPCbearwsUO4yk08ZJzAIUCFuReMdVQvHrdvg==}
     engines: {node: ^18.19.0 || >=20.6.0}
+    deprecated: Use @opentelemetry/sdk-trace package
     peerDependencies:
       '@opentelemetry/api': '>=1.0.0 <1.10.0'
 
   '@opentelemetry/sdk-trace-web@2.6.0':
     resolution: {integrity: sha512-xyYmLFatwUeYnB7NtQ2Ydl9Y8uiblN+EDo5YEjnk7ZRMhGFyt1wgPqb8EYvATLuDiRVtxid1fJsL6RH1fCQMIA==}
     engines: {node: ^18.19.0 || >=20.6.0}
+    deprecated: Use @opentelemetry/sdk-trace package
     peerDependencies:
       '@opentelemetry/api': '>=1.0.0 <1.10.0'
 
@@ -5757,8 +5786,8 @@ packages:
       redux:
         optional: true
 
-  react-relay@0.0.0-main-d188e79d:
-    resolution: {integrity: sha512-AxN6Z0yLPRlNPI0VVD+QkoIlHpLkDeBY9GZCh6D2N0qMPfkVDgpLPhziXf/Ht9C4hIBvl9fxKByWA9l70T5DKA==}
+  react-relay@0.0.0-main-b9e1c520:
+    resolution: {integrity: sha512-36ZK3tNLAVGM5ZtxHr/iy7A5WCQQpYP38xVkt0BQ6PbAGhR1kk6XdzxTWY0myUzRQcVRpuEaOfLJOYk95XUc2Q==}
     peerDependencies:
       react: ^16.9.0 || ^17 || ^18 || ^19
 
@@ -5849,12 +5878,12 @@ packages:
     resolution: {integrity: sha512-dYqgNSZbDwkaJ2ceRd9ojCGjBq+mOm9LmtXnAnEGyHhN/5R7iDW2TRw3h+o/jCFxus3P2LfWIIiwowAjANm7IA==}
     engines: {node: '>= 0.4'}
 
-  relay-compiler@0.0.0-main-d188e79d:
-    resolution: {integrity: sha512-6U6WvuGjANvtuc0izKWODUXUxh++bekCgjw33R+bU3GXMI9J7DAwVIswob6pXpr1Q4zBkfrYWUjw55S1H+lIuw==}
+  relay-compiler@0.0.0-main-b9e1c520:
+    resolution: {integrity: sha512-vmG12DEA6oECvcXnZPkbrz3e/0jHCZdFZMeG6Gw/7zYsSjU3GPFXC6O1qnV5kcJhdd3atK+cdADC6fGonSkxMg==}
     hasBin: true
 
-  relay-runtime@0.0.0-main-d188e79d:
-    resolution: {integrity: sha512-ejuDsY99xAje7mn3ky0PcBylZJ5Vgy3nQtY4vY3Nghq+MGYxK0DR1tPTeiUCuin3kr1PG2/T/zstE/P5AFzmow==}
+  relay-runtime@0.0.0-main-b9e1c520:
+    resolution: {integrity: sha512-hht6uQeW/RoVdPkZ4Hd3lSMI7Nifwg+hsK2daGYjlplLl4T/XZ3U3K4Lj/Mx0UOoyO4hxWdLIErTqyKHCpCpMA==}
 
   remark-gfm@4.0.1:
     resolution: {integrity: sha512-1quofZ2RQ9EWdeN34S79+KExV1764+wCUGop5CPL1WGdD0ocPpu91lzPGbwWMECpEpd42kJGQwzRfyov9j4yNg==}
@@ -7480,19 +7509,26 @@ snapshots:
     transitivePeerDependencies:
       - '@nest/thrift-proxy'
 
-  '@nest/bugs@file:../../libs/bugs(cdd561e5f8ff695e1316175b73af455f)':
+  '@nest/bugs@file:../../libs/bugs(edb3a44033b722d26acc7b7bf113710c)':
     dependencies:
       '@nest/interngraph': file:../../libs/interngraph(@nest/falco-logger@file:../../libs/falco-logger(@nest/thrift-proxy@file:../../libs/thrift-proxy(@opentelemetry/api-logs@0.218.0)(@opentelemetry/api@1.9.1)))(@nest/thrift-proxy@file:../../libs/thrift-proxy(@opentelemetry/api-logs@0.218.0)(@opentelemetry/api@1.9.1))(@opentelemetry/api-logs@0.218.0)(next@16.3.3(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@types/node@25.3.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))
       '@nest/meta-brand-icons': 0.0.5-dev.1(react@19.2.6)
+      '@nest/nest-comments': 0.7.4-dev.2(@nest/intern-auth@file:../../libs/intern-auth(981255cc5f51e243f2653d7589535de6))(@opentelemetry/api-logs@0.218.0)(@opentelemetry/api@1.9.1)(lucide-react@0.525.0(react@19.2.6))(next@16.3.3(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@types/node@25.3.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(react-dom@19.2.6(react@19.2.6))(react-relay@0.0.0-main-b9e1c520(react@19.2.6))(react@19.2.6)(relay-runtime@0.0.0-main-b9e1c520)
       '@nest/web-session': 0.1.2-dev.3
       react: 19.2.6
       react-dom: 19.2.6(react@19.2.6)
     optionalDependencies:
-      '@nest/intern-auth': file:../../libs/intern-auth(@meta/headers@0.1.6(next@16.3.3(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@types/node@25.3.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)))(@nest/interngraph@file:../../libs/interngraph(@nest/falco-logger@file:../../libs/falco-logger(@nest/thrift-proxy@file:../../libs/thrift-proxy(@opentelemetry/api-logs@0.218.0)(@opentelemetry/api@1.9.1)))(@nest/thrift-proxy@file:../../libs/thrift-proxy(@opentelemetry/api-logs@0.218.0)(@opentelemetry/api@1.9.1))(@opentelemetry/api-logs@0.218.0)(next@16.3.3(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@types/node@25.3.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)))(@nest/thrift-proxy@file:../../libs/thrift-proxy(@opentelemetry/api-logs@0.218.0)(@opentelemetry/api@1.9.1))(@types/react@19.2.7)(next@16.3.3(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@types/node@25.3.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(react@19.2.6)
+      '@nest/intern-auth': file:../../libs/intern-auth(981255cc5f51e243f2653d7589535de6)
       '@nest/otel': file:../../libs/otel(@meta/headers@0.1.6(next@16.3.3(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@types/node@25.3.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)))(@nest/thrift-proxy@file:../../libs/thrift-proxy(@opentelemetry/api-logs@0.218.0)(@opentelemetry/api@1.9.1))(next@16.3.3(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@types/node@25.3.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))
       '@nest/thrift-proxy': file:../../libs/thrift-proxy(@opentelemetry/api-logs@0.218.0)(@opentelemetry/api@1.9.1)
       lucide-react: 0.525.0(react@19.2.6)
       zod: 4.5.4
+    transitivePeerDependencies:
+      - '@opentelemetry/api'
+      - '@opentelemetry/api-logs'
+      - next
+      - react-relay
+      - relay-runtime
 
   '@nest/cfm@0.2.4-dev.3(@types/react-dom@19.2.3(@types/react@19.2.7))(@types/react@19.2.7)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)':
     dependencies:
@@ -7521,7 +7557,7 @@ snapshots:
 
   '@nest/distribgw@0.0.7(@nest/thrift-proxy@file:../../libs/thrift-proxy(@opentelemetry/api-logs@0.218.0)(@opentelemetry/api@1.9.1))':
     dependencies:
-      '@nest/falco-logger': 0.1.16-dev.1(@nest/thrift-proxy@file:../../libs/thrift-proxy(@opentelemetry/api-logs@0.218.0)(@opentelemetry/api@1.9.1))
+      '@nest/falco-logger': 0.1.17-dev.1(@nest/thrift-proxy@file:../../libs/thrift-proxy(@opentelemetry/api-logs@0.218.0)(@opentelemetry/api@1.9.1))
       flow-enums-runtime: 0.0.6
     transitivePeerDependencies:
       - '@nest/thrift-proxy'
@@ -7542,7 +7578,7 @@ snapshots:
     transitivePeerDependencies:
       - encoding
 
-  '@nest/eps@file:../../libs/eps(8b6058797ceda70926188514892b2de5)':
+  '@nest/eps@file:../../libs/eps(6a5849d8b71febf6baeb49da28ea9f74)':
     dependencies:
       '@atlaskit/pragmatic-drag-and-drop': 1.8.1
       '@atlaskit/pragmatic-drag-and-drop-flourish': 2.0.15(react@19.2.6)
@@ -7551,18 +7587,18 @@ snapshots:
       '@lexical/link': 0.22.0
       '@lexical/markdown': 0.22.0
       '@lexical/react': 0.22.0(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(yjs@13.6.33)
-      '@nest/bugs': file:../../libs/bugs(cdd561e5f8ff695e1316175b73af455f)
+      '@nest/bugs': file:../../libs/bugs(edb3a44033b722d26acc7b7bf113710c)
       '@nest/cfm': 0.2.4-dev.3(@types/react-dom@19.2.3(@types/react@19.2.7))(@types/react@19.2.7)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
       '@nest/draftjs-converter': 1.1.2-dev.1(@lexical/code@0.22.0)(@lexical/link@0.22.0)(@lexical/list@0.22.0)(@lexical/rich-text@0.22.0)(@lexical/table@0.22.0)(@lexical/utils@0.22.0)(lexical@0.22.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
       '@nest/falco-logger': file:../../libs/falco-logger(@nest/thrift-proxy@file:../../libs/thrift-proxy(@opentelemetry/api-logs@0.218.0)(@opentelemetry/api@1.9.1))
-      '@nest/intern-auth': file:../../libs/intern-auth(@meta/headers@0.1.6(next@16.3.3(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@types/node@25.3.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)))(@nest/interngraph@file:../../libs/interngraph(@nest/falco-logger@file:../../libs/falco-logger(@nest/thrift-proxy@file:../../libs/thrift-proxy(@opentelemetry/api-logs@0.218.0)(@opentelemetry/api@1.9.1)))(@nest/thrift-proxy@file:../../libs/thrift-proxy(@opentelemetry/api-logs@0.218.0)(@opentelemetry/api@1.9.1))(@opentelemetry/api-logs@0.218.0)(next@16.3.3(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@types/node@25.3.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)))(@nest/thrift-proxy@file:../../libs/thrift-proxy(@opentelemetry/api-logs@0.218.0)(@opentelemetry/api@1.9.1))(@types/react@19.2.7)(next@16.3.3(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@types/node@25.3.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(react@19.2.6)
+      '@nest/intern-auth': file:../../libs/intern-auth(981255cc5f51e243f2653d7589535de6)
       '@nest/intern-preferences': 0.1.4-dev.1(@nest/interngraph@file:../../libs/interngraph(@nest/falco-logger@file:../../libs/falco-logger(@nest/thrift-proxy@file:../../libs/thrift-proxy(@opentelemetry/api-logs@0.218.0)(@opentelemetry/api@1.9.1)))(@nest/thrift-proxy@file:../../libs/thrift-proxy(@opentelemetry/api-logs@0.218.0)(@opentelemetry/api@1.9.1))(@opentelemetry/api-logs@0.218.0)(next@16.3.3(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@types/node@25.3.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)))(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
       '@nest/interngraph': file:../../libs/interngraph(@nest/falco-logger@file:../../libs/falco-logger(@nest/thrift-proxy@file:../../libs/thrift-proxy(@opentelemetry/api-logs@0.218.0)(@opentelemetry/api@1.9.1)))(@nest/thrift-proxy@file:../../libs/thrift-proxy(@opentelemetry/api-logs@0.218.0)(@opentelemetry/api@1.9.1))(@opentelemetry/api-logs@0.218.0)(next@16.3.3(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@types/node@25.3.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))
       '@nest/logger': 0.1.2
       '@nest/meta-brand-icons': file:../../libs/meta-brand-icons(react@19.2.6)
       '@nest/nds': file:../../libs/nds(d96dc30060ec27514cd5ef95ff64a829)
-      '@nest/pre': 0.1.24(1358c1840fe5c11afc3211c4923a9330)
-      '@nest/relay': file:../../libs/relay(1072ded7fbe6cd4ec40251b2ec025d70)
+      '@nest/pre': 0.1.24(@nest/falco-logger@file:../../libs/falco-logger(@nest/thrift-proxy@file:../../libs/thrift-proxy(@opentelemetry/api-logs@0.218.0)(@opentelemetry/api@1.9.1)))(@nest/intern-auth@file:../../libs/intern-auth(981255cc5f51e243f2653d7589535de6))(next@16.3.3(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@types/node@25.3.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(react@19.2.6)
+      '@nest/relay': file:../../libs/relay(f8b41a70dd60e1d0d28741db221ec1fb)
       '@nest/shaman': 0.4.13(@nest/interngraph@file:../../libs/interngraph(@nest/falco-logger@file:../../libs/falco-logger(@nest/thrift-proxy@file:../../libs/thrift-proxy(@opentelemetry/api-logs@0.218.0)(@opentelemetry/api@1.9.1)))(@nest/thrift-proxy@file:../../libs/thrift-proxy(@opentelemetry/api-logs@0.218.0)(@opentelemetry/api@1.9.1))(@opentelemetry/api-logs@0.218.0)(next@16.3.3(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@types/node@25.3.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)))(@types/react@19.2.7)(next@16.3.3(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@types/node@25.3.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(react@19.2.6)
       '@radix-ui/react-accordion': 1.2.12(@types/react-dom@19.2.3(@types/react@19.2.7))(@types/react@19.2.7)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
       '@radix-ui/react-avatar': 1.1.11(@types/react-dom@19.2.3(@types/react@19.2.7))(@types/react@19.2.7)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
@@ -7603,9 +7639,9 @@ snapshots:
       react-day-picker: 9.14.0(react@19.2.6)
       react-dom: 19.2.6(react@19.2.6)
       react-markdown: 10.1.0(@types/react@19.2.7)(react@19.2.6)
-      react-relay: 0.0.0-main-d188e79d(react@19.2.6)
+      react-relay: 0.0.0-main-b9e1c520(react@19.2.6)
       react-resizable-panels: 4.7.2(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
-      relay-runtime: 0.0.0-main-d188e79d
+      relay-runtime: 0.0.0-main-b9e1c520
       remark-gfm: 4.0.1
       rrweb: 2.0.0-alpha.20
       sonner: 2.0.7(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
@@ -7628,7 +7664,7 @@ snapshots:
       - supports-color
       - tailwindcss
 
-  '@nest/falco-logger@0.1.16-dev.1(@nest/thrift-proxy@file:../../libs/thrift-proxy(@opentelemetry/api-logs@0.218.0)(@opentelemetry/api@1.9.1))':
+  '@nest/falco-logger@0.1.17-dev.1(@nest/thrift-proxy@file:../../libs/thrift-proxy(@opentelemetry/api-logs@0.218.0)(@opentelemetry/api@1.9.1))':
     dependencies:
       '@nest/web-session': 0.1.2-dev.3
     optionalDependencies:
@@ -7640,26 +7676,16 @@ snapshots:
     optionalDependencies:
       '@nest/thrift-proxy': file:../../libs/thrift-proxy(@opentelemetry/api-logs@0.218.0)(@opentelemetry/api@1.9.1)
 
-  '@nest/graphql-thrift@0.1.6(@opentelemetry/api-logs@0.218.0)(next@16.3.3(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@types/node@25.3.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))':
+  '@nest/intern-auth@file:../../libs/intern-auth(981255cc5f51e243f2653d7589535de6)':
     dependencies:
-      '@nest/justknobs': 0.2.3(@opentelemetry/api-logs@0.218.0)(@opentelemetry/api@1.9.0)
-      '@nest/thrift-proxy': 1.4.1(@opentelemetry/api-logs@0.218.0)(@opentelemetry/api@1.9.0)
-      '@opentelemetry/api': 1.9.0
-      server-only: 0.0.1
-    optionalDependencies:
-      next: 16.3.3(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@types/node@25.3.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
-    transitivePeerDependencies:
-      - '@opentelemetry/api-logs'
-
-  ? '@nest/intern-auth@file:../../libs/intern-auth(@meta/headers@0.1.6(next@16.3.3(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@types/node@25.3.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)))(@nest/interngraph@file:../../libs/interngraph(@nest/falco-logger@file:../../libs/falco-logger(@nest/thrift-proxy@file:../../libs/thrift-proxy(@opentelemetry/api-logs@0.218.0)(@opentelemetry/api@1.9.1)))(@nest/thrift-proxy@file:../../libs/thrift-proxy(@opentelemetry/api-logs@0.218.0)(@opentelemetry/api@1.9.1))(@opentelemetry/api-logs@0.218.0)(next@16.3.3(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@types/node@25.3.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)))(@nest/thrift-proxy@file:../../libs/thrift-proxy(@opentelemetry/api-logs@0.218.0)(@opentelemetry/api@1.9.1))(@types/react@19.2.7)(next@16.3.3(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@types/node@25.3.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(react@19.2.6)'
-  : dependencies:
       '@nest/interngraph': file:../../libs/interngraph(@nest/falco-logger@file:../../libs/falco-logger(@nest/thrift-proxy@file:../../libs/thrift-proxy(@opentelemetry/api-logs@0.218.0)(@opentelemetry/api@1.9.1)))(@nest/thrift-proxy@file:../../libs/thrift-proxy(@opentelemetry/api-logs@0.218.0)(@opentelemetry/api@1.9.1))(@opentelemetry/api-logs@0.218.0)(next@16.3.3(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@types/node@25.3.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))
       '@nest/middleware-chain': 0.1.1(next@16.3.3(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@types/node@25.3.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))
       '@nest/otel': 0.6.2(@meta/headers@0.1.6(next@16.3.3(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@types/node@25.3.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)))(@nest/thrift-proxy@file:../../libs/thrift-proxy(@opentelemetry/api-logs@0.218.0)(@opentelemetry/api@1.9.1))(next@16.3.3(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@types/node@25.3.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))
-      '@stylexjs/stylex': 0.17.5
       lucide-react: 1.56.0(@types/react@19.2.7)(react@19.2.6)
-      next: 16.3.3(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@types/node@25.3.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
       react: 19.2.6
+    optionalDependencies:
+      '@stylexjs/stylex': 0.17.5
+      next: 16.3.3(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@types/node@25.3.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
     transitivePeerDependencies:
       - '@meta/headers'
       - '@nest/thrift-proxy'
@@ -7679,7 +7705,6 @@ snapshots:
       '@nest/dgw-client': 0.1.4
       '@nest/distribgw': 0.0.7(@nest/thrift-proxy@file:../../libs/thrift-proxy(@opentelemetry/api-logs@0.218.0)(@opentelemetry/api@1.9.1))
       '@nest/falco-logger': file:../../libs/falco-logger(@nest/thrift-proxy@file:../../libs/thrift-proxy(@opentelemetry/api-logs@0.218.0)(@opentelemetry/api@1.9.1))
-      '@nest/graphql-thrift': 0.1.6(@opentelemetry/api-logs@0.218.0)(next@16.3.3(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@types/node@25.3.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))
       '@nest/justknobs': 0.2.3(@opentelemetry/api-logs@0.218.0)(@opentelemetry/api@1.9.0)
       '@nest/thrift-proxy': file:../../libs/thrift-proxy(@opentelemetry/api-logs@0.218.0)(@opentelemetry/api@1.9.1)
       '@opentelemetry/api': 1.9.0
@@ -7716,6 +7741,14 @@ snapshots:
   '@nest/justknobs@0.2.3(@opentelemetry/api-logs@0.218.0)(@opentelemetry/api@1.9.0)':
     dependencies:
       '@nest/thrift-proxy': 1.4.1(@opentelemetry/api-logs@0.218.0)(@opentelemetry/api@1.9.0)
+      server-only: 0.0.1
+    transitivePeerDependencies:
+      - '@opentelemetry/api'
+      - '@opentelemetry/api-logs'
+
+  '@nest/justknobs@0.3.0-dev.1(@opentelemetry/api-logs@0.218.0)(@opentelemetry/api@1.9.1)':
+    dependencies:
+      '@nest/thrift-proxy': 1.5.0(@opentelemetry/api-logs@0.218.0)(@opentelemetry/api@1.9.1)
       server-only: 0.0.1
     transitivePeerDependencies:
       - '@opentelemetry/api'
@@ -7843,16 +7876,36 @@ snapshots:
       - '@emotion/is-prop-valid'
       - redux
 
-  '@nest/next-core@file:../../libs/next-core(babel-plugin-react-compiler@1.0.0)(lightningcss@1.31.1)(next@16.3.3(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@types/node@25.3.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(react-dom@19.2.6(react@19.2.6))(react@19.2.6)':
+  '@nest/nest-comments@0.7.4-dev.2(@nest/intern-auth@file:../../libs/intern-auth(981255cc5f51e243f2653d7589535de6))(@opentelemetry/api-logs@0.218.0)(@opentelemetry/api@1.9.1)(lucide-react@0.525.0(react@19.2.6))(next@16.3.3(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@types/node@25.3.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(react-dom@19.2.6(react@19.2.6))(react-relay@0.0.0-main-b9e1c520(react@19.2.6))(react@19.2.6)(relay-runtime@0.0.0-main-b9e1c520)':
     dependencies:
+      '@nest/intern-auth': file:../../libs/intern-auth(981255cc5f51e243f2653d7589535de6)
+      '@nest/obc': 0.2.4(@opentelemetry/api-logs@0.218.0)(@opentelemetry/api@1.9.1)
+      lucide-react: 0.525.0(react@19.2.6)
+      next: 16.3.3(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@types/node@25.3.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
+      react: 19.2.6
+      react-dom: 19.2.6(react@19.2.6)
+      react-relay: 0.0.0-main-b9e1c520(react@19.2.6)
+      relay-runtime: 0.0.0-main-b9e1c520
+      server-only: 0.0.1
+      zod: 3.25.76
+    transitivePeerDependencies:
+      - '@opentelemetry/api'
+      - '@opentelemetry/api-logs'
+
+  '@nest/next-core@file:../../libs/next-core(@opentelemetry/api-logs@0.218.0)(@opentelemetry/api@1.9.1)(babel-plugin-react-compiler@1.0.0)(lightningcss@1.31.1)(next@16.3.3(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@types/node@25.3.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(react-dom@19.2.6(react@19.2.6))(react@19.2.6)':
+    dependencies:
+      '@nest/justknobs': 0.3.0-dev.1(@opentelemetry/api-logs@0.218.0)(@opentelemetry/api@1.9.1)
       '@next/env': 16.3.3
       babel-plugin-react-compiler: 1.0.0
       next: 16.3.3(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@types/node@25.3.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
       react: 19.2.6
       react-dom: 19.2.6(react@19.2.6)
       webpack: 5.105.4(lightningcss@1.31.1)
+      zod: 3.25.76
     transitivePeerDependencies:
       - '@minify-html/node'
+      - '@opentelemetry/api'
+      - '@opentelemetry/api-logs'
       - '@swc/core'
       - '@swc/css'
       - '@swc/html'
@@ -7865,6 +7918,13 @@ snapshots:
       - postcss
       - uglify-js
       - webpack-cli
+
+  '@nest/obc@0.2.4(@opentelemetry/api-logs@0.218.0)(@opentelemetry/api@1.9.1)':
+    dependencies:
+      '@nest/thrift-proxy': 1.5.0(@opentelemetry/api-logs@0.218.0)(@opentelemetry/api@1.9.1)
+    transitivePeerDependencies:
+      - '@opentelemetry/api'
+      - '@opentelemetry/api-logs'
 
   '@nest/otel@0.6.2(@meta/headers@0.1.6(next@16.3.3(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@types/node@25.3.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)))(@nest/thrift-proxy@file:../../libs/thrift-proxy(@opentelemetry/api-logs@0.218.0)(@opentelemetry/api@1.9.1))(next@16.3.3(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@types/node@25.3.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))':
     dependencies:
@@ -7938,7 +7998,7 @@ snapshots:
       - next
       - supports-color
 
-  '@nest/pre@0.1.24(1358c1840fe5c11afc3211c4923a9330)':
+  '@nest/pre@0.1.24(@nest/falco-logger@file:../../libs/falco-logger(@nest/thrift-proxy@file:../../libs/thrift-proxy(@opentelemetry/api-logs@0.218.0)(@opentelemetry/api@1.9.1)))(@nest/intern-auth@file:../../libs/intern-auth(981255cc5f51e243f2653d7589535de6))(next@16.3.3(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@types/node@25.3.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(react@19.2.6)':
     dependencies:
       '@jridgewell/trace-mapping': 0.3.31
       '@nest/falco-logger': file:../../libs/falco-logger(@nest/thrift-proxy@file:../../libs/thrift-proxy(@opentelemetry/api-logs@0.218.0)(@opentelemetry/api@1.9.1))
@@ -7946,19 +8006,22 @@ snapshots:
       react: 19.2.6
       web-vitals: 5.3.0
     optionalDependencies:
-      '@nest/intern-auth': file:../../libs/intern-auth(@meta/headers@0.1.6(next@16.3.3(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@types/node@25.3.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)))(@nest/interngraph@file:../../libs/interngraph(@nest/falco-logger@file:../../libs/falco-logger(@nest/thrift-proxy@file:../../libs/thrift-proxy(@opentelemetry/api-logs@0.218.0)(@opentelemetry/api@1.9.1)))(@nest/thrift-proxy@file:../../libs/thrift-proxy(@opentelemetry/api-logs@0.218.0)(@opentelemetry/api@1.9.1))(@opentelemetry/api-logs@0.218.0)(next@16.3.3(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@types/node@25.3.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)))(@nest/thrift-proxy@file:../../libs/thrift-proxy(@opentelemetry/api-logs@0.218.0)(@opentelemetry/api@1.9.1))(@types/react@19.2.7)(next@16.3.3(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@types/node@25.3.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(react@19.2.6)
+      '@nest/intern-auth': file:../../libs/intern-auth(981255cc5f51e243f2653d7589535de6)
       next: 16.3.3(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@types/node@25.3.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
 
-  '@nest/relay@file:../../libs/relay(1072ded7fbe6cd4ec40251b2ec025d70)':
+  '@nest/relay@file:../../libs/relay(f8b41a70dd60e1d0d28741db221ec1fb)':
     dependencies:
-      '@nest/intern-auth': file:../../libs/intern-auth(@meta/headers@0.1.6(next@16.3.3(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@types/node@25.3.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)))(@nest/interngraph@file:../../libs/interngraph(@nest/falco-logger@file:../../libs/falco-logger(@nest/thrift-proxy@file:../../libs/thrift-proxy(@opentelemetry/api-logs@0.218.0)(@opentelemetry/api@1.9.1)))(@nest/thrift-proxy@file:../../libs/thrift-proxy(@opentelemetry/api-logs@0.218.0)(@opentelemetry/api@1.9.1))(@opentelemetry/api-logs@0.218.0)(next@16.3.3(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@types/node@25.3.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)))(@nest/thrift-proxy@file:../../libs/thrift-proxy(@opentelemetry/api-logs@0.218.0)(@opentelemetry/api@1.9.1))(@types/react@19.2.7)(next@16.3.3(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@types/node@25.3.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(react@19.2.6)
+      '@meta/headers': 0.1.6(next@16.3.3(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@types/node@25.3.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))
+      '@nest/intern-auth': file:../../libs/intern-auth(981255cc5f51e243f2653d7589535de6)
       '@nest/interngraph': file:../../libs/interngraph(@nest/falco-logger@file:../../libs/falco-logger(@nest/thrift-proxy@file:../../libs/thrift-proxy(@opentelemetry/api-logs@0.218.0)(@opentelemetry/api@1.9.1)))(@nest/thrift-proxy@file:../../libs/thrift-proxy(@opentelemetry/api-logs@0.218.0)(@opentelemetry/api@1.9.1))(@opentelemetry/api-logs@0.218.0)(next@16.3.3(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@types/node@25.3.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))
-      '@nest/pre': 0.1.24(1358c1840fe5c11afc3211c4923a9330)
+      '@nest/pre': 0.1.24(@nest/falco-logger@file:../../libs/falco-logger(@nest/thrift-proxy@file:../../libs/thrift-proxy(@opentelemetry/api-logs@0.218.0)(@opentelemetry/api@1.9.1)))(@nest/intern-auth@file:../../libs/intern-auth(981255cc5f51e243f2653d7589535de6))(next@16.3.3(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@types/node@25.3.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(react@19.2.6)
       react: 19.2.6
-      react-relay: 0.0.0-main-d188e79d(react@19.2.6)
-      relay-runtime: 0.0.0-main-d188e79d
+      react-relay: 0.0.0-main-b9e1c520(react@19.2.6)
+      relay-runtime: 0.0.0-main-b9e1c520
     optionalDependencies:
       next: 16.3.3(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@types/node@25.3.2)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
+    transitivePeerDependencies:
+      - '@meta/cometjs'
 
   '@nest/request-context@0.2.1(@opentelemetry/api@1.9.0)':
     dependencies:
@@ -8016,6 +8079,14 @@ snapshots:
       '@nest/request-context': 0.2.1-dev.1(@opentelemetry/api@1.9.0)
       '@nest/thrift': 0.1.2-dev.1
       '@opentelemetry/api': 1.9.0
+      '@opentelemetry/api-logs': 0.218.0
+      server-only: 0.0.1
+
+  '@nest/thrift-proxy@1.5.0(@opentelemetry/api-logs@0.218.0)(@opentelemetry/api@1.9.1)':
+    dependencies:
+      '@nest/request-context': 0.2.1-dev.1(@opentelemetry/api@1.9.1)
+      '@nest/thrift': 0.1.2-dev.1
+      '@opentelemetry/api': 1.9.1
       '@opentelemetry/api-logs': 0.218.0
       server-only: 0.0.1
 
@@ -10965,6 +11036,7 @@ snapshots:
       css-mediaquery: 0.1.2
       invariant: 2.2.4
       styleq: 0.2.1
+    optional: true
 
   '@swc/helpers@0.5.23':
     dependencies:
@@ -11970,7 +12042,8 @@ snapshots:
       shebang-command: 2.0.0
       which: 2.0.2
 
-  css-mediaquery@0.1.2: {}
+  css-mediaquery@0.1.2:
+    optional: true
 
   cssesc@3.0.0: {}
 
@@ -13993,14 +14066,14 @@ snapshots:
       '@types/react': 19.2.7
       redux: 5.0.1
 
-  react-relay@0.0.0-main-d188e79d(react@19.2.6):
+  react-relay@0.0.0-main-b9e1c520(react@19.2.6):
     dependencies:
       '@babel/runtime': 7.29.7
       fbjs: 3.0.5
       invariant: 2.2.4
       nullthrows: 1.1.1
       react: 19.2.6
-      relay-runtime: 0.0.0-main-d188e79d
+      relay-runtime: 0.0.0-main-b9e1c520
     transitivePeerDependencies:
       - encoding
 
@@ -14118,9 +14191,9 @@ snapshots:
       gopd: 1.2.0
       set-function-name: 2.0.2
 
-  relay-compiler@0.0.0-main-d188e79d: {}
+  relay-compiler@0.0.0-main-b9e1c520: {}
 
-  relay-runtime@0.0.0-main-d188e79d:
+  relay-runtime@0.0.0-main-b9e1c520:
     dependencies:
       '@babel/runtime': 7.29.7
       fbjs: 3.0.5
@@ -14501,7 +14574,8 @@ snapshots:
     optionalDependencies:
       '@babel/core': 7.29.0
 
-  styleq@0.2.1: {}
+  styleq@0.2.1:
+    optional: true
 
   stylis@4.2.0: {}
 
