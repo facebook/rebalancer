@@ -13,14 +13,23 @@
 // limitations under the License.
 
 #include "algopt/rebalancer/algopt_common/TestUtils.h"
+#include "algopt/rebalancer/algopt_common/Utils.h"
+#include "algopt/rebalancer/entities/Map.h"
 #include "algopt/rebalancer/interface/thrift/gen-cpp2/ProblemSpecs_types.h"
+#include "algopt/rebalancer/interface/thrift/gen-cpp2/SolverSpecs_types.h"
 #include "algopt/rebalancer/materializer/spec_builder/ColocateGroupsSpecBuilder.h"
 #include "algopt/rebalancer/materializer/utils/tests/SpecBuilderTestBase.h"
 #include "algopt/rebalancer/solver/expressions/Expression.h"
+#include "algopt/rebalancer/solver/expressions/Operators.h"
+#include "algopt/rebalancer/solver/solvers/LocalSearchSolver.h"
+#include "algopt/rebalancer/solver/tests/ExprProblemCreation.h"
 
 #include <folly/coro/BlockingWait.h>
 #include <folly/coro/GtestHelpers.h>
 #include <gtest/gtest.h>
+
+#include <string>
+#include <vector>
 
 namespace facebook::rebalancer::materializer::tests {
 
@@ -310,6 +319,163 @@ CO_TEST_P(
           mostlyConsolidated),
       evaluate(
           SpecBuilder::getConstraintViolation(job1Constraint), evenlySplit));
+}
+
+CO_TEST_P(ColocateGroupsSpecBuilderTest, NegativeGroupWeightRemainsSignedGoal) {
+  setUpUniverse(
+      {{"host0", {"task0", "task1", "task2", "task3"}}, {"host1", {}}});
+  co_await addPartition(
+      "job", {{"job1", {"task0", "task1", "task2", "task3"}}});
+
+  interface::ColocateGroupsSpec spec;
+  spec.name() = "test";
+  spec.scope() = "host";
+  spec.partitionName() = "job";
+  spec.bound() = interface::ColocateGroupsSpecBound::MAX;
+  spec.limits()->globalLimit() = 1;
+  spec.groupToWeight() = {{"job1", -2}};
+
+  const ColocateGroupsSpecBuilder specBuilder(
+      buildUniverse(), spec, /*needContinuousExpressions=*/GetParam());
+  const auto goalInfo = co_await specBuilder.goal(expressionBuilder());
+
+  EXPECT_NEAR(
+      -2,
+      evaluate(goalInfo.objectiveExpr, deltaFromInitial({{"task3", "host1"}})),
+      1e-8);
+}
+
+namespace {
+// Six tasks of job1 start split 4:2 across host0 and host1 out of three hosts.
+// With MIN bound, limit 3 and weight -2, the goal rewards using fewer hosts,
+// i.e. it colocates job1 just like MAX bound, limit 1 and weight 2.
+const entities::Map<std::string, std::vector<std::string>> kSplitJobAssignment =
+    {{"host0", {"task0", "task1", "task2", "task3"}},
+     {"host1", {"task4", "task5"}},
+     {"host2", {}}};
+
+interface::ColocateGroupsSpec makeWeightedJobSpec(
+    interface::ColocateGroupsSpecBound bound,
+    double limit,
+    double weight) {
+  interface::ColocateGroupsSpec spec;
+  spec.name() = "test";
+  spec.scope() = "host";
+  spec.partitionName() = "job";
+  spec.bound() = bound;
+  spec.limits()->globalLimit() = limit;
+  spec.groupToWeight() = {{"job1", weight}};
+  return spec;
+}
+} // namespace
+
+// The separated penalty of a negative-weight MIN goal must reward the same
+// moves as the penalty of the equivalent positive-weight MAX goal. Every
+// assignment below keeps job1 on two hosts, so only the penalty tells them
+// apart: 2 * sum_host(u - 0.1 * u^2), with u = (job1 tasks on the host) / 6.
+CO_TEST_P(
+    ColocateGroupsSpecBuilderTest,
+    NegativeWeightPenaltyRewardsColocationLikePositiveWeight) {
+  setUpUniverse(kSplitJobAssignment);
+  co_await addPartition(
+      "job",
+      {{"job1", {"task0", "task1", "task2", "task3", "task4", "task5"}}});
+  const auto universe = buildUniverse();
+
+  struct Case {
+    std::string name;
+    interface::ColocateGroupsSpec spec;
+    double objective;
+  };
+  const std::vector<Case> cases = {
+      {.name = "MAX bound, positive weight",
+       .spec = makeWeightedJobSpec(
+           interface::ColocateGroupsSpecBound::MAX, /*limit=*/1, /*weight=*/2),
+       .objective = 2},
+      {.name = "MIN bound, negative weight",
+       .spec = makeWeightedJobSpec(
+           interface::ColocateGroupsSpecBound::MIN, /*limit=*/3, /*weight=*/-2),
+       .objective = -2},
+  };
+  const auto colocated = deltaFromInitial({{"task4", "host0"}});
+  const auto initial = deltaFromInitial({});
+  const auto balanced = deltaFromInitial({{"task0", "host1"}});
+  for (const auto& [name, spec, objective] : cases) {
+    SCOPED_TRACE(name);
+    const ColocateGroupsSpecBuilder specBuilder(
+        universe, spec, /*needContinuousExpressions=*/GetParam());
+    const auto goalInfo = co_await specBuilder.goal(expressionBuilder());
+
+    for (const auto& assignment : {colocated, initial, balanced}) {
+      EXPECT_NEAR(
+          objective, evaluate(goalInfo.objectiveExpr, assignment), 1e-8);
+    }
+    if (!GetParam()) {
+      EXPECT_EQ(nullptr, goalInfo.penaltyExpr);
+      continue;
+    }
+    // u = 5/6, 1/6
+    EXPECT_NEAR(
+        2 * (1 - 0.1 * 26 / 36),
+        evaluate(goalInfo.penaltyExpr, colocated),
+        1e-8);
+    // u = 4/6, 2/6
+    EXPECT_NEAR(
+        2 * (1 - 0.1 * 20 / 36), evaluate(goalInfo.penaltyExpr, initial), 1e-8);
+    // u = 3/6, 3/6
+    EXPECT_NEAR(
+        2 * (1 - 0.1 * 18 / 36),
+        evaluate(goalInfo.penaltyExpr, balanced),
+        1e-8);
+  }
+}
+
+// Local search with single moves cannot empty host1 in one move, so it only
+// colocates job1 if the separated penalty of the negative-weight MIN goal
+// rewards moving task4 to host0 first.
+CO_TEST_P(
+    ColocateGroupsSpecBuilderTest,
+    LocalSearchColocatesNegativeWeightGroupThroughPenalty) {
+  setUpUniverse(kSplitJobAssignment);
+  co_await addPartition(
+      "job",
+      {{"job1", {"task0", "task1", "task2", "task3", "task4", "task5"}}});
+  const auto universe = buildUniverse();
+
+  const ColocateGroupsSpecBuilder specBuilder(
+      universe,
+      makeWeightedJobSpec(
+          interface::ColocateGroupsSpecBound::MIN, /*limit=*/3, /*weight=*/-2),
+      /*needContinuousExpressions=*/GetParam());
+  const auto goalInfo = co_await specBuilder.goal(expressionBuilder());
+  if (!GetParam()) {
+    EXPECT_EQ(nullptr, goalInfo.penaltyExpr);
+    co_return;
+  }
+
+  auto problem = packer::tests::createTestProblem(
+      universe,
+      /*objectiveTuple=*/{goalInfo.objectiveExpr},
+      /*constraint=*/const_expr(0, *universe),
+      /*nonAcceptingContainers=*/{},
+      /*config=*/{},
+      /*performInitialFullApply=*/true,
+      /*enableParallelizedBoundsComputing=*/false,
+      /*invalidMoveFilter=*/nullptr,
+      /*penaltyObjectiveTuple=*/{goalInfo.penaltyExpr});
+  interface::LocalSearchSolverSpec solverSpec;
+  solverSpec.moveTypeList() = {algopt::utils::createThriftUnionByField<
+      interface::MoveTypeSpec,
+      interface::SingleMoveTypeSpec>({})};
+  LocalSearchSolver solver(std::move(solverSpec));
+  EXPECT_TRUE(solver.solve(*problem));
+
+  for (const auto& task :
+       {"task0", "task1", "task2", "task3", "task4", "task5"}) {
+    EXPECT_EQ(
+        containerId("host0"), problem->assignment.getContainer(objectId(task)))
+        << task;
+  }
 }
 
 CO_TEST_P(ColocateGroupsSpecBuilderTest, Filter) {
