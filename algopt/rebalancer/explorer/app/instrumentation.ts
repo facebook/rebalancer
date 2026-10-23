@@ -4,7 +4,6 @@
 // Telemetry destinations are configured in .env via OTEL_RESOURCE_ATTRIBUTES:
 //   • fb.traces.scuba.table (default: nest_traces)
 //   • fb.metrics.scuba.table (default: nest_metrics)
-//   • fb.traces.artillery (set to True to enable trace visualization in Tracery)
 //
 // Telemetry is provided by the @platform/telemetry adapter: internally
 // (NEST_INTERNAL=1) it wires @nest/otel; externally it is a no-op.
