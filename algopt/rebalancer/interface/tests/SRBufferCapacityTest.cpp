@@ -185,8 +185,7 @@ TEST_P(SRBufferCapacityTest, LocalSearchFriendliness) {
     solver->addConstraint(spec);
   }
 
-  // Unless useSumOverFailureScenarios is set, local search with SINGLE moves
-  // cannot fix the SR buffer constraint
+  // Local search with SINGLE moves cannot fix the SR buffer constraint
   LocalSearchSolverSpec solverSpec;
   solverSpec.moveTypeList()->push_back(
       ProblemSolver::makeMoveTypeSpec(SingleMoveTypeSpec()));

@@ -715,7 +715,6 @@ class SRBufferCapacitySpec(TypedDict, total=False):
     upperBoundMatchingErrors: dict[str, float]
     addUpperBound: bool
     useHeuristics: bool
-    useSumOverFailureScenarios: bool  # default False
 
 
 class SumOfMaxSpec(TypedDict, total=False):

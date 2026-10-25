@@ -1096,6 +1096,9 @@ struct ScopeItemPair {
 // The alternate implementation is more friendly to local search
 // https://docs.google.com/document/d/1MvnuPq_eKAtyXiO3AbZnRGD5GTh6X_jJuFibdUuuGsI/edit?usp=sharing
 
+// Id 12 was `useSumOverFailureScenarios`, removed once the legacy
+// non-sum-over-failure-domains path was deleted and nothing read the flag.
+@thrift.ReserveIds{ids = [12]}
 struct SRBufferCapacitySpec {
   // if empty dimension is provided we use count dimension
   1: string name;
@@ -1124,10 +1127,6 @@ struct SRBufferCapacitySpec {
   // if useHeuristics is false => bounds are estimated
   // using initial assignment
   11: bool useHeuristics;
-
-  // TODO: Deprecate this flag after all usage of this flag is removed.
-  // we default to using SumOverFailureDomains and the legacy code is removed.
-  12: bool useSumOverFailureScenarios = false;
 }
 
 // Add as an objective to minimize the sum of max value across partitions
