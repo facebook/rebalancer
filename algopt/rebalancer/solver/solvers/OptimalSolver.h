@@ -38,6 +38,9 @@ class OptimalSolver : public Solver {
       const interface::OptimalSolverSpec& configs =
           interface::OptimalSolverSpec());
   bool solve(Problem& p, Profile profile = std::nullopt) override;
+  bool needsInvalidMoveFilter() const override {
+    return false;
+  }
   void solve(
       Problem& p,
       PackerSet<entities::ContainerId> dynamicContainers,

@@ -33,5 +33,10 @@ class Solver {
   virtual bool needs_continuous_expressions() {
     return false;
   }
+  // Whether the solver reads the materialized InvalidMoveFilter. Solvers that
+  // never generate local search moves can skip building it.
+  virtual bool needsInvalidMoveFilter() const {
+    return true;
+  }
 };
 } // namespace facebook::rebalancer

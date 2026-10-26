@@ -16,6 +16,8 @@
 
 #include <folly/logging/xlog.h>
 
+#include <algorithm>
+
 using namespace std;
 
 namespace facebook::rebalancer {
@@ -51,6 +53,12 @@ bool ChainSolver::needs_continuous_expressions() {
     throw std::runtime_error("No solver found in ChainSolver");
   }
   return solvers_[0]->needs_continuous_expressions();
+}
+
+bool ChainSolver::needsInvalidMoveFilter() const {
+  return std::any_of(solvers_.begin(), solvers_.end(), [](const auto& solver) {
+    return solver->needsInvalidMoveFilter();
+  });
 }
 
 } // namespace facebook::rebalancer

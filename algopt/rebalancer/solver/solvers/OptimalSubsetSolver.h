@@ -32,6 +32,9 @@ class OptimalSubsetSolver : public Solver {
   OptimalSubsetSolver(
       const OptimalSubsetSolverSpec& configs = OptimalSubsetSolverSpec());
   bool solve(Problem& p, Profile profile = std::nullopt) override;
+  bool needsInvalidMoveFilter() const override {
+    return false;
+  }
 
  private:
   OptimalSubsetSolverSpec configs;

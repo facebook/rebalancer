@@ -27,6 +27,7 @@ class ChainSolver : public Solver {
   explicit ChainSolver(std::vector<std::unique_ptr<Solver>> solvers);
   bool solve(Problem& p, Profile profile = std::nullopt) override;
   bool needs_continuous_expressions() override;
+  bool needsInvalidMoveFilter() const override;
 
  private:
   std::vector<std::unique_ptr<Solver>> solvers_;
