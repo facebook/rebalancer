@@ -110,13 +110,13 @@ static void applyFilterRule(
     std::vector<RowId>& rowIds) {
   switch (rule.getType()) {
     case FilterRule::Type::regex:
-      return applyFilterRuleRegex(columns, rule.get_regex(), rowIds);
+      return applyFilterRuleRegex(columns, rule.regex().value(), rowIds);
     case FilterRule::Type::numeric:
-      return applyFilterRuleNumeric(columns, rule.get_numeric(), rowIds);
+      return applyFilterRuleNumeric(columns, rule.numeric().value(), rowIds);
     case FilterRule::Type::stringAny:
-      return applyFilterStringAny(columns, rule.get_stringAny(), rowIds);
+      return applyFilterStringAny(columns, rule.stringAny().value(), rowIds);
     case FilterRule::Type::stringNe:
-      return applyFilterStringNe(columns, rule.get_stringNe(), rowIds);
+      return applyFilterStringNe(columns, rule.stringNe().value(), rowIds);
     default:
       throw std::runtime_error("Unrecognized filter type");
   }
