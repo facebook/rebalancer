@@ -21,12 +21,14 @@
 #include "algopt/rebalancer/solver/summary/LabeledExpressions.h"
 #include "algopt/rebalancer/solver/utils/Problem.h"
 
+#include <fmt/core.h>
 #include <folly/container/irange.h>
 #include <thrift/lib/cpp2/FieldRef.h>
 
 #include <memory>
 #include <ranges>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -95,8 +97,7 @@ interface::MovesSummary MovesSummaryHelper::makeMovesSummary(
         objChangeSummary.change() = delta.oldValue - delta.newValue;
         objChangeSummary.tuplePos() = pos;
         if (delta.isPenalty) {
-          summary.objectives()[fmt::format(
-              "{} [penalty]", delta.objective->name)] =
+          summary.objectives()[penaltyObjectiveName(delta.objective->name)] =
               std::move(objChangeSummary);
         } else {
           summary.objectives()[delta.objective->name] =
@@ -112,6 +113,11 @@ interface::MovesSummary MovesSummaryHelper::makeMovesSummary(
   summary.cycleId().from_optional(cycleId);
 
   return summary;
+}
+
+std::string MovesSummaryHelper::penaltyObjectiveName(
+    std::string_view objectiveName) {
+  return fmt::format("{} [penalty]", objectiveName);
 }
 
 } // namespace facebook::rebalancer

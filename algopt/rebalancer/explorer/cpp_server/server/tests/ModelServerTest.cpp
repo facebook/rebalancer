@@ -15,6 +15,7 @@
 #include "datainfra/presto/client_next/ligen/cpp_bindings/presto_next.h"
 #endif
 
+#include <fmt/core.h>
 #include <folly/container/irange.h>
 #include <folly/coro/BlockingWait.h>
 #include <folly/coro/Collect.h>
@@ -22,7 +23,9 @@
 #include <folly/coro/Timeout.h>
 #include <folly/Portability.h>
 #include <gtest/gtest.h>
+#include <thrift/lib/cpp/util/EnumUtils.h>
 
+#include <map>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -1335,6 +1338,161 @@ TEST_F(ModelServerTest, MoveSetsWithObjectiveNamesAndAppliedValues) {
   EXPECT_EQ(*cells.at(4).stringValue(), "task3"); // object
   EXPECT_EQ(*cells.at(5).stringValue(), "host1"); // source container
   EXPECT_EQ(*cells.at(6).stringValue(), "host2"); // destination container
+}
+
+namespace {
+struct PenaltyOnlyMoveSetRow {
+  double globalChange;
+  std::string penaltyOnly;
+  std::string object;
+};
+
+std::vector<std::string> getColumnNames(const Result& table) {
+  std::vector<std::string> columnNames;
+  for (const auto& column : *table.columns()) {
+    columnNames.push_back(*column.name());
+  }
+  return columnNames;
+}
+
+// Checks the move table of TestUtils::buildUniverseWithPenaltyOnlyMove: only
+// MoveSet 1 leaves the diversity violation unchanged while changing its
+// penalty.
+void expectPenaltyOnlyMoveSets(const ModelServer& model) {
+  const auto metadata = model.getProblemMetadata();
+  EXPECT_EQ(std::vector<std::string>{"diversity"}, *metadata.objectiveNames());
+  EXPECT_TRUE(*metadata.canDisplayObjChangesInMoveSetsTable());
+
+  auto request = TestUtils::prepareMoveSetsRequest(0, 2);
+  request.objectiveNames() = std::vector<std::string>{"diversity"};
+  const auto table = *model.getMoveSets(request).table();
+
+  const std::vector<std::string> expectedColumnNames = {
+      "Move #",
+      "diversity (\u0394)",
+      "Penalty Only",
+      "Object",
+      "Source Container",
+      "Destination Container",
+      "Cycle Id"};
+  EXPECT_EQ(expectedColumnNames, getColumnNames(table));
+  EXPECT_EQ(ColumnType::STRING, *table.columns()->at(2).type());
+
+  std::map<int, PenaltyOnlyMoveSetRow> rowsByMoveSet;
+  for (const auto& row : *table.rows()) {
+    const auto& cells = *row.cells();
+    rowsByMoveSet.emplace(
+        static_cast<int>(*cells.at(0).doubleValue()),
+        PenaltyOnlyMoveSetRow{
+            .globalChange = *cells.at(1).doubleValue(),
+            .penaltyOnly = *cells.at(2).stringValue(),
+            .object = *cells.at(3).stringValue()});
+  }
+  const std::map<int, PenaltyOnlyMoveSetRow> expectedRowsByMoveSet = {
+      {1, {.globalChange = 0, .penaltyOnly = "true", .object = "task0"}},
+      {2, {.globalChange = -1, .penaltyOnly = "false", .object = "task2"}},
+  };
+  ASSERT_EQ(expectedRowsByMoveSet.size(), rowsByMoveSet.size());
+  for (const auto& [moveSet, expected] : expectedRowsByMoveSet) {
+    SCOPED_TRACE(fmt::format("MoveSet {}", moveSet));
+    const auto& actual = rowsByMoveSet.at(moveSet);
+    EXPECT_NEAR(expected.globalChange, actual.globalChange, 1e-8);
+    EXPECT_EQ(expected.penaltyOnly, actual.penaltyOnly);
+    EXPECT_EQ(expected.object, actual.object);
+  }
+}
+
+Assignment makeIntermediateAssignment(int64_t searchStep) {
+  Assignment assignment;
+  assignment.base() = AssignmentBase::INTERMEDIATE;
+  assignment.searchStep() = searchStep;
+  return assignment;
+}
+
+ExpressionResult evaluateDiversity(
+    const ModelServer& model,
+    const Assignment& assignment) {
+  const auto result = model.evaluate(assignment);
+  for (const auto& expression : *result.expressions()) {
+    if (*expression.name() == "diversity" &&
+        *expression.type() == ExpressionType::OBJECTIVE) {
+      return expression;
+    }
+  }
+  throw std::runtime_error("diversity objective not found");
+}
+} // namespace
+
+TEST_F(ModelServerTest, MoveSetsSeparatedPenaltyReplayedMoves) {
+  const auto model = TestUtils::buildUniverseWithPenaltyOnlyMove({});
+  expectPenaltyOnlyMoveSets(*model);
+}
+
+TEST_F(ModelServerTest, MoveSetsSeparatedPenaltyRecordedInMovesSummary) {
+  const auto model = TestUtils::buildUniverseWithPenaltyOnlyMove(
+      {.recordObjectiveChangesInMovesSummary = true});
+  expectPenaltyOnlyMoveSets(*model);
+}
+
+TEST_F(ModelServerTest, MoveSetsLegacyPenaltyHasNoPenaltyOnlyColumn) {
+  const auto model = TestUtils::buildUniverseWithPenaltyOnlyMove(
+      {.useSeparatedLocalSearchPenaltyObjective = false});
+  const auto metadata = model->getProblemMetadata();
+  EXPECT_EQ(std::vector<std::string>{"diversity"}, *metadata.objectiveNames());
+
+  auto request = TestUtils::prepareMoveSetsRequest(0, 2);
+  request.objectiveNames() = std::vector<std::string>{"diversity"};
+  const auto table = *model->getMoveSets(request).table();
+  const std::vector<std::string> expectedColumnNames = {
+      "Move #",
+      "diversity (\u0394)",
+      "Object",
+      "Source Container",
+      "Destination Container",
+      "Cycle Id"};
+  EXPECT_EQ(expectedColumnNames, getColumnNames(table));
+}
+
+// The diversity penalty on host0 is sum_job(u - 0.1 * u^2) with
+// u = (tasks of the job on host0) / 2 while host0 holds two jobs; the violation
+// is the number of jobs over the limit of one per host.
+TEST_F(ModelServerTest, EvaluateReportsSeparatedPenalty) {
+  const auto model = TestUtils::buildUniverseWithPenaltyOnlyMove({});
+  struct Expected {
+    double value;
+    double penaltyValue;
+  };
+  const std::vector<std::pair<Assignment, Expected>> cases = {
+      {TestUtils::prepareAssigmentRequest({}, AssignmentBase::INITIAL),
+       {.value = 1, .penaltyValue = 1.375}},
+      {makeIntermediateAssignment(1), {.value = 1, .penaltyValue = 0.95}},
+      {TestUtils::prepareAssigmentRequest({}, AssignmentBase::FINAL),
+       {.value = 0, .penaltyValue = 0}},
+  };
+  for (const auto& [assignment, expected] : cases) {
+    SCOPED_TRACE(apache::thrift::util::enumNameSafe(*assignment.base()));
+    const auto diversity = evaluateDiversity(*model, assignment);
+    EXPECT_NEAR(expected.value, *diversity.value(), 1e-8);
+    ASSERT_TRUE(diversity.penaltyValue().has_value());
+    EXPECT_NEAR(expected.penaltyValue, *diversity.penaltyValue(), 1e-8);
+  }
+}
+
+TEST_F(ModelServerTest, EvaluateOmitsPenaltyForLegacyPenalty) {
+  // std::nullopt is a run saved before useSeparatedLocalSearchPenaltyObjective
+  // existed: it was solved with the legacy combined objective whatever the
+  // field's current default is.
+  for (const auto useSeparatedPenalty :
+       {std::optional<bool>{false}, std::optional<bool>{std::nullopt}}) {
+    SCOPED_TRACE(
+        useSeparatedPenalty.has_value() ? "explicitly disabled" : "unset");
+    const auto model = TestUtils::buildUniverseWithPenaltyOnlyMove(
+        {.useSeparatedLocalSearchPenaltyObjective = useSeparatedPenalty});
+    const auto diversity = evaluateDiversity(
+        *model,
+        TestUtils::prepareAssigmentRequest({}, AssignmentBase::INITIAL));
+    EXPECT_FALSE(diversity.penaltyValue().has_value());
+  }
 }
 
 TEST_F(ModelServerTest, MoveSetsNonIntermediateAssignments) {

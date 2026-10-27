@@ -14,6 +14,7 @@
 #include "rebalancer/explorer/cpp_server/lib/Utils.h"
 #include "rebalancer/explorer/if/gen-cpp2/explorer_types.h"
 
+#include <folly/container/F14Set.h>
 #include <folly/coro/Task.h>
 #include <folly/Executor.h>
 #include <folly/futures/Future.h>
@@ -153,6 +154,7 @@ class ModelServer {
   double getChangeInObjective(
       const std::string& objectiveName,
       const size_t moveSetIndex) const;
+  bool isPenaltyOnlyMoveSet(size_t moveSetIndex) const;
   std::string getGroupName(
       const std::string& objectName,
       const std::string& partitionName) const;
@@ -187,6 +189,9 @@ class ModelServer {
   std::vector<std::string> dynamicDimensionNames_;
   entities::Map<int64_t, Expression*> expressionIdToPtr_;
   folly::F14FastMap<std::string, ExprPtr> objectiveNameToExpr_;
+  // Subset of objectiveNameToExpr_ keys that are separated local-search
+  // penalties.
+  folly::F14FastSet<std::string> penaltyObjectiveNames_;
   entities::Map<std::string, interface::thrift::MetricCollectionType>
       metricCollectionNameToType_;
   std::unique_ptr<Problem> problem_;

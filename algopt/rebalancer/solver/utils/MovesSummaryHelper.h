@@ -20,6 +20,8 @@
 #include "algopt/rebalancer/solver/utils/Problem.h"
 
 #include <optional>
+#include <string>
+#include <string_view>
 
 namespace facebook::rebalancer {
 
@@ -32,6 +34,10 @@ class MovesSummaryHelper {
       const MoveStatsAggregator& move_stats,
       const std::optional<int> stageId = std::nullopt,
       std::optional<int> cycleId = std::nullopt);
+
+  // Key under which MovesSummary::objectives records the change in the
+  // separated local-search penalty of the given objective.
+  static std::string penaltyObjectiveName(std::string_view objectiveName);
 };
 
 } // namespace facebook::rebalancer

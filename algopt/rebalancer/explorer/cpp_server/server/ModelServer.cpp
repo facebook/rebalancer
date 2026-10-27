@@ -8,6 +8,7 @@
 #include "algopt/rebalancer/solver/expressions/PropertiesHelper.h"
 #include "algopt/rebalancer/solver/moves/MoveSet.h"
 #include "algopt/rebalancer/solver/utils/Context.h"
+#include "algopt/rebalancer/solver/utils/MovesSummaryHelper.h"
 #include "rebalancer/explorer/cpp_server/lib/FilterModel.h"
 #include "rebalancer/explorer/cpp_server/lib/GroupModel.h"
 #include "rebalancer/explorer/cpp_server/lib/LoadModel.h"
@@ -52,6 +53,8 @@ const static std::string kObjectiveColDesc =
     "Value w.r.t. moveSet i is the change in value of this objective as a result of applying moveSet i";
 const static std::string kMoveSetColDesc =
     "MoveSet i is the set of moves applied together during the i-th step of local search.";
+const static std::string kPenaltyOnlyColDesc =
+    "Whether moveSet i changes only separated local-search penalties: every objective is unchanged and at least one penalty changes. Local search takes such moveSets to escape a local optimum.";
 
 enum class VisitPhase { ENTER, EXIT };
 
@@ -227,6 +230,25 @@ void ModelServer::initObjectiveNameToExpr() {
     }
     objectiveNameToExpr_.emplace(universe_->getEntityName(goalId), expr);
   }
+  // Separated local-search penalties are listed under the same names that
+  // MovesSummary uses for their changes.
+  const auto addPenaltyObjective =
+      [this](const std::string& objectiveName, const ExprPtr& expr) {
+        if (!expr) {
+          return;
+        }
+        auto penaltyName =
+            MovesSummaryHelper::penaltyObjectiveName(objectiveName);
+        penaltyObjectiveNames_.insert(penaltyName);
+        objectiveNameToExpr_.emplace(std::move(penaltyName), expr);
+      };
+  for (const auto& [constraintId, expr] :
+       materialized_->softConstraintPenalties) {
+    addPenaltyObjective(universe_->getEntityName(constraintId), expr);
+  }
+  for (const auto& [goalId, expr] : materialized_->userPenalties) {
+    addPenaltyObjective(universe_->getEntityName(goalId), expr);
+  }
 
   const auto& moveStatsSpec = *problemSpec_.moveStatsSpec();
   const auto moveStatsEnabled =
@@ -377,6 +399,22 @@ double ModelServer::getChangeInObjective(
     throw std::runtime_error(
         "Unexpected call to getObjectiveChange when allObjChangesInMovesSummary_ = false and objectiveToChangePerMoveSet_ is empty");
   }
+}
+
+bool ModelServer::isPenaltyOnlyMoveSet(const size_t moveSetIndex) const {
+  const auto& precision = universe_->getPrecision();
+  bool penaltyChanged = false;
+  for (const auto& objectiveName :
+       objectiveNameToExpr_ | std::ranges::views::keys) {
+    if (precision.isZero(getChangeInObjective(objectiveName, moveSetIndex))) {
+      continue;
+    }
+    if (!penaltyObjectiveNames_.contains(objectiveName)) {
+      return false;
+    }
+    penaltyChanged = true;
+  }
+  return penaltyChanged;
 }
 
 static Result prepareResult(const Table& table, size_t totalRows) {
@@ -619,6 +657,9 @@ ProblemMetadata ModelServer::getProblemMetadata() const {
   metadata.metricCollectionNames() = metricCollectionNameToType_ |
       std::ranges::views::keys | algopt::utils::to<std::vector>;
   metadata.objectiveNames() = objectiveNameToExpr_ | std::ranges::views::keys |
+      std::views::filter([this](const std::string& name) {
+                                return !penaltyObjectiveNames_.contains(name);
+                              }) |
       algopt::utils::to<std::vector>;
   metadata.canDisplayObjChangesInMoveSetsTable() =
       canDisplayObjChangesInMoveSetsTable_;
@@ -938,6 +979,16 @@ MoveSetsResponse ModelServer::getMoveSets(
           });
     }
   }
+  if (canDisplayObjChangesInMoveSetsTable_ && !penaltyObjectiveNames_.empty()) {
+    tableBuilder.add(
+        {.name = "Penalty Only",
+         .type = ColumnType::STRING,
+         .description = kPenaltyOnlyColDesc,
+         .excludeFromAggregation = true},
+        [this](const Row& row) -> std::string {
+          return isPenaltyOnlyMoveSet(row.moveSetIndex) ? "true" : "false";
+        });
+  }
   tableBuilder
       .add(
           {.name = existsPartitionName ? "Group" : "Object",
@@ -1167,6 +1218,10 @@ EvaluationResult ModelServer::evaluate(const Assignment& assignment) const {
     entry.description() = expression->description;
     entry.value() = value;
     entry.tupleIndex() = constraint.getTupleIndex();
+    if (const auto penalty = folly::get_ptr(
+            materialized_->softConstraintPenalties, constraintId)) {
+      entry.penaltyValue() = orchestrator.evaluate(penalty->get(), context);
+    }
     result.expressions()->push_back(std::move(entry));
   }
 
@@ -1183,6 +1238,10 @@ EvaluationResult ModelServer::evaluate(const Assignment& assignment) const {
     entry.description() = expression->description;
     entry.value() = value;
     entry.tupleIndex() = goal.getTupleIndex();
+    if (const auto penalty =
+            folly::get_ptr(materialized_->userPenalties, goalId)) {
+      entry.penaltyValue() = orchestrator.evaluate(penalty->get(), context);
+    }
     result.expressions()->push_back(std::move(entry));
   }
 

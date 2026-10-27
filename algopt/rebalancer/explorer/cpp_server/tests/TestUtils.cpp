@@ -302,6 +302,80 @@ Bundle TestUtils::buildConstraintsAndGoalsBundle(
   return bundle;
 }
 
+std::unique_ptr<ModelServer> TestUtils::buildUniverseWithPenaltyOnlyMove(
+    BuildWithPenaltyOnlyMoveConfig config) {
+  UniverseProblemBuilder builder(
+      std::make_unique<AsyncConfig>(getTestExecutor(/*numThreads=*/1)));
+  builder.setObjectName("task");
+  builder.setContainerName("host");
+  builder.setAssignment(
+      std::unordered_map<std::string, std::vector<std::string>>{
+          {"host0", {"task0", "task1", "task2"}},
+          {"host1", {}},
+          {"host2", {}},
+      });
+  builder.addPartition(
+      "job",
+      std::map<std::string, std::vector<std::string>>({
+          {"job0", {"task0", "task1"}},
+          {"job1", {"task2"}},
+      }));
+  builder.addObjectDimension(
+      "count", folly::F14FastMap<std::string, double>{}, /*defaultValue=*/1);
+  {
+    auto spec = GroupDiversitySpec();
+    spec.name() = "diversity";
+    spec.scope() = "host";
+    spec.partition() = "job";
+    spec.dimension() = "count";
+    spec.limit()->globalLimit() = 1;
+    spec.bound() = GroupDiversityBound::MAX;
+    builder.addGoal(std::move(spec), /*weight=*/1.0, /*tuplePos=*/0);
+  }
+
+  AssignmentProblem problem;
+  problem.universe() = builder.build()->toThrift();
+  if (config.useSeparatedLocalSearchPenaltyObjective.has_value()) {
+    problem.rolloutConfig()->useSeparatedLocalSearchPenaltyObjective() =
+        *config.useSeparatedLocalSearchPenaltyObjective;
+  }
+  if (config.recordObjectiveChangesInMovesSummary) {
+    problem.moveStatsSpec()->trackContainers() = true;
+    problem.moveStatsSpec()->showAllChangedObjectivesInMovesSummary() = true;
+  }
+  ThriftStrategyBuilder strategyBuilder;
+  strategyBuilder.addSolver(LocalSearchSolverSpec());
+  problem.strategy() = strategyBuilder.build();
+
+  std::vector<MoveSet> moveSets(2);
+  moveSets[0].moves = {
+      {.object = "task0", .srcContainer = "host0", .dstContainer = "host1"}};
+  moveSets[1].moves = {
+      {.object = "task2", .srcContainer = "host0", .dstContainer = "host2"}};
+  if (config.recordObjectiveChangesInMovesSummary) {
+    // change = old value - new value. The host0 penalty is
+    // sum_job(u - 0.1 * u^2) with u = (tasks of the job on host0) / 2 while
+    // host0 holds two jobs: 1.375 initially, 0.95 after MoveSet 1, and 0 after
+    // MoveSet 2, which also fixes the one-job violation.
+    moveSets[0].objectiveNameToChange = {{"diversity [penalty]", 0.425}};
+    moveSets[1].objectiveNameToChange = {
+        {"diversity", 1.0}, {"diversity [penalty]", 0.95}};
+  }
+
+  AssignmentSolution solution;
+  solution.movesSummary() = makeMovesSummaries(moveSets);
+  solution.assignment() = folly::F14FastMap<std::string, std::string>{
+      {"task0", "host1"},
+      {"task1", "host0"},
+      {"task2", "host2"},
+  };
+
+  Bundle bundle;
+  bundle.problem() = std::move(problem);
+  bundle.solution() = std::move(solution);
+  return std::make_unique<ModelServer>(std::move(bundle));
+}
+
 Bundle TestUtils::buildBundle(const BuildFilesOptions& buildOptions) {
   // Build the problem.
   UniverseProblemBuilder builder(

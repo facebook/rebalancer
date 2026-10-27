@@ -278,6 +278,9 @@ struct ExpressionResult {
   4: string description;
   5: double value;
   6: i32 tupleIndex;
+  // Value of the separated local-search penalty of this objective; unset when
+  // the objective has no separated penalty.
+  7: optional double penaltyValue;
 }
 
 struct EvaluationResult {

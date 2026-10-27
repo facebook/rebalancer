@@ -25,6 +25,7 @@
 #include <folly/executors/CPUThreadPoolExecutor.h>
 #include <folly/String.h>
 #include <folly/system/HardwareConcurrency.h>
+#include <thrift/lib/cpp2/FieldRef.h>
 
 #include <algorithm>
 #include <functional>
@@ -173,6 +174,15 @@ static std::shared_ptr<Universe> buildUniverse(
     interface::AssignmentProblem& problem) {
   /* Build the universe and return the object for further processing. */
   if (problem.universe()) {
+    // A run saved before useSeparatedLocalSearchPenaltyObjective existed was
+    // solved with the legacy combined objective; keep possiblyModify() from
+    // filling in today's default so the explorer matches that solve.
+    if (!apache::thrift::is_non_optional_field_set_manually_or_by_serializer(
+            problem.rolloutConfig()
+                ->useSeparatedLocalSearchPenaltyObjective())) {
+      problem.rolloutConfig()->useSeparatedLocalSearchPenaltyObjective() =
+          false;
+    }
     BackwardCompatabilityUtils::possiblyModify(problem);
     return std::make_shared<Universe>(*problem.universe());
   }
@@ -967,7 +977,10 @@ ExplorerModel LoadModel::buildData(interface::Bundle&& bundle) {
       universe,
       solver->needs_continuous_expressions(),
       std::make_shared<LogCollector>(),
-      /*shouldCollectMetrics=*/true);
+      /*shouldCollectMetrics=*/true,
+      /*enableInvalidMoveFilter=*/false,
+      *problemSpec.rolloutConfig()->useSeparatedLocalSearchPenaltyObjective() &&
+          solver->needs_continuous_expressions());
 
   const ProblemConfigs problemConfigs{
       .threadPool = executor,

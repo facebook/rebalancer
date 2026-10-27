@@ -24,6 +24,14 @@ struct BuildWithConstraintsAndGoalsConfig {
   std::optional<interface::MoveStatsSpec> moveStatsSpec = std::nullopt;
 };
 
+struct BuildWithPenaltyOnlyMoveConfig {
+  // std::nullopt leaves the field unset, like a run saved before it existed.
+  std::optional<bool> useSeparatedLocalSearchPenaltyObjective = true;
+  // Record objective changes in MovesSummary instead of letting the explorer
+  // replay the moves.
+  bool recordObjectiveChangesInMovesSummary = false;
+};
+
 class TestUtils {
  private:
   explicit TestUtils();
@@ -38,6 +46,11 @@ class TestUtils {
       bool useLocalSearchStageSolver = false);
   static std::unique_ptr<ModelServer> buildUniverseWithConstraintsAndGoals(
       BuildWithConstraintsAndGoalsConfig config);
+  // Three tasks of two jobs start on host0 under a GroupDiversitySpec goal
+  // allowing one job per host. MoveSet 1 keeps both jobs on host0, so it only
+  // changes the separated penalty; MoveSet 2 leaves one job per host.
+  static std::unique_ptr<ModelServer> buildUniverseWithPenaltyOnlyMove(
+      BuildWithPenaltyOnlyMoveConfig config);
 
   static interface::Bundle buildBundle(
       const BuildFilesOptions& buildOptions = BuildFilesOptions());
