@@ -14,17 +14,23 @@
 
 #include "algopt/lp/detail/xpress/XpressVariable.h"
 
+#include <stdexcept>
+
 #ifdef REBALANCER_USE_XPRESS
 
 #include "algopt/lp/detail/xpress/XpressExpression.h"
+#include "algopt/lp/detail/xpress/XpressProblem.h"
 #include "algopt/lp/generic/SolverError.h"
 
 #include <fmt/format.h>
 
 namespace facebook::algopt::lp::detail {
 
-XpressVariable::XpressVariable(dashoptimization::XPRBvar variable, Type type)
-    : variable_(variable) {
+XpressVariable::XpressVariable(
+    dashoptimization::XPRBvar variable,
+    Type type,
+    XpressProblem* problem)
+    : variable_(variable), problem_(problem) {
   type_ = type;
 }
 
@@ -35,10 +41,12 @@ void XpressVariable::setLB(double lb) {
             "cannot set lower bound on a {} variable. Did you mean to set threshold?",
             fmt::underlying(type_)));
   }
+  problem_->markModified();
   variable_.setLB(lb);
 }
 
 void XpressVariable::setUB(double ub) {
+  problem_->markModified();
   variable_.setUB(ub);
 }
 
@@ -48,11 +56,26 @@ void XpressVariable::setThreshold(double threshold) {
         fmt::format(
             "cannot set threshold on a {} variable", fmt::underlying(type_)));
   }
+  problem_->markModified();
   variable_.setLim(threshold);
 }
 
 double XpressVariable::getValue() const {
   return variable_.getSol();
+}
+
+double XpressVariable::getReducedCost() const {
+  // Same reasoning as XpressConstraint::getDual(): mipOptimize() leaves BCL's
+  // reduced costs at 0, and a silent 0 is worse than a throw.
+  if (!problem_->hasLpSensitivity()) {
+    throw std::runtime_error(
+        "getReducedCost() requires an optimal lpOptimize() solve "
+        "with the model unchanged since; it was not "
+        "solved to optimality, was modified after the solve, or has discrete entities, "
+        "quadratic terms, native constraints or start values and went "
+        "through mipOptimize(), where BCL reports every reduced cost as 0");
+  }
+  return variable_.getRCost();
 }
 
 std::shared_ptr<ExpressionImpl> XpressVariable::makeExpression(

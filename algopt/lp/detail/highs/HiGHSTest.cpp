@@ -20,6 +20,7 @@
 #include <gtest/gtest.h>
 
 #include <set>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -192,6 +193,64 @@ TEST(HiGHSTest, IISEmptyForUnbounded) {
   ASSERT_EQ(model.getStatus(), thrift::ProblemStatus::NO_SOLUTION_EXISTS);
 
   EXPECT_FALSE(model.getIIS().has_value());
+}
+
+TEST(HiGHSTest, SensitivityTest) {
+  // min x + y over a non-degenerate vertex, so the duals below are unique.
+  auto model = Problem(std::make_unique<HiGHSProblem>());
+  auto x = model.makeVar("x");
+  auto y = model.makeVar("y");
+  // Deleted before the solve so every row below is read after shifting down.
+  auto shifted = model.newConstraint(x + y <= 1000, "shifted");
+  auto xneg = model.newConstraint(x <= 0, "xneg");
+  model.newConstraint(y <= 0, "yneg");
+  auto con1 = model.newConstraint(5 * x + 2 * y >= -45, "con1");
+  model.newConstraint(x - y <= 3, "con2");
+  auto con3 = model.newConstraint(x + 4 * y >= -27, "con3");
+  model.deleteConstraint(shifted);
+  model.setObjective(x + y);
+  model.solve();
+  ASSERT_EQ(model.getStatus(), thrift::ProblemStatus::OPTIMAL_FOUND);
+
+  // con1 and con3 are the binding rows at (-7, -5). Both are `>=` rows, so
+  // under the minimization convention their duals are positive.
+  EXPECT_NEAR(con1.getDual(), 1.0 / 6.0, 1e-6);
+  EXPECT_NEAR(con3.getDual(), 1.0 / 6.0, 1e-6);
+  EXPECT_NEAR(con1.getSlack(), 0.0, 1e-9);
+  EXPECT_NEAR(con1.getRHS(), -45.0, 1e-9);
+
+  // xneg is slack at the optimum, so it prices at zero.
+  EXPECT_NEAR(xneg.getDual(), 0.0, 1e-9);
+  EXPECT_NEAR(xneg.getSlack(), 7.0, 1e-9);
+  EXPECT_NEAR(xneg.getRHS(), 0.0, 1e-9);
+
+  // Both columns are basic at the optimum.
+  EXPECT_NEAR(x.getReducedCost(), 0.0, 1e-9);
+  EXPECT_NEAR(y.getReducedCost(), 0.0, 1e-9);
+}
+
+TEST(HiGHSTest, RowLookupSurvivesDeletions) {
+  // Each row's RHS is its creation order, so a lookup that lands on the wrong
+  // row returns the wrong number.
+  auto model = Problem(std::make_unique<HiGHSProblem>());
+  auto x = model.makeVar("x");
+  std::vector<Constraint> rows;
+  rows.reserve(6);
+  for (int i = 0; i < 5; ++i) {
+    rows.push_back(model.newConstraint(x <= i, "r" + std::to_string(i)));
+  }
+  // Cache r4's row before the rows below it move.
+  EXPECT_EQ(rows[4].getRHS(), 4.0);
+
+  model.deleteConstraint(rows[1]);
+  rows.push_back(model.newConstraint(x <= 5, "r5"));
+  model.deleteConstraint(rows[3]);
+  model.deleteConstraint(rows[0]);
+
+  EXPECT_EQ(rows[4].getRHS(), 4.0);
+  EXPECT_EQ(rows[2].getRHS(), 2.0);
+  EXPECT_EQ(rows[5].getRHS(), 5.0);
+  EXPECT_THROW(rows[1].getRHS(), std::runtime_error);
 }
 
 #endif

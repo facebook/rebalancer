@@ -21,6 +21,7 @@
 #include "algopt/lp/detail/gurobi/gurobi.h"
 #include "algopt/lp/generic/Constraint.h"
 
+#include <string_view>
 #include <variant>
 
 namespace facebook::algopt::lp::detail {
@@ -37,7 +38,17 @@ class GurobiConstraint : public ConstraintImpl {
   // setIndicatorOnConstraint to swap a linear constraint for an indicator).
   void setGenConstr(GRBGenConstr gc);
 
+  // getDual() is defined only for a linear constraint; getSlack() and getRHS()
+  // also cover quadratic ones. On anything else they throw.
+  double getDual() const override;
+  double getSlack() const override;
+  double getRHS() const override;
+
  private:
+  // Throws unless the stored handle is a plain linear constraint. Returns by
+  // value: GRBConstr is a handle, and GRBConstr::get() is not const-qualified.
+  GRBConstr linearOrThrow(std::string_view accessor) const;
+
   std::variant<GRBConstr, GRBQConstr, GRBGenConstr> constraint_;
 };
 

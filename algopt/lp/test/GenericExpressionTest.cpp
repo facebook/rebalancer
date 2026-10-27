@@ -15,6 +15,7 @@
 #include "algopt/lp/detail/generic/impl/GenericExpressionImpl.h"
 #include "algopt/lp/detail/generic/impl/GenericVariableImpl.h"
 #include "algopt/lp/factory/ProblemFactory.h"
+#include "algopt/lp/generic/Constraint.h"
 #include "algopt/lp/generic/Expression.h"
 #include "algopt/lp/generic/Operators.h"
 #include "algopt/lp/generic/Problem.h"
@@ -25,6 +26,7 @@
 #include <gtest/gtest.h>
 
 #include <optional>
+#include <stdexcept>
 
 using namespace facebook::algopt::lp;
 using namespace facebook::algopt::lp::detail;
@@ -157,4 +159,13 @@ TEST(GenericExpressionTest, termCancellation) {
   auto b = problem.makeVar("b");
   auto quadExpr = (a + b) * (a - b);
   EXPECT_EQ("0 + (1 · a · a) + (-1 · b · b)", getGeneric(quadExpr)->digest());
+}
+
+TEST(GenericExpressionTest, SensitivityUnsupportedBackendThrows) {
+  // The base ConstraintImpl stands in for FastConstraintImpl /
+  // GenericConstraintImpl, which do not override the sensitivity accessors.
+  const ConstraintImpl unsupported{};
+  EXPECT_THROW(unsupported.getDual(), std::runtime_error);
+  EXPECT_THROW(unsupported.getSlack(), std::runtime_error);
+  EXPECT_THROW(unsupported.getRHS(), std::runtime_error);
 }

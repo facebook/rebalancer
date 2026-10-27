@@ -31,6 +31,19 @@ namespace facebook::algopt::lp::detail {
 
 class XpressProblem : public ProblemImpl {
  public:
+  // True when the last solve() reached an optimal LP rather than a MIP,
+  // and no row, column or objective has been changed since.
+  // XpressConstraint / XpressVariable consult this before returning duals
+  // or reduced costs.
+  bool hasLpSensitivity() const {
+    return solvedAsLp_ && !modifiedSinceSolve_ &&
+        XPRBgetlpstat(problem_.getCRef()) == XPRB_LP_OPTIMAL;
+  }
+
+  void markModified() {
+    modifiedSinceSolve_ = true;
+  }
+
   XpressProblem();
 
   std::string_view backendName() const override {
@@ -187,6 +200,8 @@ class XpressProblem : public ProblemImpl {
   folly::F14FastMap<std::shared_ptr<const VariableImpl>, double> initialValues_;
   std::optional<thrift::WarmStartResult> warmStartResult_;
   Timer timer_;
+  bool solvedAsLp_ = false;
+  bool modifiedSinceSolve_ = false;
   bool callbackAborted_ = false;
   bool loggingDisabled_ = false;
 

@@ -29,8 +29,10 @@
 #include <folly/container/MapUtil.h>
 #include <folly/logging/xlog.h>
 
+#include <cmath>
 #include <cstring>
 #include <filesystem>
+#include <limits>
 #include <map>
 #include <numeric>
 #include <optional>
@@ -504,7 +506,8 @@ XpressProblem::makeVar(const std::string& name, int xprbType, double lb) {
             fmt::format("unknown xpress variable type {}", xprbType));
     }
   };
-  return std::make_shared<XpressVariable>(variable, getVarType(xprbType));
+  modifiedSinceSolve_ = true;
+  return std::make_shared<XpressVariable>(variable, getVarType(xprbType), this);
 }
 
 std::shared_ptr<ConstraintImpl> XpressProblem::newConstraint(
@@ -512,12 +515,16 @@ std::shared_ptr<ConstraintImpl> XpressProblem::newConstraint(
     const std::string& name) {
   auto constraint = problem_.newCtr(
       name.c_str(), dynamic_cast<const XpressRelation&>(*relation).get());
-  return std::make_shared<XpressConstraint>(constraint);
+  modifiedSinceSolve_ = true;
+  return std::make_shared<XpressConstraint>(constraint, this);
 }
 
 void XpressProblem::deleteConstraint(
     std::shared_ptr<ConstraintImpl> constraint) {
-  problem_.delCtr(dynamic_cast<XpressConstraint&>(*constraint).get());
+  auto& xpressConstraint = dynamic_cast<XpressConstraint&>(*constraint);
+  problem_.delCtr(xpressConstraint.get());
+  xpressConstraint.markDeleted();
+  modifiedSinceSolve_ = true;
 }
 
 int XpressProblem::getObjectiveSize() const {
@@ -539,12 +546,14 @@ std::shared_ptr<const ExpressionImpl> XpressProblem::getObjectiveAt(
 void XpressProblem::addObjective(
     std::shared_ptr<const ExpressionImpl> expression) {
   objectives_.push_back(expression);
+  modifiedSinceSolve_ = true;
 }
 
 void XpressProblem::clearObjectives() {
   objectives_.clear();
   // also clear all saved results w.r.t. those objectives
   problemResultPerObjective_.clear();
+  modifiedSinceSolve_ = true;
 }
 
 void XpressProblem::setObjective(
@@ -575,10 +584,14 @@ int XpressProblem::callbackImpl(XPRSprob& prob) {
   if (callbackAborted_) {
     return 1;
   }
-  double bound;
-  double objective;
-  XPRSgetdblattrib(prob, XPRS_BESTBOUND, &bound);
-  XPRSgetdblattrib(prob, XPRS_MIPBESTOBJVAL, &objective);
+  // lpOptimize() populates neither MIP attribute, so an LP solve reports no
+  // progress rather than whatever an earlier solve left behind.
+  double bound = -std::numeric_limits<double>::infinity();
+  double objective = std::numeric_limits<double>::infinity();
+  if (!solvedAsLp_) {
+    XPRSgetdblattrib(prob, XPRS_BESTBOUND, &bound);
+    XPRSgetdblattrib(prob, XPRS_MIPBESTOBJVAL, &objective);
+  }
   if ((*callback_)(
           {.bound = bound,
            .objective = objective,
@@ -612,6 +625,10 @@ void XpressProblem::solveForObjectiveAt(
 
   // start the timer as we start solve
   timer_.start();
+  // Cleared before anything below can throw, so a failed solve never leaves
+  // the accessors trusting an earlier LP solve's state.
+  solvedAsLp_ = false;
+  modifiedSinceSolve_ = false;
 
   // Prevent error "problem has no variables" by adding a dummy constraint with
   // a variable.
@@ -692,8 +709,49 @@ void XpressProblem::solveForObjectiveAt(
           "BCL solution cache left unsynced",
           mipStatus);
     }
-  } else {
+  } else if (!initialValues_.empty()) {
+    // A start value is a MIP-style warm start that lpOptimize() would silently
+    // discard. Skipping the loadMat() below also keeps BCL from reloading the
+    // matrix over the XPRSaddmipsol() hint.
     problem_.mipOptimize(lpConfigs.c_str());
+  } else {
+    // BCL only populates duals and reduced costs on the lpOptimize() path --
+    // under mipOptimize() it reports every dual as 0. XPRS_MIPENTS counts
+    // integer, binary, partial-integer and semi-continuous entities;
+    // XPRS_SETS counts SOS sets; usesNativeExpressions() covers PWL and
+    // general constraints and is already false in this branch. Quadratic
+    // models stay on mipOptimize(), the only path that reaches the global
+    // solver for a non-convex one.
+    problem_.loadMat();
+    XPRSprob xprob = problem_.getXPRSprob();
+    int mipEnts = 0;
+    int sets = 0;
+    int qElems = 0;
+    int qConstraints = 0;
+    throwIfXpressError(
+        XPRSgetintattrib(xprob, XPRS_MIPENTS, &mipEnts),
+        xprob,
+        "XPRSgetintattrib(XPRS_MIPENTS) failed");
+    throwIfXpressError(
+        XPRSgetintattrib(xprob, XPRS_SETS, &sets),
+        xprob,
+        "XPRSgetintattrib(XPRS_SETS) failed");
+    throwIfXpressError(
+        XPRSgetintattrib(xprob, XPRS_QELEMS, &qElems),
+        xprob,
+        "XPRSgetintattrib(XPRS_QELEMS) failed");
+    throwIfXpressError(
+        XPRSgetintattrib(xprob, XPRS_QCONSTRAINTS, &qConstraints),
+        xprob,
+        "XPRSgetintattrib(XPRS_QCONSTRAINTS) failed");
+    solvedAsLp_ = mipEnts == 0 && sets == 0 && qElems == 0 && qConstraints == 0;
+    if (solvedAsLp_) {
+      // "c" means "continue the global search" to mipOptimize() and is not an
+      // lpOptimize() flag; "" is lpOptimize()'s automatic choice.
+      problem_.lpOptimize(lpConfigs == "c" ? "" : lpConfigs.c_str());
+    } else {
+      problem_.mipOptimize(lpConfigs.c_str());
+    }
   }
   saveDebugData(DebugPhase::PostMain);
 
@@ -733,6 +791,33 @@ std::string XpressProblem::getAlgorithm() {
 
 thrift::ProblemStatus XpressProblem::getSolveStatus() {
   int status;
+  if (solvedAsLp_) {
+    // XPRS_MIPSTATUS is not populated by an lpOptimize(), so reading it here
+    // would classify every LP solve from a stale value.
+    XPRSgetintattrib(problem_.getXPRSprob(), XPRS_LPSTATUS, &status);
+    switch (status) {
+      case XPRS_LP_OPTIMAL:
+        return thrift::ProblemStatus::OPTIMAL_FOUND;
+      case XPRS_LP_UNFINISHED: {
+        // SOLSTATUS describes XPRSoptimize(), not the lpOptimize() path.
+        // An interrupted LP can still have a primal-feasible basis.
+        int primalInfeasibilities = 0;
+        XPRSprob xprob = problem_.getXPRSprob();
+        throwIfXpressError(
+            XPRSgetintattrib(xprob, XPRS_PRIMALINFEAS, &primalInfeasibilities),
+            xprob,
+            "XPRSgetintattrib(XPRS_PRIMALINFEAS) failed");
+        return primalInfeasibilities == 0
+            ? thrift::ProblemStatus::SOLUTION_FOUND
+            : thrift::ProblemStatus::SOLUTION_NOT_FOUND;
+      }
+      case XPRS_LP_INFEAS:
+      case XPRS_LP_UNBOUNDED:
+        return thrift::ProblemStatus::NO_SOLUTION_EXISTS;
+      default:
+        return thrift::ProblemStatus::SOLUTION_NOT_FOUND;
+    }
+  }
   XPRSgetintattrib(problem_.getXPRSprob(), XPRS_MIPSTATUS, &status);
   switch (status) {
     case XPRS_MIP_OPTIMAL:
@@ -761,9 +846,26 @@ thrift::ProblemResult XpressProblem::getSolveResult() {
   }
 
   double bestBound;
-  XPRSgetdblattrib(problem_.getXPRSprob(), XPRS_BESTBOUND, &bestBound);
   double bestSolution;
-  XPRSgetdblattrib(problem_.getXPRSprob(), XPRS_MIPBESTOBJVAL, &bestSolution);
+  if (solvedAsLp_) {
+    // No branch-and-bound tree, so XPRS_BESTBOUND / XPRS_MIPBESTOBJVAL are not
+    // populated. An optimal LP is its own bound, which makes the gap exactly 0;
+    // an LP stopped short of optimality has proved no bound at all, and
+    // XPRS_LPOBJVAL means nothing unless a feasible point exists. Xpress's own
+    // finite infinities keep the result serializable, as on the MIP path.
+    const thrift::ProblemStatus status = *result.status();
+    bestSolution = XPRS_PLUSINFINITY;
+    if (status == thrift::ProblemStatus::OPTIMAL_FOUND ||
+        status == thrift::ProblemStatus::SOLUTION_FOUND) {
+      XPRSgetdblattrib(problem_.getXPRSprob(), XPRS_LPOBJVAL, &bestSolution);
+    }
+    bestBound = status == thrift::ProblemStatus::OPTIMAL_FOUND
+        ? bestSolution
+        : XPRS_MINUSINFINITY;
+  } else {
+    XPRSgetdblattrib(problem_.getXPRSprob(), XPRS_BESTBOUND, &bestBound);
+    XPRSgetdblattrib(problem_.getXPRSprob(), XPRS_MIPBESTOBJVAL, &bestSolution);
+  }
 
   result.bestBound() = bestBound;
   result.bestObjective() = bestSolution;
@@ -1390,6 +1492,7 @@ bool XpressProblem::setIndicatorOnConstraint(
             "setIndicatorOnConstraint: dir must be 0 or 1, got {}", dir));
   }
   const int bclDir = (dir == 1) ? 1 : -1;
+  modifiedSinceSolve_ = true;
   return xpressCtr->get().setIndicator(bclDir, xpressVar->get()) == 0;
 }
 

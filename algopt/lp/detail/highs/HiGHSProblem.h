@@ -62,6 +62,14 @@ class HiGHSProblem : public ProblemImpl {
       const std::string& name) override;
   void deleteConstraint(std::shared_ptr<ConstraintImpl> constraint) override;
 
+  /// Current row of a constraint in this problem, searching down from `hint`;
+  /// throws if it is not here. Rows only move toward 0, so a row the
+  /// constraint once had is a valid hint.
+  HighsInt getRowIndex(const ConstraintImpl& constraint, HighsInt hint) const;
+  const Highs& getHighs() const {
+    return highs_;
+  }
+
   void addObjective(std::shared_ptr<const ExpressionImpl> expression) override;
 
   double getParameter(const std::string& name) override;

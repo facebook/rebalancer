@@ -14,15 +14,58 @@
 
 #include "algopt/lp/generic/Constraint.h"
 
+#include <fmt/format.h>
+#include <folly/Demangle.h>
+
+#include <stdexcept>
+#include <string_view>
+#include <typeinfo>
+
 namespace facebook::algopt::lp {
 
+namespace {
+[[noreturn]] void unsupported(
+    const ConstraintImpl& impl,
+    std::string_view accessor) {
+  throw std::runtime_error(
+      fmt::format(
+          "{}() is not supported by backend {}",
+          accessor,
+          folly::demangle(typeid(impl).name())));
+}
+} // namespace
+
 ConstraintImpl::~ConstraintImpl() = default;
+
+double ConstraintImpl::getDual() const {
+  unsupported(*this, "getDual");
+}
+
+double ConstraintImpl::getSlack() const {
+  unsupported(*this, "getSlack");
+}
+
+double ConstraintImpl::getRHS() const {
+  unsupported(*this, "getRHS");
+}
 
 Constraint::Constraint(std::shared_ptr<ConstraintImpl> constraint)
     : constraint_(constraint) {}
 
 std::shared_ptr<ConstraintImpl> Constraint::get() {
   return constraint_;
+}
+
+double Constraint::getDual() const {
+  return constraint_->getDual();
+}
+
+double Constraint::getSlack() const {
+  return constraint_->getSlack();
+}
+
+double Constraint::getRHS() const {
+  return constraint_->getRHS();
 }
 
 } // namespace facebook::algopt::lp

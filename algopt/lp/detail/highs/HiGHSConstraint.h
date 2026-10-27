@@ -16,13 +16,39 @@
 
 #ifdef REBALANCER_USE_HIGHS
 
+#include "algopt/lp/detail/highs/highs.h"
 #include "algopt/lp/generic/Constraint.h"
+
+#include <atomic>
 
 namespace facebook::algopt::lp::detail {
 
-// Deliberately holds no row index: deleting a row shifts every later one, so
-// HiGHSProblem finds a constraint's current row by identity instead.
-class HiGHSConstraint : public ConstraintImpl {};
+class HiGHSProblem;
+
+// Deleting a row shifts every later one, so row_ is only a hint: HiGHSProblem
+// confirms it by identity and searches toward row 0 when it is stale. The
+// atomic only keeps concurrent const reads race-free; like the rest of the
+// problem, adding or deleting constraints still needs external synchronization.
+class HiGHSConstraint : public ConstraintImpl {
+ public:
+  HiGHSConstraint(const HiGHSProblem* problem, HighsInt row);
+
+  double getDual() const override;
+  double getSlack() const override;
+  double getRHS() const override;
+
+  // Possibly stale; see the class comment.
+  HighsInt rowHint() const {
+    return row_.load(std::memory_order_relaxed);
+  }
+
+ private:
+  HighsInt getRow() const;
+  double rhsAt(HighsInt row) const;
+
+  const HiGHSProblem* problem_; // Non-owning pointer
+  mutable std::atomic<HighsInt> row_;
+};
 
 } // namespace facebook::algopt::lp::detail
 

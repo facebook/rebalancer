@@ -32,7 +32,6 @@
 #include <algorithm>
 #include <cmath>
 #include <filesystem>
-#include <iterator>
 #include <map>
 #include <optional>
 #include <utility>
@@ -182,25 +181,38 @@ std::shared_ptr<ConstraintImpl> HiGHSProblem::newConstraint(
     REBALANCER_HIGHS_CALL(highs_.addRow(lhs, rhs, 0, nullptr, nullptr));
   }
 
-  auto constraint = std::make_shared<HiGHSConstraint>();
+  auto constraint =
+      std::make_shared<HiGHSConstraint>(this, highs_.getNumRow() - 1);
   rows_.push_back({constraint, name});
   return constraint;
 }
 
 void HiGHSProblem::deleteConstraint(
     std::shared_ptr<ConstraintImpl> constraint) {
-  // Compared by control block, which the weak_ptr keeps alive, so a new
-  // constraint allocated at a freed one's address cannot match its row.
-  const auto it = std::find_if(rows_.begin(), rows_.end(), [&](const Row& row) {
-    return !row.constraint.owner_before(constraint) &&
-        !constraint.owner_before(row.constraint);
-  });
-  if (it == rows_.end()) {
+  const auto* highsConstraint =
+      dynamic_cast<const HiGHSConstraint*>(constraint.get());
+  if (highsConstraint == nullptr) {
     throw HiGHSError("deleteConstraint: constraint is not in this problem");
   }
-  const HighsInt rowIndex = std::distance(rows_.begin(), it);
+  const HighsInt rowIndex =
+      getRowIndex(*constraint, highsConstraint->rowHint());
   REBALANCER_HIGHS_CALL(highs_.deleteRows(1, &rowIndex));
-  rows_.erase(it);
+  rows_.erase(rows_.begin() + rowIndex);
+}
+
+HighsInt HiGHSProblem::getRowIndex(
+    const ConstraintImpl& constraint,
+    HighsInt hint) const {
+  // lock() is null for a freed constraint, so a new constraint allocated at a
+  // freed one's address cannot match its row.
+  for (HighsInt row = std::min(hint, static_cast<HighsInt>(rows_.size()) - 1);
+       row >= 0;
+       --row) {
+    if (rows_[row].constraint.lock().get() == &constraint) {
+      return row;
+    }
+  }
+  throw HiGHSError("constraint is not in this problem");
 }
 
 int HiGHSProblem::getObjectiveSize() const {

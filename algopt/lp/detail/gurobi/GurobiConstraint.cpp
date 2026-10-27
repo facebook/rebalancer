@@ -16,6 +16,10 @@
 
 #ifdef REBALANCER_USE_GUROBI
 
+#include <fmt/format.h>
+
+#include <stdexcept>
+
 namespace facebook::algopt::lp::detail {
 
 GurobiConstraint::GurobiConstraint(
@@ -38,6 +42,42 @@ std::variant<GRBConstr, GRBQConstr, GRBGenConstr>& GurobiConstraint::get() {
 
 void GurobiConstraint::setGenConstr(GRBGenConstr gc) {
   constraint_ = gc;
+}
+
+GRBConstr GurobiConstraint::linearOrThrow(std::string_view accessor) const {
+  if (const auto* linear = std::get_if<GRBConstr>(&constraint_)) {
+    return *linear;
+  }
+  throw std::runtime_error(
+      fmt::format(
+          "{}() is only defined for linear constraints; this is a {} constraint",
+          accessor,
+          std::holds_alternative<GRBQConstr>(constraint_) ? "quadratic"
+                                                          : "general"));
+}
+
+double GurobiConstraint::getDual() const try {
+  return linearOrThrow("getDual").get(GRB_DoubleAttr::GRB_DoubleAttr_Pi);
+} catch (const GRBException& e) {
+  rethrowGurobiError(e);
+}
+
+double GurobiConstraint::getSlack() const try {
+  if (const auto* quadratic = std::get_if<GRBQConstr>(&constraint_)) {
+    return GRBQConstr(*quadratic).get(GRB_DoubleAttr::GRB_DoubleAttr_QCSlack);
+  }
+  return linearOrThrow("getSlack").get(GRB_DoubleAttr::GRB_DoubleAttr_Slack);
+} catch (const GRBException& e) {
+  rethrowGurobiError(e);
+}
+
+double GurobiConstraint::getRHS() const try {
+  if (const auto* quadratic = std::get_if<GRBQConstr>(&constraint_)) {
+    return GRBQConstr(*quadratic).get(GRB_DoubleAttr::GRB_DoubleAttr_QCRHS);
+  }
+  return linearOrThrow("getRHS").get(GRB_DoubleAttr::GRB_DoubleAttr_RHS);
+} catch (const GRBException& e) {
+  rethrowGurobiError(e);
 }
 
 } // namespace facebook::algopt::lp::detail

@@ -20,6 +20,8 @@
 
 #include <fmt/format.h>
 
+#include <stdexcept>
+
 namespace facebook::algopt::lp::detail {
 
 HiGHSVariable::HiGHSVariable(
@@ -56,6 +58,18 @@ void HiGHSVariable::setThreshold(double threshold) {
 
 double HiGHSVariable::getValue() const {
   return highs_->getSolution().col_value[colIndex_];
+}
+
+double HiGHSVariable::getReducedCost() const {
+  const auto& solution = highs_->getSolution();
+  if (!solution.dual_valid) {
+    // No dual solution: not solved yet, solve failed, or this is a MIP.
+    throw std::runtime_error(
+        fmt::format(
+            "HiGHS has no dual solution for column {}; reduced costs require a solved LP",
+            name_));
+  }
+  return solution.col_dual[colIndex_];
 }
 
 const std::string& HiGHSVariable::getName() const {

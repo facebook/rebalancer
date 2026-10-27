@@ -21,16 +21,32 @@
 #include "algopt/lp/detail/xpress/xpress.h"
 #include "algopt/lp/generic/Constraint.h"
 
+#include <string_view>
+
 namespace facebook::algopt::lp::detail {
+
+class XpressProblem;
 
 class XpressConstraint : public ConstraintImpl {
  public:
-  explicit XpressConstraint(dashoptimization::XPRBctr constraint);
+  XpressConstraint(
+      dashoptimization::XPRBctr constraint,
+      const XpressProblem* problem);
 
   dashoptimization::XPRBctr& get();
+  void markDeleted();
+
+  double getDual() const override;
+  double getSlack() const override;
+  double getRHS() const override;
 
  private:
+  const dashoptimization::XPRBctr& liveOrThrow(std::string_view accessor) const;
+
   dashoptimization::XPRBctr constraint_;
+  // Non-owning; the problem outlives every constraint it hands out.
+  const XpressProblem* problem_;
+  bool deleted_ = false;
 };
 
 } // namespace facebook::algopt::lp::detail

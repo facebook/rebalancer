@@ -33,6 +33,7 @@ class GurobiVariable : public VariableImpl {
   void setPartition(int partitionId) override;
 
   double getValue() const override;
+  double getReducedCost() const override;
 
   std::shared_ptr<ExpressionImpl> makeExpression(double coeff) const override;
 

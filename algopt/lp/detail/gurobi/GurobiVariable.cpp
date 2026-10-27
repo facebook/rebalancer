@@ -77,6 +77,12 @@ double GurobiVariable::getValue() const try {
   rethrowGurobiError(e);
 }
 
+double GurobiVariable::getReducedCost() const try {
+  return variable_.get(GRB_DoubleAttr::GRB_DoubleAttr_RC);
+} catch (const GRBException& e) {
+  rethrowGurobiError(e);
+}
+
 std::shared_ptr<ExpressionImpl> GurobiVariable::makeExpression(
     double coeff) const try {
   return std::make_shared<GurobiExpression>(coeff * variable_);

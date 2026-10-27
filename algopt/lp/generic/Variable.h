@@ -43,6 +43,20 @@ class VariableImpl {
 
   virtual double getValue() const = 0;
 
+  /// Reduced cost of this column. The default implementation throws; a backend
+  /// that can report solved-basis information overrides it.
+  ///
+  /// Only meaningful after a solve that reached an optimal LP solution, and
+  /// only defined for LPs -- on a MIP the backend raises its own error, which
+  /// is deliberately allowed to propagate. As with duals, a degenerate LP has
+  /// non-unique reduced costs, so do not compare them across backends.
+  ///
+  /// Sign convention: the BCL/Xpress convention for a MINIMIZATION problem
+  /// (every backend here minimizes). A variable at its lower bound has a
+  /// non-negative reduced cost, one at its upper bound a non-positive one, and
+  /// a basic variable's is zero.
+  virtual double getReducedCost() const;
+
   virtual std::shared_ptr<ExpressionImpl> makeExpression(
       double coeff) const = 0;
 
@@ -61,6 +75,10 @@ class Variable {
   void setPartition(int partitionId);
 
   double getValue() const;
+
+  /// See VariableImpl::getReducedCost for semantics and caveats.
+  /// Throws if the backend does not support sensitivity information.
+  double getReducedCost() const;
 
   std::shared_ptr<const VariableImpl> get() const;
 

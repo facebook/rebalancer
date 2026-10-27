@@ -15,8 +15,25 @@
 #include "algopt/lp/generic/Variable.h"
 
 #include <fmt/format.h>
+#include <folly/Demangle.h>
+
+#include <stdexcept>
+#include <string_view>
+#include <typeinfo>
 
 namespace facebook::algopt::lp {
+
+namespace {
+[[noreturn]] void unsupported(
+    const VariableImpl& impl,
+    std::string_view accessor) {
+  throw std::runtime_error(
+      fmt::format(
+          "{}() is not supported by backend {}",
+          accessor,
+          folly::demangle(typeid(impl).name())));
+}
+} // namespace
 
 VariableImpl::~VariableImpl() = default;
 
@@ -26,6 +43,10 @@ void VariableImpl::setPartition(int /* unused */) {
 
 bool VariableImpl::hasThreshold() const {
   return type_ == Type::SEMI_CONTINUOUS || type_ == Type::SEMI_INTEGER;
+}
+
+double VariableImpl::getReducedCost() const {
+  unsupported(*this, "getReducedCost");
 }
 
 Variable::Variable(std::shared_ptr<VariableImpl> variable)
@@ -54,6 +75,10 @@ void Variable::setPartition(int partitionId) {
 
 double Variable::getValue() const {
   return variable_->getValue();
+}
+
+double Variable::getReducedCost() const {
+  return variable_->getReducedCost();
 }
 
 std::shared_ptr<const VariableImpl> Variable::get() const {

@@ -23,15 +23,21 @@
 
 namespace facebook::algopt::lp::detail {
 
+class XpressProblem;
+
 class XpressVariable : public VariableImpl {
  public:
-  explicit XpressVariable(dashoptimization::XPRBvar variable, Type type);
+  XpressVariable(
+      dashoptimization::XPRBvar variable,
+      Type type,
+      XpressProblem* problem);
 
   void setLB(double lb) override;
   void setUB(double ub) override;
   void setThreshold(double threshold) override;
 
   double getValue() const override;
+  double getReducedCost() const override;
 
   std::shared_ptr<ExpressionImpl> makeExpression(double coeff) const override;
 
@@ -39,6 +45,8 @@ class XpressVariable : public VariableImpl {
 
  private:
   dashoptimization::XPRBvar variable_;
+  // Non-owning; the problem outlives every variable it hands out.
+  XpressProblem* problem_;
 };
 
 } // namespace facebook::algopt::lp::detail

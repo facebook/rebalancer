@@ -32,6 +32,7 @@
 
 #include <functional>
 #include <memory>
+#include <stdexcept>
 
 namespace facebook::algopt::lp::tests {
 using namespace facebook::algopt::lp::detail;
@@ -653,6 +654,56 @@ void testUnknownParameter(const std::function<Problem()>& factory) {
   EXPECT_THROW(problem.setParameter("NO_SUCH_PARAMETER", 1), SolverError);
 }
 
+// Pins the dual/slack/reduced-cost SIGN CONVENTION across every backend.
+//
+// No solver header in the repo documents its dual sign, so the convention is
+// established here by execution rather than by assumption. The vertex is
+// non-degenerate, so the duals are unique and a backend cannot agree by luck.
+// `neteng/stoma`'s Benders decomposition is written against these signs -- if
+// a backend disagrees, every cut it generates is inverted.
+//
+// With `solveAsMip`, `y` is integer. The optimum is unchanged, but Xpress now
+// solves via mipOptimize(), under which BCL reports every dual as 0, so its
+// accessors must throw rather than hand back that silent zero.
+void testSensitivitySignConvention(
+    const std::function<Problem()>& factory,
+    bool solveAsMip) {
+  auto model = factory();
+  const auto x = model.makeVar("x");
+  const auto y = solveAsMip ? model.makeIntVar("y") : model.makeVar("y");
+  const auto xneg = model.newConstraint(x <= 0, "xneg");
+  model.newConstraint(y <= 0, "yneg");
+  const auto con1 = model.newConstraint(5 * x + 2 * y >= -45, "con1");
+  model.newConstraint(x - y <= 3, "con2");
+  const auto con3 = model.newConstraint(x + 4 * y >= -27, "con3");
+  model.setObjective(x + y);
+  model.solve();
+  ASSERT_EQ(model.getStatus(), thrift::ProblemStatus::OPTIMAL_FOUND);
+
+  // Slack and RHS are available on every backend.
+  EXPECT_NEAR(con1.getSlack(), 0.0, 1e-6);
+  EXPECT_NEAR(con1.getRHS(), -45.0, 1e-9);
+  EXPECT_NEAR(xneg.getSlack(), 7.0, 1e-6);
+
+  if (solveAsMip) {
+    EXPECT_THROW(con1.getDual(), std::runtime_error);
+    EXPECT_THROW(x.getReducedCost(), std::runtime_error);
+    return;
+  }
+
+  // Binding `>=` rows at (-7, -5). Positive duals under the minimization
+  // convention. Identical values are asserted in HiGHSTest.SensitivityTest.
+  EXPECT_NEAR(con1.getDual(), 1.0 / 6.0, 1e-6);
+  EXPECT_NEAR(con3.getDual(), 1.0 / 6.0, 1e-6);
+
+  // Non-binding row prices at zero.
+  EXPECT_NEAR(xneg.getDual(), 0.0, 1e-9);
+
+  // Both columns basic, so no reduced cost.
+  EXPECT_NEAR(x.getReducedCost(), 0.0, 1e-9);
+  EXPECT_NEAR(y.getReducedCost(), 0.0, 1e-9);
+}
+
 void verifyModelFingerprint(
     const std::function<Problem()>& factory,
     bool expectedToExist) {
@@ -667,6 +718,70 @@ void verifyModelFingerprint(
 
 #ifdef REBALANCER_USE_XPRESS
 
+TEST(EndToEndTest, XpressSensitivityUnavailableForInfeasibleLp) {
+  auto problem = ProblemFactory::makeXpressProblem();
+  auto x = problem.makeVar("x");
+  x.setUB(1.0);
+  const auto constraint = problem.newConstraint(x >= 2.0);
+  problem.setObjective(x);
+  problem.solve();
+
+  ASSERT_EQ(problem.getStatus(), thrift::ProblemStatus::NO_SOLUTION_EXISTS);
+  EXPECT_THROW(constraint.getDual(), std::runtime_error);
+  EXPECT_THROW(x.getReducedCost(), std::runtime_error);
+}
+
+TEST(EndToEndTest, XpressSensitivityRequiresOptimalLp) {
+  auto problem = ProblemFactory::makeXpressProblem();
+  auto x = problem.makeVar("x");
+  auto y = problem.makeVar("y");
+  x.setLB(0.0);
+  y.setLB(0.0);
+  const auto constraint = problem.newConstraint(x + y <= 10.0);
+  problem.newConstraint(x <= 8.0);
+  problem.newConstraint(y <= 8.0);
+  problem.setObjective(-x - y);
+  problem.setParameter("XPRS_PRESOLVE", 0);
+  problem.setParameter("XPRS_DEFAULTALG", 3);
+  problem.setParameter("XPRS_LPITERLIMIT", 1);
+  problem.solve();
+
+  ASSERT_EQ(problem.getStatus(), thrift::ProblemStatus::SOLUTION_FOUND);
+  EXPECT_LT(x.getValue() + y.getValue(), 10.0);
+  EXPECT_THROW(constraint.getDual(), std::runtime_error);
+  EXPECT_THROW(x.getReducedCost(), std::runtime_error);
+}
+
+TEST(EndToEndTest, XpressSensitivityInvalidatedByVariableBounds) {
+  auto problem = ProblemFactory::makeXpressProblem();
+  auto x = problem.makeVar("x");
+  x.setBounds(0.0, 10.0);
+  const auto constraint = problem.newConstraint(x >= 1.0);
+  problem.setObjective(x);
+  problem.solve();
+  ASSERT_EQ(problem.getStatus(), thrift::ProblemStatus::OPTIMAL_FOUND);
+  EXPECT_NEAR(constraint.getDual(), 1.0, 1e-9);
+  EXPECT_NEAR(x.getReducedCost(), 0.0, 1e-9);
+
+  x.setLB(0.5);
+  EXPECT_THROW(constraint.getDual(), std::runtime_error);
+  EXPECT_THROW(x.getReducedCost(), std::runtime_error);
+  problem.setObjective(x);
+  problem.solve();
+  ASSERT_EQ(problem.getStatus(), thrift::ProblemStatus::OPTIMAL_FOUND);
+  EXPECT_NEAR(constraint.getDual(), 1.0, 1e-9);
+  EXPECT_NEAR(x.getReducedCost(), 0.0, 1e-9);
+
+  x.setUB(9.0);
+  EXPECT_THROW(constraint.getDual(), std::runtime_error);
+  EXPECT_THROW(x.getReducedCost(), std::runtime_error);
+  problem.setObjective(x);
+  problem.solve();
+  ASSERT_EQ(problem.getStatus(), thrift::ProblemStatus::OPTIMAL_FOUND);
+  EXPECT_NEAR(constraint.getDual(), 1.0, 1e-9);
+  EXPECT_NEAR(x.getReducedCost(), 0.0, 1e-9);
+}
+
 TEST(EndToEndTest, Xpress) {
   runTest(ProblemFactory::makeXpressProblem);
   testLogging(ProblemFactory::makeXpressProblem);
@@ -675,6 +790,10 @@ TEST(EndToEndTest, Xpress) {
   testQuadraticLPModel(ProblemFactory::makeXpressProblem);
   testUnknownParameter(ProblemFactory::makeXpressProblem);
   verifyModelFingerprint(ProblemFactory::makeXpressProblem, false);
+  testSensitivitySignConvention(
+      ProblemFactory::makeXpressProblem, /*solveAsMip=*/false);
+  testSensitivitySignConvention(
+      ProblemFactory::makeXpressProblem, /*solveAsMip=*/true);
 }
 
 TEST(EndToEndTest, XpressSimplified) {
@@ -714,6 +833,8 @@ TEST(EndToEndTest, Gurobi) {
   testUnknownParameter(ProblemFactory::makeGurobiProblem);
   verifyModelFingerprint(ProblemFactory::makeGurobiProblem, true);
   testCompactPrinting(ProblemFactory::makeGurobiProblem);
+  testSensitivitySignConvention(
+      ProblemFactory::makeGurobiProblem, /*solveAsMip=*/false);
 }
 
 TEST(EndToEndTest, GenericImpl) {
@@ -771,6 +892,10 @@ TEST(EndToEndTest, HiGHS) {
   testLogging(ProblemFactory::makeHiGHSProblem);
   testUnknownParameter(ProblemFactory::makeHiGHSProblem);
   verifyModelFingerprint(ProblemFactory::makeHiGHSProblem, false);
+  testSensitivitySignConvention(
+      ProblemFactory::makeHiGHSProblem, /*solveAsMip=*/false);
+  testSensitivitySignConvention(
+      ProblemFactory::makeHiGHSProblem, /*solveAsMip=*/true);
 }
 
 TEST(EndToEndTest, HiGHSSimplified) {

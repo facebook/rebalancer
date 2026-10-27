@@ -41,6 +41,9 @@ class HiGHSVariable : public VariableImpl {
   /// Get the value of the variable in the best solution
   double getValue() const override;
 
+  /// Get the reduced cost of the variable in the solved LP
+  double getReducedCost() const override;
+
   /// Get the name of the variable
   const std::string& getName() const;
 
