@@ -321,7 +321,9 @@ AssignmentSolution CoreSolver::materializeAndSolve(
       logCollector,
       *problemSpec.publishMetrics(),
       *problemSpec.rolloutConfig()->enableInvalidMoveFilter() &&
-          solver->needsInvalidMoveFilter());
+          solver->needsInvalidMoveFilter(),
+      /*useSeparatedLocalSearchPenaltyObjective=*/false,
+      enableParallelizedNewMaterializer);
   materialize.stop();
 
   // TODO: simplify the logic below this line once the old materializer is gone

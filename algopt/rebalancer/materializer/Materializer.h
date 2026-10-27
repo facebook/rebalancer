@@ -46,7 +46,8 @@ class Materializer {
       std::shared_ptr<LogCollector> logger = std::make_shared<LogCollector>(),
       bool shouldCollectMetrics = false,
       bool enableInvalidMoveFilter = false,
-      bool useSeparatedLocalSearchPenaltyObjective = false);
+      bool useSeparatedLocalSearchPenaltyObjective = false,
+      bool parallelized = true);
 
  private:
   explicit Materializer(
@@ -56,7 +57,8 @@ class Materializer {
       std::shared_ptr<LogCollector> logger,
       bool shouldCollectMetrics = false,
       bool enableInvalidMoveFilter = false,
-      bool useSeparatedLocalSearchPenaltyObjective = false);
+      bool useSeparatedLocalSearchPenaltyObjective = false,
+      bool parallelized = true);
 
   std::shared_ptr<MaterializedProblem> materialize();
 
@@ -113,6 +115,7 @@ class Materializer {
   std::unique_ptr<InvalidMoveFilter> invalidMoveFilter_;
   std::shared_ptr<Metrics::Builder> metricsBuilder_;
   bool useSeparatedLocalSearchPenaltyObjective_{false};
+  bool parallelized_{true};
 };
 
 } // namespace facebook::rebalancer::materializer

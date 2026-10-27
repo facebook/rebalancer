@@ -69,7 +69,8 @@ const std::shared_ptr<const MaterializedProblem> Materializer::materialize(
     std::shared_ptr<LogCollector> logger,
     bool shouldCollectMetrics,
     bool enableInvalidMoveFilter,
-    bool useSeparatedLocalSearchPenaltyObjective) {
+    bool useSeparatedLocalSearchPenaltyObjective,
+    bool parallelized) {
   Materializer materializer(
       std::move(executor),
       std::move(universe),
@@ -77,7 +78,8 @@ const std::shared_ptr<const MaterializedProblem> Materializer::materialize(
       std::move(logger),
       shouldCollectMetrics,
       enableInvalidMoveFilter,
-      useSeparatedLocalSearchPenaltyObjective);
+      useSeparatedLocalSearchPenaltyObjective,
+      parallelized);
   return materializer.materialize();
 }
 
@@ -88,7 +90,8 @@ Materializer::Materializer(
     std::shared_ptr<LogCollector> logger,
     bool shouldCollectMetrics,
     bool enableInvalidMoveFilter,
-    bool useSeparatedLocalSearchPenaltyObjective)
+    bool useSeparatedLocalSearchPenaltyObjective,
+    bool parallelized)
     : executor_(std::move(executor)),
       universe_(std::move(universe)),
       specBuilderFactory_(universe_, continuousExpressions, logger),
@@ -104,7 +107,8 @@ Materializer::Materializer(
           shouldCollectMetrics ? std::make_shared<Metrics::Builder>()
                                : nullptr),
       useSeparatedLocalSearchPenaltyObjective_(
-          useSeparatedLocalSearchPenaltyObjective) {}
+          useSeparatedLocalSearchPenaltyObjective),
+      parallelized_(parallelized) {}
 
 std::shared_ptr<MaterializedProblem> Materializer::materialize() {
   auto updatesInInitialAssignment = getUpdatesInInitialAssignment();
@@ -233,13 +237,17 @@ folly::coro::Task<void> Materializer::materializeConstraintCoro(
   auto constraints = co_await specBuilder->constraints(expressionBuilder);
 
   // Sort by expression memory address for better cache locality
-  // when expressions were allocated from multiple threads
-  std::sort(
-      constraints.begin(),
-      constraints.end(),
-      [](const ConstraintInfo& a, const ConstraintInfo& b) {
-        return a.constraintExpr.get() < b.constraintExpr.get();
-      });
+  // when expressions were allocated from multiple threads. Serial runs keep
+  // the spec builder order: addresses differ between processes, so sorting by
+  // them would make the expressions built below, and the solution, vary.
+  if (parallelized_) {
+    std::sort(
+        constraints.begin(),
+        constraints.end(),
+        [](const ConstraintInfo& a, const ConstraintInfo& b) {
+          return a.constraintExpr.get() < b.constraintExpr.get();
+        });
+  }
 
   const auto addComponentTo = [&](const ExprPtr& component,
                                   ExprPtr& aggregate) {
