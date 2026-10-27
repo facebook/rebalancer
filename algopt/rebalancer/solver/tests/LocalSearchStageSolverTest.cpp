@@ -76,7 +76,7 @@ TEST(LocalSearchStageSolverTest, StageWithoutConfigTakesSolverLevelConfig) {
   const auto config = getStageConfig(solver, 0);
   ASSERT_TRUE(config.has_value());
   ASSERT_EQ(config->getType(), ParallelExecutionConfig::Type::batching);
-  EXPECT_EQ(*config->get_batching().batchSize(), 128);
+  EXPECT_EQ(*config->batching().value().batchSize(), 128);
 }
 
 TEST(LocalSearchStageSolverTest, StageLevelConfigOverridesSolverLevelConfig) {

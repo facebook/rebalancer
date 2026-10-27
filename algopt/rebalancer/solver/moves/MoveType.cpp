@@ -26,8 +26,7 @@ int MoveType::getBundleSize(
   auto type = exploreOptions.getType();
   switch (type) {
     case interface::ObjectsToExploreOptions::Type::objectsFromGroupsSpec:
-      return exploreOptions.get_objectsFromGroupsSpec().bundleSize().value_or(
-          1);
+      return exploreOptions.objectsFromGroupsSpec()->bundleSize().value_or(1);
     default:
       return 1;
   }
@@ -69,12 +68,13 @@ MoveType::getDestinationsToExplore(
     case interface::DestinationsToExploreOptions::Type::
         moveToCurrentScopeItem: {
       return problem.getDestinationsGenerator().getAcceptingDestinations(
-          destinationsToExplore.get_moveToCurrentScopeItem(), hotContainerId);
+          destinationsToExplore.moveToCurrentScopeItem().value(),
+          hotContainerId);
     }
 
     case interface::DestinationsToExploreOptions::Type::moveToScopeItems: {
       return problem.getDestinationsGenerator().getAcceptingDestinations(
-          destinationsToExplore.get_moveToScopeItems(),
+          destinationsToExplore.moveToScopeItems().value(),
           hotContainerId,
           hotObjectId);
     }
@@ -84,7 +84,7 @@ MoveType::getDestinationsToExplore(
       const auto& universe = problem.getUniverse();
       return getDestinationsToExplore(
           universe.getDestinationsToExploreOptions(
-              destinationsToExplore.get_destinationToExploreName()),
+              destinationsToExplore.destinationToExploreName().value()),
           hotContainerId,
           hotObjectId,
           problem);
@@ -114,8 +114,8 @@ std::vector<ObjectBundle> MoveType::getObjectBundlesToExplore(
   switch (exploreOptions) {
     case interface::ObjectsToExploreOptions::Type::objectsFromGroupsSpec: {
       const std::string& partition =
-          *objectsToExploreOptions.get_objectsFromGroupsSpec()
-               .groupList()
+          *objectsToExploreOptions.objectsFromGroupsSpec()
+               ->groupList()
                ->partitionName();
       return problem.getObjectsGenerator().getObjectBundlesToExplore(
           partition,
@@ -142,8 +142,8 @@ MoveType::getObjectsToExplore(
   switch (exploreOptions) {
     case interface::ObjectsToExploreOptions::Type::objectsFromGroupsSpec:
       return problem.getObjectsGenerator().getObjectsToExplore(
-          *objectsToExplore.get_objectsFromGroupsSpec()
-               .groupList()
+          *objectsToExplore.objectsFromGroupsSpec()
+               ->groupList()
                ->partitionName(),
           hotContainerId,
           problem.assignment,

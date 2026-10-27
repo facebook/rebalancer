@@ -45,7 +45,7 @@ std::optional<GroupUtilizationBound> getGroupUtilizationBound(
   if (spec.utilizationBound() &&
       spec.utilizationBound()->getType() ==
           UtilizationBound::Type::groupUtilizationBound) {
-    return spec.utilizationBound()->get_groupUtilizationBound();
+    return spec.utilizationBound()->groupUtilizationBound().value();
   }
   return std::nullopt;
 }

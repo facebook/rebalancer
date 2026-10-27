@@ -448,7 +448,7 @@ void ProblemChecker::checkCapacitySpec(const CapacitySpec& spec) {
   checkLimitForScopeItems(*spec.scope(), *spec.limit());
   checkScopeItemFilterSpec(*spec.filter(), *spec.scope());
   if (auto utilBound = spec.utilizationBound()) {
-    check(utilBound->get_groupUtilizationBound(), *spec.scope());
+    check(utilBound->groupUtilizationBound().value(), *spec.scope());
   }
   if (*spec.useLegacyFormula()) {
     XLOG(WARNING)
@@ -532,19 +532,19 @@ void ProblemChecker::checkIfPositiveInteger(
 void ProblemChecker::checkGenericSpec(const GenericSpec& spec) {
   switch (spec.getType()) {
     case interface::GenericSpec::Type::logicalOrSpec:
-      checkLogicalOrSpec(spec.get_logicalOrSpec());
+      checkLogicalOrSpec(spec.logicalOrSpec().value());
       break;
     case interface::GenericSpec::Type::logicalAndSpec:
-      checkLogicalAndSpec(spec.get_logicalAndSpec());
+      checkLogicalAndSpec(spec.logicalAndSpec().value());
       break;
     case interface::GenericSpec::Type::capacitySpec:
-      checkCapacitySpec(spec.get_capacitySpec());
+      checkCapacitySpec(spec.capacitySpec().value());
       break;
     case interface::GenericSpec::Type::groupCountSpec:
-      checkGroupCountSpec(spec.get_groupCountSpec());
+      checkGroupCountSpec(spec.groupCountSpec().value());
       break;
     case interface::GenericSpec::Type::groupCapacitySpec:
-      checkGroupCapacitySpec(spec.get_groupCapacitySpec());
+      checkGroupCapacitySpec(spec.groupCapacitySpec().value());
       break;
     case interface::GenericSpec::Type::__EMPTY__:
       throw std::runtime_error("Uninitialized generic spec");
@@ -602,20 +602,20 @@ void ProblemChecker::addSpec(const MinimizeContainersSpec& spec) {
     switch (spec.target()->getType()) {
       case MinimizeContainersTarget::Type::maxFreeLimit:
         checkValue(
-            spec.target()->get_maxFreeLimit(),
+            spec.target()->maxFreeLimit().value(),
             fmt::format(
                 "maxFreeLimit for MinimizeContainersSpec dimension '{}'",
                 *spec.dimension()),
             ValueRequirement::POSITIVE);
         break;
       case MinimizeContainersTarget::Type::minUsedLimit:
-        if (spec.target()->get_minUsedLimit() < 0) {
+        if (spec.target()->minUsedLimit().value() < 0) {
           throw std::runtime_error(
               fmt::format(
                   "Minimize containers spec on dimension {} has negative "
                   "minUsedLimit {}",
                   *spec.dimension(),
-                  spec.target()->get_minUsedLimit()));
+                  spec.target()->minUsedLimit().value()));
         }
         break;
       case MinimizeContainersTarget::Type::__EMPTY__:
@@ -1673,10 +1673,10 @@ void ProblemChecker::checkExecutionConfig(
     case interface::ParallelExecutionConfig::Type::slidingWindow:
       return;
     case interface::ParallelExecutionConfig::Type::batching:
-      checkBatchingConfig(config.get_batching());
+      checkBatchingConfig(config.batching().value());
       return;
     case interface::ParallelExecutionConfig::Type::autoExecution:
-      checkBatchingConfig(*config.get_autoExecution().batching());
+      checkBatchingConfig(*config.autoExecution()->batching());
       return;
   }
   throw std::runtime_error("Unknown ParallelExecutionConfig type");
@@ -1758,43 +1758,43 @@ void ProblemChecker::checkMoveTypeSpecs(
       case interface::MoveTypeSpec::Type::
           singleRandomObjectStratifiedMoveTypeSpec: {
         checkMoveTypeSpec(
-            moveTypeSpec.get_singleRandomObjectStratifiedMoveTypeSpec());
+            moveTypeSpec.singleRandomObjectStratifiedMoveTypeSpec().value());
         break;
       }
       case interface::MoveTypeSpec::Type::
           groupMoveWithHintStrategiesMoveTypeSpec: {
         checkMoveTypeSpec(
-            moveTypeSpec.get_groupMoveWithHintStrategiesMoveTypeSpec());
+            moveTypeSpec.groupMoveWithHintStrategiesMoveTypeSpec().value());
         break;
       }
       case interface::MoveTypeSpec::Type::swapMoveTypeSpec: {
-        checkMoveTypeSpec(moveTypeSpec.get_swapMoveTypeSpec());
+        checkMoveTypeSpec(moveTypeSpec.swapMoveTypeSpec().value());
         break;
       }
       case interface::MoveTypeSpec::Type::fixedDestMoveTypeSpec: {
-        checkMoveTypeSpec(moveTypeSpec.get_fixedDestMoveTypeSpec());
+        checkMoveTypeSpec(moveTypeSpec.fixedDestMoveTypeSpec().value());
         break;
       }
       case interface::MoveTypeSpec::Type::singleFixedSourceMoveTypeSpec: {
-        checkMoveTypeSpec(moveTypeSpec.get_singleFixedSourceMoveTypeSpec());
+        checkMoveTypeSpec(moveTypeSpec.singleFixedSourceMoveTypeSpec().value());
         break;
       }
       case interface::MoveTypeSpec::Type::colocateGroupsMoveTypeSpec: {
-        checkMoveTypeSpec(moveTypeSpec.get_colocateGroupsMoveTypeSpec());
+        checkMoveTypeSpec(moveTypeSpec.colocateGroupsMoveTypeSpec().value());
         break;
       }
       case interface::MoveTypeSpec::Type::singleRandomStratifiedMoveTypeSpec: {
         checkMoveTypeSpec(
-            moveTypeSpec.get_singleRandomStratifiedMoveTypeSpec());
+            moveTypeSpec.singleRandomStratifiedMoveTypeSpec().value());
         break;
       }
       case interface::MoveTypeSpec::Type::singleFastMoveTypeSpec: {
-        checkMoveTypeSpec(moveTypeSpec.get_singleFastMoveTypeSpec());
+        checkMoveTypeSpec(moveTypeSpec.singleFastMoveTypeSpec().value());
         break;
       }
       case interface::MoveTypeSpec::Type::greedyGroupToScopeItemMoveTypeSpec: {
         checkMoveTypeSpec(
-            moveTypeSpec.get_greedyGroupToScopeItemMoveTypeSpec());
+            moveTypeSpec.greedyGroupToScopeItemMoveTypeSpec().value());
         break;
       }
       case MoveTypeSpec::Type::__EMPTY__: {
@@ -1848,7 +1848,8 @@ void ProblemChecker::checkMoveTypeSpec(
             "SwapMoveType does not support {}: only unfiltered MoveToScopeItemsSpec.defaultScopeItems is supported",
             field);
       };
-      const auto& moveToScopeItems = destinationOptions.get_moveToScopeItems();
+      const auto& moveToScopeItems =
+          destinationOptions.moveToScopeItems().value();
       if (moveToScopeItems.defaultScopeItems()->filter().has_value()) {
         throw std::runtime_error(
             unsupported("MoveToScopeItemsSpec.defaultScopeItems.filter"));
@@ -1974,7 +1975,7 @@ void ProblemChecker::checkObjectsToExploreOptions(
   switch (exploreOption) {
     case interface::ObjectsToExploreOptions::Type::objectsFromGroupsSpec: {
       checkObjectsFromGroupsSpec(
-          objectsToExploreOptions.get_objectsFromGroupsSpec(),
+          objectsToExploreOptions.objectsFromGroupsSpec().value(),
           objectBundleExpectation);
       break;
     }
@@ -2076,17 +2077,17 @@ void ProblemChecker::checkDestinationsToExploreOptions(
   switch (exploreOption) {
     case interface::DestinationsToExploreOptions::Type::
         moveToCurrentScopeItem: {
-      checkExploreOption(destinationOptions.get_moveToCurrentScopeItem());
+      checkExploreOption(destinationOptions.moveToCurrentScopeItem().value());
       break;
     }
     case interface::DestinationsToExploreOptions::Type::moveToScopeItems: {
-      checkExploreOption(destinationOptions.get_moveToScopeItems());
+      checkExploreOption(destinationOptions.moveToScopeItems().value());
       break;
     }
     case interface::DestinationsToExploreOptions::Type::
         destinationToExploreName: {
       checkDestinationsToExploreOptionExists(
-          destinationOptions.get_destinationToExploreName());
+          destinationOptions.destinationToExploreName().value());
       break;
     }
     case interface::DestinationsToExploreOptions::Type::__EMPTY__: {
@@ -2135,7 +2136,7 @@ void ProblemChecker::check(
     switch (filter.getType()) {
       case interface::ScopeItemFilter::Type::objectDimensionBased: {
         const auto& dimensionName =
-            *filter.get_objectDimensionBased().dimensionName();
+            *filter.objectDimensionBased()->dimensionName();
         checkDimensionExists(dimensionName);
         const auto& scopeName = *scopeItemList.scopeName();
         const auto* dimensionScope =
@@ -2261,7 +2262,7 @@ void ProblemChecker::checkMoveTypeSpec(
     const auto& destinations = *spec.destinationsToExplore();
     if (destinations.getType() ==
         interface::DestinationsToExploreOptions::Type::moveToScopeItems) {
-      const auto& moveToScopeItems = destinations.get_moveToScopeItems();
+      const auto& moveToScopeItems = destinations.moveToScopeItems().value();
       // This move type relocates a whole group to a single scope item.
       // objectToScopeItems is per-object, so it is not supported.
       if (!moveToScopeItems.objectToScopeItems()->empty()) {

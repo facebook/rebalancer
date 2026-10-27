@@ -118,7 +118,7 @@ void FixedSourceMoveType::getBundleMoveCandidates(
   if (adjustBundleSizeForIncompleteBundles) {
     const int bundleSize = MoveType::getBundleSize(bundleOptions);
     const std::string& partition =
-        *bundleOptions.get_objectsFromGroupsSpec().groupList()->partitionName();
+        *bundleOptions.objectsFromGroupsSpec()->groupList()->partitionName();
     groupBundleSizeOverrides = getGroupBundleSizeOverrides(
         partition,
         bundleSize,

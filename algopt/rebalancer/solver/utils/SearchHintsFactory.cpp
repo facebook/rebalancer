@@ -36,7 +36,7 @@ SearchHints SearchHintsFactory::create(
   auto byName = [&name = std::as_const(kSingleColdestStratifiedMoveTypeName)](
                     const interface::MoveTypeSpec& mts) {
     return mts.getType() == interface::MoveTypeSpec::Type::moveTypeName &&
-        mts.get_moveTypeName() == name;
+        mts.moveTypeName().value() == name;
   };
   const bool coldest_stratified_containers =
       (std::ranges::find_if(moveTypeList, byName) != moveTypeList.end());

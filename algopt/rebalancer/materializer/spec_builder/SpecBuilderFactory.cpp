@@ -88,110 +88,111 @@ std::unique_ptr<SpecBuilder> SpecBuilderFactory::getBuilder(
   switch (spec.getType()) {
     case ConstraintSpecs::Type::capacitySpec:
       return std::make_unique<CapacitySpecBuilder>(
-          universe_, spec.get_capacitySpec());
+          universe_, spec.capacitySpec().value());
     case ConstraintSpecs::Type::bipartiteSwapsSpec:
       return std::make_unique<BipartiteSwapsSpecBuilder>(
-          universe_, spec.get_bipartiteSwapsSpec());
+          universe_, spec.bipartiteSwapsSpec().value());
     case ConstraintSpecs::Type::colocateGroupsSpec:
       return std::make_unique<ColocateGroupsSpecBuilder>(
-          universe_, spec.get_colocateGroupsSpec(), continuousExpressions_);
+          universe_, spec.colocateGroupsSpec().value(), continuousExpressions_);
     case ConstraintSpecs::Type::exclusiveObjectsSpec:
       return std::make_unique<ExclusiveObjectsSpecBuilder>(
-          universe_, spec.get_exclusiveObjectsSpec());
+          universe_, spec.exclusiveObjectsSpec().value());
     case ConstraintSpecs::Type::exclusiveGroupsSpec:
       return std::make_unique<ExclusiveGroupsSpecBuilder>(
-          universe_, spec.get_exclusiveGroupsSpec(), logger_);
+          universe_, spec.exclusiveGroupsSpec().value(), logger_);
     case ConstraintSpecs::Type::exclusiveScopeItemsSpec:
       return std::make_unique<ExclusiveScopeItemsSpecBuilder>(
-          universe_, spec.get_exclusiveScopeItemsSpec());
+          universe_, spec.exclusiveScopeItemsSpec().value());
     case ConstraintSpecs::Type::flowSpec:
-      return std::make_unique<FlowSpecBuilder>(universe_, spec.get_flowSpec());
+      return std::make_unique<FlowSpecBuilder>(
+          universe_, spec.flowSpec().value());
     case ConstraintSpecs::Type::avoidAssignmentsSpec:
       return std::make_unique<AvoidAssignmentsSpecBuilder>(
-          universe_, spec.get_avoidAssignmentsSpec());
+          universe_, spec.avoidAssignmentsSpec().value());
     case ConstraintSpecs::Type::moveGroupSpec:
       return std::make_unique<MoveGroupSpecBuilder>(
-          universe_, spec.get_moveGroupSpec());
+          universe_, spec.moveGroupSpec().value());
     case ConstraintSpecs::Type::capacityRatioSpec:
       return std::make_unique<CapacityRatioSpecBuilder>(
-          universe_, spec.get_capacityRatioSpec());
+          universe_, spec.capacityRatioSpec().value());
     case ConstraintSpecs::Type::toFreeSpec:
       return std::make_unique<ToFreeSpecBuilder>(
-          universe_, spec.get_toFreeSpec(), continuousExpressions_);
+          universe_, spec.toFreeSpec().value(), continuousExpressions_);
     case ConstraintSpecs::Type::minimizeMovementSpec:
       return std::make_unique<MinimizeMovementSpecBuilder>(
-          universe_, spec.get_minimizeMovementSpec());
+          universe_, spec.minimizeMovementSpec().value());
     case ConstraintSpecs::Type::srBufferCapacitySpec:
       return std::make_unique<SRBufferCapacitySpecBuilder>(
-          universe_, spec.get_srBufferCapacitySpec());
+          universe_, spec.srBufferCapacitySpec().value());
     case ConstraintSpecs::Type::rasRebalancingMovementSpec:
 #ifndef REBALANCER_OSS_BUILD
       return std::make_unique<RasRebalancingMovementSpecBuilder>(
-          universe_, spec.get_rasRebalancingMovementSpec());
+          universe_, spec.rasRebalancingMovementSpec().value());
 #else
       throw std::runtime_error("Not available in OSS.");
 #endif
     case ConstraintSpecs::Type::avoidMovingSpec:
       return std::make_unique<AvoidMovingSpecBuilder>(
-          universe_, spec.get_avoidMovingSpec());
+          universe_, spec.avoidMovingSpec().value());
     case ConstraintSpecs::Type::movesInProgressSpec:
       return std::make_unique<MovesInProgressSpecBuilder>(
-          universe_, spec.get_movesInProgressSpec());
+          universe_, spec.movesInProgressSpec().value());
     case ConstraintSpecs::Type::groupCountSpec:
       return std::make_unique<GroupCountSpecBuilder>(
-          universe_, spec.get_groupCountSpec());
+          universe_, spec.groupCountSpec().value());
     case ConstraintSpecs::Type::groupMoveLimitSpec:
       return std::make_unique<GroupMoveLimitSpecBuilder>(
-          universe_, spec.get_groupMoveLimitSpec());
+          universe_, spec.groupMoveLimitSpec().value());
     case ConstraintSpecs::Type::groupIsolationLimitSpec:
       return std::make_unique<GroupIsolationLimitSpecBuilder>(
-          universe_, spec.get_groupIsolationLimitSpec());
+          universe_, spec.groupIsolationLimitSpec().value());
     case ConstraintSpecs::Type::groupCapacitySpec:
       return std::make_unique<GroupCapacitySpecBuilder>(
-          universe_, spec.get_groupCapacitySpec());
+          universe_, spec.groupCapacitySpec().value());
     case ConstraintSpecs::Type::objectAffinitiesSpec:
       return std::make_unique<ObjectAffinitiesSpecBuilder>(
-          universe_, spec.get_objectAffinitiesSpec());
+          universe_, spec.objectAffinitiesSpec().value());
     case ConstraintSpecs::Type::capacityWithSupplyAndDrSpec:
       return std::make_unique<CapacityWithSupplyAndDrSpecBuilder>(
-          universe_, spec.get_capacityWithSupplyAndDrSpec());
+          universe_, spec.capacityWithSupplyAndDrSpec().value());
     case ConstraintSpecs::Type::disasterRecoveryCapacitySpec:
       return std::make_unique<DisasterRecoveryCapacitySpecBuilder>(
-          universe_, spec.get_disasterRecoveryCapacitySpec());
+          universe_, spec.disasterRecoveryCapacitySpec().value());
     case ConstraintSpecs::Type::aggregatedGroupSpec:
       return std::make_unique<AggregatedGroupSpecBuilder>(
-          universe_, spec.get_aggregatedGroupSpec());
+          universe_, spec.aggregatedGroupSpec().value());
     case ConstraintSpecs::Type::nestedScopeLimitSpec:
       return std::make_unique<NestedScopeLimitSpecBuilder>(
-          universe_, spec.get_nestedScopeLimitSpec());
+          universe_, spec.nestedScopeLimitSpec().value());
     case ConstraintSpecs::Type::drainCapacitySpec:
       return std::make_unique<DrainCapacitySpecBuilder>(
-          universe_, spec.get_drainCapacitySpec());
+          universe_, spec.drainCapacitySpec().value());
     case ConstraintSpecs::Type::nonAcceptingSpec:
       return std::make_unique<NonAcceptingSpecBuilder>(
-          universe_, spec.get_nonAcceptingSpec());
+          universe_, spec.nonAcceptingSpec().value());
     case ConstraintSpecs::Type::exclusiveSwapsSpec:
       return std::make_unique<ExclusiveSwapsSpecBuilder>(
-          universe_, spec.get_exclusiveSwapsSpec());
+          universe_, spec.exclusiveSwapsSpec().value());
     case ConstraintSpecs::Type::multipleOrCapacitySpec:
       return std::make_unique<MultipleOrCapacitySpecBuilder>(
-          universe_, spec.get_multipleOrCapacitySpec());
+          universe_, spec.multipleOrCapacitySpec().value());
     case ConstraintSpecs::Type::logicalOrSpec:
       return std::make_unique<LogicalOrSpecBuilder>(
-          universe_, spec.get_logicalOrSpec());
+          universe_, spec.logicalOrSpec().value());
     case ConstraintSpecs::Type::logicalAndSpec:
       return std::make_unique<LogicalAndSpecBuilder>(
-          universe_, spec.get_logicalAndSpec());
+          universe_, spec.logicalAndSpec().value());
     case ConstraintSpecs::Type::routingLatencySpec:
       return std::make_unique<RoutingLatencySpecBuilder>(
-          universe_, spec.get_routingLatencySpec());
+          universe_, spec.routingLatencySpec().value());
     case ConstraintSpecs::Type::groupDiversitySpec:
       return std::make_unique<GroupDiversitySpecBuilder>(
-          universe_, spec.get_groupDiversitySpec(), continuousExpressions_);
+          universe_, spec.groupDiversitySpec().value(), continuousExpressions_);
     case ConstraintSpecs::Type::capacityWithGroupPresenceSpec:
       return std::make_unique<CapacityWithGroupPresenceSpecBuilder>(
           universe_,
-          spec.get_capacityWithGroupPresenceSpec(),
+          spec.capacityWithGroupPresenceSpec().value(),
           continuousExpressions_);
     case ConstraintSpecs::Type::throttlingSpec:
       throw std::runtime_error(
@@ -212,112 +213,115 @@ std::unique_ptr<SpecBuilder> SpecBuilderFactory::getBuilder(
   switch (spec.getType()) {
     case GoalSpecs::Type::assignmentAffinitiesSpec:
       return std::make_unique<AssignmentAffinitiesSpecBuilder>(
-          universe_, spec.get_assignmentAffinitiesSpec());
+          universe_, spec.assignmentAffinitiesSpec().value());
     case GoalSpecs::Type::capacitySpec:
       return std::make_unique<CapacitySpecBuilder>(
-          universe_, spec.get_capacitySpec());
+          universe_, spec.capacitySpec().value());
     case GoalSpecs::Type::colocateGroupsSpec:
       return std::make_unique<ColocateGroupsSpecBuilder>(
-          universe_, spec.get_colocateGroupsSpec(), continuousExpressions_);
+          universe_, spec.colocateGroupsSpec().value(), continuousExpressions_);
     case GoalSpecs::Type::exclusiveObjectsSpec:
       return std::make_unique<ExclusiveObjectsSpecBuilder>(
-          universe_, spec.get_exclusiveObjectsSpec());
+          universe_, spec.exclusiveObjectsSpec().value());
     case GoalSpecs::Type::exclusiveGroupsSpec:
       return std::make_unique<ExclusiveGroupsSpecBuilder>(
-          universe_, spec.get_exclusiveGroupsSpec(), logger_);
+          universe_, spec.exclusiveGroupsSpec().value(), logger_);
     case GoalSpecs::Type::flowSpec:
-      return std::make_unique<FlowSpecBuilder>(universe_, spec.get_flowSpec());
+      return std::make_unique<FlowSpecBuilder>(
+          universe_, spec.flowSpec().value());
     case GoalSpecs::Type::groupAssignmentAffinitiesSpec:
       return std::make_unique<GroupAssignmentAffinitiesSpecBuilder>(
-          universe_, spec.get_groupAssignmentAffinitiesSpec());
+          universe_, spec.groupAssignmentAffinitiesSpec().value());
     case GoalSpecs::Type::maximizeAllocationSpec:
       return std::make_unique<MaximizeAllocationSpecBuilder>(
-          universe_, spec.get_maximizeAllocationSpec());
+          universe_, spec.maximizeAllocationSpec().value());
     case GoalSpecs::Type::maximizeFreeCapacityUnitsSpec:
       return std::make_unique<MaximizeFreeCapacityUnitsSpecBuilder>(
           universe_,
-          spec.get_maximizeFreeCapacityUnitsSpec(),
+          spec.maximizeFreeCapacityUnitsSpec().value(),
           continuousExpressions_);
     case GoalSpecs::Type::capacityRatioSpec:
       return std::make_unique<CapacityRatioSpecBuilder>(
-          universe_, spec.get_capacityRatioSpec());
+          universe_, spec.capacityRatioSpec().value());
     case GoalSpecs::Type::minimizeSquaresSpec:
       return std::make_unique<MinimizeSquaresSpecBuilder>(
-          universe_, spec.get_minimizeSquaresSpec());
+          universe_, spec.minimizeSquaresSpec().value());
     case GoalSpecs::Type::minimizeMovementSpec:
       return std::make_unique<MinimizeMovementSpecBuilder>(
-          universe_, spec.get_minimizeMovementSpec());
+          universe_, spec.minimizeMovementSpec().value());
     case GoalSpecs::Type::sumOfMaxSpec:
       return std::make_unique<SumOfMaxSpecBuilder>(
-          universe_, spec.get_sumOfMaxSpec());
+          universe_, spec.sumOfMaxSpec().value());
     case GoalSpecs::Type::balanceSpec:
       return std::make_unique<BalanceSpecBuilder>(
-          universe_, spec.get_balanceSpec(), continuousExpressions_);
+          universe_, spec.balanceSpec().value(), continuousExpressions_);
     case GoalSpecs::Type::groupCapacitySpec:
       return std::make_unique<GroupCapacitySpecBuilder>(
-          universe_, spec.get_groupCapacitySpec());
+          universe_, spec.groupCapacitySpec().value());
     case GoalSpecs::Type::groupCountSpec:
       return std::make_unique<GroupCountSpecBuilder>(
-          universe_, spec.get_groupCountSpec());
+          universe_, spec.groupCountSpec().value());
     case GoalSpecs::Type::minimizeContainersSpec:
       return std::make_unique<MinimizeContainersSpecBuilder>(
-          universe_, spec.get_minimizeContainersSpec(), continuousExpressions_);
+          universe_,
+          spec.minimizeContainersSpec().value(),
+          continuousExpressions_);
     case GoalSpecs::Type::utilIncreaseCostSpec:
       return std::make_unique<UtilIncreaseCostSpecBuilder>(
-          universe_, spec.get_utilIncreaseCostSpec());
+          universe_, spec.utilIncreaseCostSpec().value());
     case GoalSpecs::Type::groupIsolationLimitSpec:
       return std::make_unique<GroupIsolationLimitSpecBuilder>(
-          universe_, spec.get_groupIsolationLimitSpec());
+          universe_, spec.groupIsolationLimitSpec().value());
     case GoalSpecs::Type::capacityWithSupplyAndDrSpec:
       return std::make_unique<CapacityWithSupplyAndDrSpecBuilder>(
-          universe_, spec.get_capacityWithSupplyAndDrSpec());
+          universe_, spec.capacityWithSupplyAndDrSpec().value());
     case GoalSpecs::Type::workingSetSpec:
       return std::make_unique<WorkingSetSpecBuilder>(
-          universe_, spec.get_workingSetSpec());
+          universe_, spec.workingSetSpec().value());
     case GoalSpecs::Type::disasterRecoveryCapacitySpec:
       return std::make_unique<DisasterRecoveryCapacitySpecBuilder>(
-          universe_, spec.get_disasterRecoveryCapacitySpec());
+          universe_, spec.disasterRecoveryCapacitySpec().value());
     case GoalSpecs::Type::aggregatedGroupSpec:
       return std::make_unique<AggregatedGroupSpecBuilder>(
-          universe_, spec.get_aggregatedGroupSpec());
+          universe_, spec.aggregatedGroupSpec().value());
     case GoalSpecs::Type::drainCapacitySpec:
       return std::make_unique<DrainCapacitySpecBuilder>(
-          universe_, spec.get_drainCapacitySpec());
+          universe_, spec.drainCapacitySpec().value());
     case GoalSpecs::Type::toFreeSpec:
       return std::make_unique<ToFreeSpecBuilder>(
-          universe_, spec.get_toFreeSpec(), continuousExpressions_);
+          universe_, spec.toFreeSpec().value(), continuousExpressions_);
     case GoalSpecs::Type::minimizeNthLargestUtilizationSpec:
       return std::make_unique<MinimizeNthLargestUtilizationSpecBuilder>(
-          universe_, spec.get_minimizeNthLargestUtilizationSpec());
+          universe_, spec.minimizeNthLargestUtilizationSpec().value());
     case GoalSpecs::Type::scopeAffinitiesSpec:
       return std::make_unique<ScopeAffinitiesSpecBuilder>(
-          universe_, spec.get_scopeAffinitiesSpec());
+          universe_, spec.scopeAffinitiesSpec().value());
     case GoalSpecs::Type::itemsAffinitySpec:
       return std::make_unique<ItemsAffinitySpecBuilder>(
-          universe_, spec.get_itemsAffinitySpec());
+          universe_, spec.itemsAffinitySpec().value());
     case GoalSpecs::Type::largeShardSpec:
       return std::make_unique<LargeShardSpecBuilder>(
-          universe_, spec.get_largeShardSpec());
+          universe_, spec.largeShardSpec().value());
     case GoalSpecs::Type::routingLatencySpec:
       return std::make_unique<RoutingLatencySpecBuilder>(
-          universe_, spec.get_routingLatencySpec());
+          universe_, spec.routingLatencySpec().value());
     case GoalSpecs::Type::groupDiversitySpec:
       return std::make_unique<GroupDiversitySpecBuilder>(
-          universe_, spec.get_groupDiversitySpec(), continuousExpressions_);
+          universe_, spec.groupDiversitySpec().value(), continuousExpressions_);
     case GoalSpecs::Type::srBufferCapacitySpec:
       return std::make_unique<SRBufferCapacitySpecBuilder>(
-          universe_, spec.get_srBufferCapacitySpec());
+          universe_, spec.srBufferCapacitySpec().value());
     case GoalSpecs::Type::capacityWithGroupPresenceSpec:
       return std::make_unique<CapacityWithGroupPresenceSpecBuilder>(
           universe_,
-          spec.get_capacityWithGroupPresenceSpec(),
+          spec.capacityWithGroupPresenceSpec().value(),
           continuousExpressions_);
     case GoalSpecs::Type::diversifyWithinScopeItemSpec:
       return std::make_unique<DiversifyWithinScopeItemSpec>(
-          universe_, spec.get_diversifyWithinScopeItemSpec());
+          universe_, spec.diversifyWithinScopeItemSpec().value());
     case GoalSpecs::Type::exclusiveScopeItemsSpec:
       return std::make_unique<ExclusiveScopeItemsSpecBuilder>(
-          universe_, spec.get_exclusiveScopeItemsSpec());
+          universe_, spec.exclusiveScopeItemsSpec().value());
     case GoalSpecs::Type::balanceV2Spec:
       throw std::runtime_error(
           "Did not expect to be called with balanceV2Spec as it is deprecated");

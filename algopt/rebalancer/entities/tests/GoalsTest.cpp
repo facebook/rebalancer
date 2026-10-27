@@ -83,13 +83,13 @@ TEST(GoalsTest, ToThrift) {
 
   auto& goal0 = thrift.goals()->at(0);
   EXPECT_EQ(GoalSpecs::Type::capacitySpec, goal0.spec()->getType());
-  EXPECT_EQ("host", *goal0.spec()->get_capacitySpec().scope());
+  EXPECT_EQ("host", *goal0.spec()->capacitySpec().as_const().value().scope());
   EXPECT_EQ(4.0, *goal0.weight());
   EXPECT_EQ(0, *goal0.tupleIndex());
 
   auto& goal1 = thrift.goals()->at(1);
   EXPECT_EQ(GoalSpecs::Type::capacitySpec, goal1.spec()->getType());
-  EXPECT_EQ("rack", *goal1.spec()->get_capacitySpec().scope());
+  EXPECT_EQ("rack", *goal1.spec()->capacitySpec().as_const().value().scope());
   EXPECT_EQ(3.0, *goal1.weight());
   EXPECT_EQ(2, *goal1.tupleIndex());
 }
@@ -135,12 +135,12 @@ TEST(GoalsTest, FromThrift) {
   EXPECT_EQ(std::vector<GoalId>({GoalId(1)}), goals.getGoalIds(2));
 
   auto& goal0 = goals.getGoal(GoalId(0));
-  EXPECT_EQ("host", *goal0.getSpec().get_capacitySpec().scope());
+  EXPECT_EQ("host", *goal0.getSpec().capacitySpec().value().scope());
   EXPECT_EQ(4.0, goal0.getWeight());
   EXPECT_EQ(0, goal0.getTupleIndex());
 
   auto& goal1 = goals.getGoal(GoalId(1));
-  EXPECT_EQ("rack", *goal1.getSpec().get_capacitySpec().scope());
+  EXPECT_EQ("rack", *goal1.getSpec().capacitySpec().value().scope());
   EXPECT_EQ(3.0, goal1.getWeight());
   EXPECT_EQ(2, goal1.getTupleIndex());
 }

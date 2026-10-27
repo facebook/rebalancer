@@ -32,23 +32,23 @@ GenericSpecBuilder::GenericSpecBuilder(
   switch (spec.getType()) {
     case interface::GenericSpec::Type::logicalOrSpec:
       builder_ = std::make_unique<LogicalOrSpecBuilder>(
-          universe, spec.get_logicalOrSpec());
+          universe, spec.logicalOrSpec().as_const().value());
       break;
     case interface::GenericSpec::Type::logicalAndSpec:
       builder_ = std::make_unique<LogicalAndSpecBuilder>(
-          universe, spec.get_logicalAndSpec());
+          universe, spec.logicalAndSpec().as_const().value());
       break;
     case interface::GenericSpec::Type::capacitySpec:
       builder_ = std::make_unique<CapacitySpecBuilder>(
-          universe, spec.get_capacitySpec());
+          universe, spec.capacitySpec().as_const().value());
       break;
     case interface::GenericSpec::Type::groupCountSpec:
       builder_ = std::make_unique<GroupCountSpecBuilder>(
-          universe, spec.get_groupCountSpec());
+          universe, spec.groupCountSpec().as_const().value());
       break;
     case interface::GenericSpec::Type::groupCapacitySpec:
       builder_ = std::make_unique<GroupCapacitySpecBuilder>(
-          universe, spec.get_groupCapacitySpec());
+          universe, spec.groupCapacitySpec().as_const().value());
       break;
     case interface::GenericSpec::Type::__EMPTY__:
       throw std::runtime_error("Uninitialized generic spec");

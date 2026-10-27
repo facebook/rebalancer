@@ -707,7 +707,9 @@ CO_TEST_F(UniverseTest, Universe) {
 
   EXPECT_EQ(
       "region",
-      expectedDestinationsToExploreOptions.get_moveToCurrentScopeItem()
+      expectedDestinationsToExploreOptions.moveToCurrentScopeItem()
+          .as_const()
+          .value()
           .scopeNameForExploringMovesToCurrentScopeItem());
 
   auto expectedDestinationsToExploreOptions2 =
@@ -719,7 +721,9 @@ CO_TEST_F(UniverseTest, Universe) {
       expectedDestinationsToExploreOptions2.getType());
 
   auto expectedMoveToScopeItems =
-      expectedDestinationsToExploreOptions2.get_moveToScopeItems();
+      expectedDestinationsToExploreOptions2.moveToScopeItems()
+          .as_const()
+          .value();
 
   auto expectedDefaultScopeItems = expectedMoveToScopeItems.defaultScopeItems();
 
@@ -749,7 +753,9 @@ CO_TEST_F(UniverseTest, Universe) {
 
   EXPECT_EQ(
       "destinationToExploreName",
-      expectedDestinationsToExploreOptions3.get_destinationToExploreName());
+      expectedDestinationsToExploreOptions3.destinationToExploreName()
+          .as_const()
+          .value());
 
   auto expectedDestinationsToExploreOptions4 =
       universe.getDestinationsToExploreOptions(
@@ -760,7 +766,9 @@ CO_TEST_F(UniverseTest, Universe) {
       expectedDestinationsToExploreOptions4.getType());
 
   auto expectedMoveToScopeItems4 =
-      expectedDestinationsToExploreOptions4.get_moveToScopeItems();
+      expectedDestinationsToExploreOptions4.moveToScopeItems()
+          .as_const()
+          .value();
 
   auto expectedDefaultScopeItems4 =
       expectedMoveToScopeItems4.defaultScopeItems();
@@ -1155,20 +1163,23 @@ TEST_F(UniverseTest, FromThrift) {
   EXPECT_EQ(
       "region",
       universe.getDestinationsToExploreOptions("destinationId1")
-          .get_moveToCurrentScopeItem()
+          .moveToCurrentScopeItem()
+          .value()
           .scopeNameForExploringMovesToCurrentScopeItem());
 
   EXPECT_EQ(
       "host",
       universe.getDestinationsToExploreOptions("destinationId2")
-          .get_moveToScopeItems()
+          .moveToScopeItems()
+          .value()
           .defaultScopeItems()
           ->scopeName());
 
   EXPECT_EQ(
       "host1",
       universe.getDestinationsToExploreOptions("destinationId2")
-          .get_moveToScopeItems()
+          .moveToScopeItems()
+          .value()
           .defaultScopeItems()
           ->scopeItems()
           ->at(0));
@@ -1176,7 +1187,8 @@ TEST_F(UniverseTest, FromThrift) {
   EXPECT_EQ(
       "host0",
       universe.getDestinationsToExploreOptions("destinationId2")
-          .get_moveToScopeItems()
+          .moveToScopeItems()
+          .value()
           .defaultScopeItems()
           ->scopeItems()
           ->at(1));
@@ -1184,7 +1196,8 @@ TEST_F(UniverseTest, FromThrift) {
   EXPECT_EQ(
       "rack",
       universe.getDestinationsToExploreOptions("destinationId2")
-          .get_moveToScopeItems()
+          .moveToScopeItems()
+          .value()
           .objectToScopeItems()
           ->at("task0")
           .scopeName());
@@ -1192,7 +1205,8 @@ TEST_F(UniverseTest, FromThrift) {
   EXPECT_EQ(
       "rack1",
       universe.getDestinationsToExploreOptions("destinationId2")
-          .get_moveToScopeItems()
+          .moveToScopeItems()
+          .value()
           .objectToScopeItems()
           ->at("task0")
           .scopeItems()
@@ -1201,7 +1215,8 @@ TEST_F(UniverseTest, FromThrift) {
   EXPECT_EQ(
       "destinationToExploreName",
       universe.getDestinationsToExploreOptions("destinationId3")
-          .get_destinationToExploreName());
+          .destinationToExploreName()
+          .value());
 
   EXPECT_EQ(1e-5, universe.getPrecision().getTolerances().absolute());
   EXPECT_EQ(1e-8, universe.getPrecision().getTolerances().relative());

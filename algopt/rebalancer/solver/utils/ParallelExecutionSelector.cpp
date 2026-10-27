@@ -97,12 +97,12 @@ ParallelExecutionSelector::ParallelExecutionSelector(
       return;
     case interface::ParallelExecutionConfig::Type::batching:
       strategy_ = Strategy::Batching;
-      batchingOptions_ = makeBatchingOptions(config->get_batching());
+      batchingOptions_ = makeBatchingOptions(config->batching().value());
       return;
     case interface::ParallelExecutionConfig::Type::autoExecution:
       strategy_ = kAbbaRound.front();
       batchingOptions_ =
-          makeBatchingOptions(*config->get_autoExecution().batching());
+          makeBatchingOptions(*config->autoExecution()->batching());
       experiment_.emplace();
       return;
     case interface::ParallelExecutionConfig::Type::__EMPTY__:

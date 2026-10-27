@@ -79,10 +79,11 @@ int64_t MinimizeContainersSpecBuilder::numUsedScopeItemLimit(
   switch (spec_.target()->getType()) {
     case interface::MinimizeContainersTarget::Type::maxFreeLimit:
       return numScopeItems -
-          std::min<int64_t>(spec_.target()->get_maxFreeLimit(), numScopeItems);
+          std::min<int64_t>(
+                 spec_.target()->maxFreeLimit().value(), numScopeItems);
     case interface::MinimizeContainersTarget::Type::minUsedLimit:
       return std::min<int64_t>(
-          spec_.target()->get_minUsedLimit(), numScopeItems);
+          spec_.target()->minUsedLimit().value(), numScopeItems);
     case interface::MinimizeContainersTarget::Type::__EMPTY__:
       throw std::runtime_error("MinimizeContainersTarget is set but empty");
   }

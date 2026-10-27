@@ -173,7 +173,7 @@ DestinationsToExploreGenerator::getAcceptingContainersList(
     const auto& filter = *scopeItemList.filter();
     switch (filter.getType()) {
       case interface::ScopeItemFilter::Type::objectDimensionBased: {
-        const auto& filterSpec = filter.get_objectDimensionBased();
+        const auto& filterSpec = filter.objectDimensionBased().value();
         const auto& dimension = universe_.getObjects()
                                     .getDimension(universe_.getDimensionId(
                                         *filterSpec.dimensionName()))

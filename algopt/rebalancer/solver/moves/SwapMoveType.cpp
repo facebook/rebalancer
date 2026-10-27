@@ -475,7 +475,8 @@ SwapMoveType::getCustomColdContainers(
           evaluator.getProblem()
               .getDestinationsGenerator()
               .getAcceptingDestinations(
-                  destinationsToExplore->get_moveToScopeItems(), hotContainer);
+                  destinationsToExplore->moveToScopeItems().value(),
+                  hotContainer);
       PackerSet<entities::ContainerId> allowedColdContainers;
       for (auto& containers : allowedColdContainersList) {
         allowedColdContainers.insert(

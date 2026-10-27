@@ -192,7 +192,9 @@ TEST_F(MoveTypeFactoryTest, replayBackfillsMinObjectsToExploreOnlyWhenMissing) {
         7,
         *spec.moveTypeList()
              ->at(0)
-             .get_singleRandomStratifiedMoveTypeSpec()
+             .singleRandomStratifiedMoveTypeSpec()
+             .as_const()
+             .value()
              .minObjectsToExplore());
   }
 
@@ -224,7 +226,9 @@ TEST_F(MoveTypeFactoryTest, replayBackfillsMinObjectsToExploreOnlyWhenMissing) {
         1,
         *spec.moveTypeList()
              ->at(0)
-             .get_singleRandomStratifiedMoveTypeSpec()
+             .singleRandomStratifiedMoveTypeSpec()
+             .as_const()
+             .value()
              .minObjectsToExplore());
   }
 
@@ -243,7 +247,9 @@ TEST_F(MoveTypeFactoryTest, replayBackfillsMinObjectsToExploreOnlyWhenMissing) {
         3,
         *spec.moveTypeList()
              ->at(0)
-             .get_singleRandomStratifiedMoveTypeSpec()
+             .singleRandomStratifiedMoveTypeSpec()
+             .as_const()
+             .value()
              .minObjectsToExplore());
   }
 }

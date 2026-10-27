@@ -106,82 +106,84 @@ std::unique_ptr<MoveType> MoveTypeFactory::createMoveType(
   switch (spec.getType()) {
     case interface::MoveTypeSpec::Type::singleMoveTypeSpec:
       return std::make_unique<SingleMoveType>(
-          configs, spec.get_singleMoveTypeSpec());
+          configs, spec.singleMoveTypeSpec().value());
     case interface::MoveTypeSpec::Type::swapMoveTypeSpec:
       return std::make_unique<SwapMoveType>(
-          configs, spec.get_swapMoveTypeSpec());
+          configs, spec.swapMoveTypeSpec().value());
     case interface::MoveTypeSpec::Type::tripleLoopMoveTypeSpec:
       return std::make_unique<TripleLoopMoveType>(
-          configs, spec.get_tripleLoopMoveTypeSpec());
+          configs, spec.tripleLoopMoveTypeSpec().value());
     case interface::MoveTypeSpec::Type::klSearchMoveTypeSpec:
       return std::make_unique<KLSearchMoveType>(
-          configs, spec.get_klSearchMoveTypeSpec());
+          configs, spec.klSearchMoveTypeSpec().value());
     case interface::MoveTypeSpec::Type::fixedDestMoveTypeSpec:
       return std::make_unique<FixedDestMoveType>(
-          configs, spec.get_fixedDestMoveTypeSpec());
+          configs, spec.fixedDestMoveTypeSpec().value());
     case interface::MoveTypeSpec::Type::fixedSrcMultiMoveTypeSpec:
       return std::make_unique<FixedSourceMultiMoveType>(
-          configs, spec.get_fixedSrcMultiMoveTypeSpec());
+          configs, spec.fixedSrcMultiMoveTypeSpec().value());
     case interface::MoveTypeSpec::Type::fixedDestMultiMoveTypeSpec:
       return std::make_unique<FixedDestMultiMoveType>(
-          configs, spec.get_fixedDestMultiMoveTypeSpec());
+          configs, spec.fixedDestMultiMoveTypeSpec().value());
     case interface::MoveTypeSpec::Type::fixedDestSwapMultiMoveTypeSpec:
       return std::make_unique<FixedDestSwapMultiMoveType>(
-          configs, spec.get_fixedDestSwapMultiMoveTypeSpec());
+          configs, spec.fixedDestSwapMultiMoveTypeSpec().value());
     case interface::MoveTypeSpec::Type::
         singleRandomObjectStratifiedMoveTypeSpec:
       return std::make_unique<SingleRandomObjectStratifiedMoveType>(
-          configs, spec.get_singleRandomObjectStratifiedMoveTypeSpec());
+          configs, spec.singleRandomObjectStratifiedMoveTypeSpec().value());
     case interface::MoveTypeSpec::Type::groupRoutingMoveTypeSpec:
       return std::make_unique<GroupRoutingMoveType>(
-          configs, spec.get_groupRoutingMoveTypeSpec());
+          configs, spec.groupRoutingMoveTypeSpec().value());
     case interface::MoveTypeSpec::Type::singleChainMoveTypeSpec:
       return std::make_unique<SingleChainMoveType>(
-          configs, spec.get_singleChainMoveTypeSpec());
+          configs, spec.singleChainMoveTypeSpec().value());
     case interface::MoveTypeSpec::Type::singleChainFastMoveTypeSpec:
       return std::make_unique<SingleChainFastMoveType>(
-          configs, spec.get_singleChainFastMoveTypeSpec());
+          configs, spec.singleChainFastMoveTypeSpec().value());
     case interface::MoveTypeSpec::Type::singleFixedSourceMoveTypeSpec:
       return std::make_unique<FixedSourceMoveType>(
-          configs, spec.get_singleFixedSourceMoveTypeSpec());
+          configs, spec.singleFixedSourceMoveTypeSpec().value());
     case interface::MoveTypeSpec::Type::singleFastMoveTypeSpec:
       return std::make_unique<SingleFastMoveType>(
-          configs, spec.get_singleFastMoveTypeSpec());
+          configs, spec.singleFastMoveTypeSpec().value());
     case interface::MoveTypeSpec::Type::groupMoveWithHintStrategiesMoveTypeSpec:
       return std::make_unique<GroupMoveWithHintStrategiesMoveType>(
-          configs, spec.get_groupMoveWithHintStrategiesMoveTypeSpec(), problem);
+          configs,
+          spec.groupMoveWithHintStrategiesMoveTypeSpec().value(),
+          problem);
     case interface::MoveTypeSpec::Type::singleGreedyMoveTypeSpec:
       return std::make_unique<SingleGreedyMoveType>(
-          configs, spec.get_singleGreedyMoveTypeSpec());
+          configs, spec.singleGreedyMoveTypeSpec().value());
     case interface::MoveTypeSpec::Type::swapNMoveTypeSpec:
       return std::make_unique<SwapNMoveType>(
-          configs, spec.get_swapNMoveTypeSpec(), problem);
+          configs, spec.swapNMoveTypeSpec().value(), problem);
     case interface::MoveTypeSpec::Type::singleRandomBatchesMoveTypeSpec:
       return std::make_unique<SingleRandomBatchesMoveType>(
-          configs, spec.get_singleRandomBatchesMoveTypeSpec());
+          configs, spec.singleRandomBatchesMoveTypeSpec().value());
     case interface::MoveTypeSpec::Type::swapFullContainersMoveTypeSpec:
       return std::make_unique<SwapFullContainersMoveType>(
-          configs, spec.get_swapFullContainersMoveTypeSpec());
+          configs, spec.swapFullContainersMoveTypeSpec().value());
     case interface::MoveTypeSpec::Type::swapFullWithEmptyContainersMoveTypeSpec:
       return std::make_unique<SwapFullWithEmptyContainersMoveType>(
-          configs, spec.get_swapFullWithEmptyContainersMoveTypeSpec());
+          configs, spec.swapFullWithEmptyContainersMoveTypeSpec().value());
     case interface::MoveTypeSpec::Type::singleEndChainMoveTypeSpec:
       return std::make_unique<SingleEndChainMoveType>(
-          configs, spec.get_singleEndChainMoveTypeSpec());
+          configs, spec.singleEndChainMoveTypeSpec().value());
     case interface::MoveTypeSpec::Type::replicaDropMoveTypeSpec:
       return std::make_unique<ReplicaDropMoveType>(
-          configs, spec.get_replicaDropMoveTypeSpec());
+          configs, spec.replicaDropMoveTypeSpec().value());
     case interface::MoveTypeSpec::Type::colocateGroupsMoveTypeSpec:
       return std::make_unique<ColocateGroupsMoveType>(
-          configs, spec.get_colocateGroupsMoveTypeSpec(), problem);
+          configs, spec.colocateGroupsMoveTypeSpec().value(), problem);
     case interface::MoveTypeSpec::Type::greedyGroupToScopeItemMoveTypeSpec:
       return std::make_unique<GreedyGroupToScopeItemMoveType>(
-          configs, spec.get_greedyGroupToScopeItemMoveTypeSpec(), problem);
+          configs, spec.greedyGroupToScopeItemMoveTypeSpec().value(), problem);
     case interface::MoveTypeSpec::Type::singleRandomStratifiedMoveTypeSpec:
       return std::make_unique<SingleRandomStratifiedMoveType>(
-          configs, spec.get_singleRandomStratifiedMoveTypeSpec());
+          configs, spec.singleRandomStratifiedMoveTypeSpec().value());
     case interface::MoveTypeSpec::Type::moveTypeName:
-      return createMoveType(spec.get_moveTypeName(), configs);
+      return createMoveType(spec.moveTypeName().value(), configs);
     case interface::MoveTypeSpec::Type::__EMPTY__:
       throw std::runtime_error(
           "Found uninitialized (i.e., empty) MoveTypeSpec -- initialize it with at least one move type struct");
@@ -264,14 +266,15 @@ void MoveTypeFactory::transformMoveTypeSpecs(
     if (moveSpec.getType() != interface::MoveTypeSpec::Type::moveTypeName) {
       newSpec = moveSpec;
     } else if (
-        moveSpec.get_moveTypeName() == kGroupRoutingMoveTypeName &&
+        moveSpec.moveTypeName().value() == kGroupRoutingMoveTypeName &&
         spec.groupRoutingMoveTypeSpec()) {
       newSpec.set_groupRoutingMoveTypeSpec(*spec.groupRoutingMoveTypeSpec());
-    } else if (moveSpec.get_moveTypeName() == kSingleChainMoveTypeName) {
+    } else if (moveSpec.moveTypeName().value() == kSingleChainMoveTypeName) {
       newSpec.set_singleChainMoveTypeSpec(
           spec.singleChainMoveTypeSpec().value_or(
               interface::SingleChainMoveTypeSpec()));
-    } else if (moveSpec.get_moveTypeName() == kSingleChainFastMoveTypeName) {
+    } else if (
+        moveSpec.moveTypeName().value() == kSingleChainFastMoveTypeName) {
       auto singleChainFastMoveTypeSpec =
           interface::SingleChainFastMoveTypeSpec();
       auto currentSpec = spec.singleChainFastMoveTypeSpec().value_or(
@@ -284,20 +287,21 @@ void MoveTypeFactory::transformMoveTypeSpecs(
           currentSpec.specialColdContainer());
       newSpec.set_singleChainFastMoveTypeSpec(singleChainFastMoveTypeSpec);
     } else if (
-        moveSpec.get_moveTypeName() == kSingleFixedSourceMoveTypeName &&
+        moveSpec.moveTypeName().value() == kSingleFixedSourceMoveTypeName &&
         spec.singleFixedSourceMoveTypeSpec()) {
       newSpec.set_singleFixedSourceMoveTypeSpec(
           *spec.singleFixedSourceMoveTypeSpec());
-    } else if (moveSpec.get_moveTypeName() == kSingleGreedyMoveTypeName) {
+    } else if (moveSpec.moveTypeName().value() == kSingleGreedyMoveTypeName) {
       newSpec.set_singleGreedyMoveTypeSpec(
           interface::SingleGreedyMoveTypeSpec());
-    } else if (moveSpec.get_moveTypeName() == kSingleFastMoveTypeName) {
+    } else if (moveSpec.moveTypeName().value() == kSingleFastMoveTypeName) {
       newSpec.set_singleFastMoveTypeSpec(interface::SingleFastMoveTypeSpec());
-    } else if (moveSpec.get_moveTypeName() == kSingleEndChainMoveTypeName) {
+    } else if (moveSpec.moveTypeName().value() == kSingleEndChainMoveTypeName) {
       newSpec.set_singleEndChainMoveTypeSpec(
           interface::SingleEndChainMoveTypeSpec());
     } else if (
-        moveSpec.get_moveTypeName() == kGreedyGroupToScopeItemMoveTypeName) {
+        moveSpec.moveTypeName().value() ==
+        kGreedyGroupToScopeItemMoveTypeName) {
       auto greedyGroupToScopeItemMoveTypeSpec =
           interface::GreedyGroupToScopeItemMoveTypeSpec();
       if (spec.scopeItemMovesScope().has_value()) {
@@ -313,14 +317,14 @@ void MoveTypeFactory::transformMoveTypeSpecs(
       newSpec.set_greedyGroupToScopeItemMoveTypeSpec(
           greedyGroupToScopeItemMoveTypeSpec);
     } else if (
-        moveSpec.get_moveTypeName() == kSingleRandomBatchesMoveTypeName) {
+        moveSpec.moveTypeName().value() == kSingleRandomBatchesMoveTypeName) {
       auto singleRandomBatchesMoveTypeSpec =
           interface::SingleRandomBatchesMoveTypeSpec();
       singleRandomBatchesMoveTypeSpec.randomContainerBatchSize().copy_from(
           spec.randomContainerBatchSize());
       newSpec.set_singleRandomBatchesMoveTypeSpec(
           singleRandomBatchesMoveTypeSpec);
-    } else if (moveSpec.get_moveTypeName() == kReplicaDropMoveTypeName) {
+    } else if (moveSpec.moveTypeName().value() == kReplicaDropMoveTypeName) {
       auto replicaDropMoveTypeSpec = interface::ReplicaDropMoveTypeSpec();
       if (spec.replicaDropPartition().has_value()) {
         replicaDropMoveTypeSpec.replicaDropPartition() =
@@ -331,14 +335,15 @@ void MoveTypeFactory::transformMoveTypeSpecs(
             spec.replicaDropScope().value();
       }
       newSpec.set_replicaDropMoveTypeSpec(replicaDropMoveTypeSpec);
-    } else if (moveSpec.get_moveTypeName() == kSwapFullContainersTypeName) {
+    } else if (moveSpec.moveTypeName().value() == kSwapFullContainersTypeName) {
       newSpec.set_swapFullContainersMoveTypeSpec(
           interface::SwapFullContainersMoveTypeSpec());
     } else if (
-        moveSpec.get_moveTypeName() == kSwapFullWithEmptyContainersTypeName) {
+        moveSpec.moveTypeName().value() ==
+        kSwapFullWithEmptyContainersTypeName) {
       newSpec.set_swapFullWithEmptyContainersMoveTypeSpec(
           interface::SwapFullWithEmptyContainersMoveTypeSpec());
-    } else if (moveSpec.get_moveTypeName() == kSwapNMoveTypeName) {
+    } else if (moveSpec.moveTypeName().value() == kSwapNMoveTypeName) {
       auto swapNMoveTypeSpec = interface::SwapNMoveTypeSpec();
       swapNMoveTypeSpec.swapNConcurrentObjects().copy_from(
           spec.swapNConcurrentObjects());

@@ -104,7 +104,8 @@ TEST_F(RoutingLatencySpecTest, RoutingLatencySpecMax) {
   EXPECT_EQ(1, getGoalCount());
   EXPECT_EQ(1, getConstraintCount());
 
-  auto& changedRoutingLatencyGoalSpec = getGoalSpec(0).get_routingLatencySpec();
+  auto& changedRoutingLatencyGoalSpec =
+      getGoalSpec(0).routingLatencySpec().value();
 
   EXPECT_EQ(
       thriftUtils::makeRoutingLatencyMetric(
@@ -125,7 +126,8 @@ TEST_F(RoutingLatencySpecTest, RoutingLatencySpecP99) {
   EXPECT_EQ(1, getGoalCount());
   EXPECT_EQ(1, getConstraintCount());
 
-  auto& changedRoutingLatencyGoalSpec = getGoalSpec(0).get_routingLatencySpec();
+  auto& changedRoutingLatencyGoalSpec =
+      getGoalSpec(0).routingLatencySpec().value();
 
   EXPECT_EQ(
       thriftUtils::makeRoutingLatencyMetric(
@@ -162,7 +164,7 @@ TEST_F(BackwardCompatabilityUtilsTest, ExclusiveScopeItemsSpec) {
   EXPECT_EQ(1, getConstraintCount());
 
   auto& changedExclusiveScopeItemsGoalSpec =
-      getGoalSpec(0).get_exclusiveScopeItemsSpec();
+      getGoalSpec(0).exclusiveScopeItemsSpec().value();
 
   EXPECT_EQ(2, changedExclusiveScopeItemsGoalSpec.conflictInfoList()->size());
 }
@@ -184,14 +186,14 @@ TEST_F(BackwardCompatabilityUtilsTest, MinimizeContainersSpecMaxFreeLimit) {
   possiblyModify();
 
   ASSERT_EQ(1, getGoalCount());
-  const auto& migratedSpec = getGoalSpec(0).get_minimizeContainersSpec();
+  const auto& migratedSpec = getGoalSpec(0).minimizeContainersSpec().value();
 
   // maxFreeLimit is migrated into the target union...
   ASSERT_TRUE(migratedSpec.target().has_value());
   EXPECT_EQ(
       interface::MinimizeContainersTarget::Type::maxFreeLimit,
       migratedSpec.target()->getType());
-  EXPECT_EQ(5, migratedSpec.target()->get_maxFreeLimit());
+  EXPECT_EQ(5, migratedSpec.target()->maxFreeLimit().value());
 
   // ...and the deprecated field is cleared so it cannot be read again.
   FOLLY_PUSH_WARNING
@@ -215,7 +217,7 @@ TEST_F(BackwardCompatabilityUtilsTest, BalanceSpecUpperBound) {
   addGoal(spec, /*goalId=*/0);
   possiblyModify();
 
-  const auto& migratedSpec = getGoalSpec(0).get_balanceSpec();
+  const auto& migratedSpec = getGoalSpec(0).balanceSpec().value();
   EXPECT_EQ(0.5, *migratedSpec.upperBounds()->globalLimit());
   FOLLY_PUSH_WARNING
   FOLLY_GNU_DISABLE_WARNING("-Wdeprecated-declarations")
@@ -246,7 +248,7 @@ TEST_F(
   possiblyModify();
 
   EXPECT_EQ(
-      0.5, *getGoalSpec(0).get_balanceSpec().upperBounds()->globalLimit());
+      0.5, *getGoalSpec(0).balanceSpec().value().upperBounds()->globalLimit());
 }
 
 // ---------------------------------------------------------------------------
@@ -389,8 +391,10 @@ TEST_F(DensifyEntityIdsTest, DynamicDimensionValuesPopulateScopedValues) {
   possiblyModify();
 
   const auto& dimensionThrift = universeThrift.objects()->dimensions()->at(0);
-  const auto& remappedDyn =
-      dimensionThrift.scalarDimensions()->at(0).get_objectDynamicDimension();
+  const auto& remappedDyn = dimensionThrift.scalarDimensions()
+                                ->at(0)
+                                .objectDynamicDimension()
+                                .value();
   EXPECT_EQ(0, *remappedDyn.scopeId());
   EXPECT_TRUE(remappedDyn.values()->empty());
   const auto& scopedValues = *remappedDyn.scopedValues();

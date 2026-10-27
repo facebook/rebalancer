@@ -62,14 +62,14 @@ TEST(ConstraintsTest, Constructor) {
       toSet<ConstraintId>(constraints.getConstraintIds()));
 
   const auto& c1 = constraints.getConstraint(constraint1Id);
-  EXPECT_EQ("host", *c1.getSpec().get_capacitySpec().scope());
+  EXPECT_EQ("host", *c1.getSpec().capacitySpec().value().scope());
   EXPECT_EQ(ConstraintPolicy::DEFAULT, c1.getPolicy());
   EXPECT_EQ(1.0, c1.getInvalidCost());
   EXPECT_EQ(2.0, c1.getInvalidState());
   EXPECT_EQ(0, c1.getTupleIndex());
 
   const auto& c2 = constraints.getConstraint(constraint2Id);
-  EXPECT_EQ("rack", *c2.getSpec().get_capacitySpec().scope());
+  EXPECT_EQ("rack", *c2.getSpec().capacitySpec().value().scope());
   EXPECT_EQ(ConstraintPolicy::HARD, c2.getPolicy());
   EXPECT_EQ(3.0, c2.getInvalidCost());
   EXPECT_EQ(4.0, c2.getInvalidState());
@@ -106,7 +106,8 @@ TEST(ConstraintsTest, ToThrift) {
 
   auto& constraint0 = thrift.constraints()->at(0);
   EXPECT_EQ(ConstraintSpecs::Type::capacitySpec, constraint0.spec()->getType());
-  EXPECT_EQ("host", *constraint0.spec()->get_capacitySpec().scope());
+  EXPECT_EQ(
+      "host", *constraint0.spec()->capacitySpec().as_const().value().scope());
   EXPECT_EQ(ConstraintPolicy::DEFAULT, *constraint0.policy());
   EXPECT_EQ(1.0, *constraint0.invalidCost());
   EXPECT_EQ(2.0, *constraint0.invalidState());
@@ -114,7 +115,8 @@ TEST(ConstraintsTest, ToThrift) {
 
   auto& constraint1 = thrift.constraints()->at(1);
   EXPECT_EQ(ConstraintSpecs::Type::capacitySpec, constraint1.spec()->getType());
-  EXPECT_EQ("rack", *constraint1.spec()->get_capacitySpec().scope());
+  EXPECT_EQ(
+      "rack", *constraint1.spec()->capacitySpec().as_const().value().scope());
   EXPECT_EQ(ConstraintPolicy::HARD, *constraint1.policy());
   EXPECT_EQ(3.0, *constraint1.invalidCost());
   EXPECT_EQ(4.0, *constraint1.invalidState());
@@ -165,14 +167,14 @@ TEST(ConstraintsTest, FromThrift) {
       toSet<ConstraintId>(constraints.getConstraintIds()));
 
   auto& constraint0 = constraints.getConstraint(ConstraintId(0));
-  EXPECT_EQ("host", *constraint0.getSpec().get_capacitySpec().scope());
+  EXPECT_EQ("host", *constraint0.getSpec().capacitySpec().value().scope());
   EXPECT_EQ(ConstraintPolicy::DEFAULT, constraint0.getPolicy());
   EXPECT_EQ(1.0, constraint0.getInvalidCost());
   EXPECT_EQ(2.0, constraint0.getInvalidState());
   EXPECT_EQ(0, constraint0.getTupleIndex());
 
   auto& constraint1 = constraints.getConstraint(ConstraintId(1));
-  EXPECT_EQ("rack", *constraint1.getSpec().get_capacitySpec().scope());
+  EXPECT_EQ("rack", *constraint1.getSpec().capacitySpec().value().scope());
   EXPECT_EQ(ConstraintPolicy::HARD, constraint1.getPolicy());
   EXPECT_EQ(3.0, constraint1.getInvalidCost());
   EXPECT_EQ(4.0, constraint1.getInvalidState());

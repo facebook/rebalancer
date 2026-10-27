@@ -146,7 +146,7 @@ TEST_P(UniverseProblemBuilderTest, ThrottlingSpec) {
   auto& spec = constraint.getSpec();
   EXPECT_EQ(ConstraintSpecs::Type::capacitySpec, spec.getType());
 
-  auto& capacity = spec.get_capacitySpec();
+  auto& capacity = spec.capacitySpec().value();
   EXPECT_EQ("abc", *capacity.name());
   EXPECT_EQ("host", *capacity.scope());
   EXPECT_EQ("task_count", *capacity.dimension());
@@ -728,11 +728,11 @@ TEST_P(UniverseProblemBuilderTest, Detailed) {
     EXPECT_EQ(
         ConstraintSpecs::Type::avoidMovingSpec, constraint.getSpec().getType());
     EXPECT_EQ(
-        "avoid_moving", *constraint.getSpec().get_avoidMovingSpec().name());
+        "avoid_moving", *constraint.getSpec().avoidMovingSpec().value().name());
     EXPECT_EQ(
         toSet<std::string>(std::vector<std::string>({"task0", "task2"})),
         toSet<std::string>(
-            *constraint.getSpec().get_avoidMovingSpec().objects()));
+            *constraint.getSpec().avoidMovingSpec().value().objects()));
 
     EXPECT_EQ(ConstraintPolicy::DEFAULT, constraint.getPolicy());
     EXPECT_EQ(100, constraint.getInvalidCost());
@@ -748,9 +748,9 @@ TEST_P(UniverseProblemBuilderTest, Detailed) {
         constraint.getSpec().getType());
     EXPECT_EQ(
         "moves_in_progress",
-        *constraint.getSpec().get_movesInProgressSpec().name());
+        *constraint.getSpec().movesInProgressSpec().value().name());
 
-    auto& moves = *constraint.getSpec().get_movesInProgressSpec().moves();
+    auto& moves = *constraint.getSpec().movesInProgressSpec()->moves();
     EXPECT_EQ(1, moves.size());
     EXPECT_EQ("task0", *moves.at(0).objName());
     EXPECT_EQ("host1", *moves.at(0).toContainer());
@@ -765,8 +765,10 @@ TEST_P(UniverseProblemBuilderTest, Detailed) {
     auto& constraint = universe->getConstraints().getConstraint(moveGroup);
     EXPECT_EQ(
         ConstraintSpecs::Type::moveGroupSpec, constraint.getSpec().getType());
-    EXPECT_EQ("move_group", *constraint.getSpec().get_moveGroupSpec().name());
-    EXPECT_EQ("job", *constraint.getSpec().get_moveGroupSpec().partitionName());
+    EXPECT_EQ(
+        "move_group", *constraint.getSpec().moveGroupSpec().value().name());
+    EXPECT_EQ(
+        "job", *constraint.getSpec().moveGroupSpec().value().partitionName());
 
     EXPECT_EQ(ConstraintPolicy::DEFAULT, constraint.getPolicy());
     EXPECT_EQ(100, constraint.getInvalidCost());
@@ -780,7 +782,7 @@ TEST_P(UniverseProblemBuilderTest, Detailed) {
         ConstraintSpecs::Type::toFreeSpec, constraint.getSpec().getType());
     EXPECT_EQ(
         std::vector<std::string>{"host0"},
-        *constraint.getSpec().get_toFreeSpec().containers());
+        *constraint.getSpec().toFreeSpec().value().containers());
 
     EXPECT_EQ(ConstraintPolicy::DEFAULT, constraint.getPolicy());
     EXPECT_EQ(100, constraint.getInvalidCost());
@@ -844,41 +846,55 @@ TEST_P(UniverseProblemBuilderTest, Detailed) {
 
   EXPECT_EQ(
       "rack",
-      expectedDestinationsToExplore.get_moveToCurrentScopeItem()
+      expectedDestinationsToExplore.moveToCurrentScopeItem()
+          .as_const()
+          .value()
           .scopeNameForExploringMovesToCurrentScopeItem());
   EXPECT_EQ(
       "host",
-      expectedDestinationsToExplore2.get_moveToScopeItems()
+      expectedDestinationsToExplore2.moveToScopeItems()
+          .as_const()
+          .value()
           .defaultScopeItems()
           ->scopeName());
   EXPECT_EQ(
       "host1",
-      expectedDestinationsToExplore2.get_moveToScopeItems()
+      expectedDestinationsToExplore2.moveToScopeItems()
+          .as_const()
+          .value()
           .defaultScopeItems()
           ->scopeItems()
           ->at(0));
   EXPECT_EQ(
       "host2",
-      expectedDestinationsToExplore2.get_moveToScopeItems()
+      expectedDestinationsToExplore2.moveToScopeItems()
+          .as_const()
+          .value()
           .defaultScopeItems()
           ->scopeItems()
           ->at(1));
   EXPECT_EQ(
       "region",
-      expectedDestinationsToExplore2.get_moveToScopeItems()
+      expectedDestinationsToExplore2.moveToScopeItems()
+          .as_const()
+          .value()
           .objectToScopeItems()
           ->at("task1")
           .scopeName());
   EXPECT_EQ(
       "rgn2",
-      expectedDestinationsToExplore2.get_moveToScopeItems()
+      expectedDestinationsToExplore2.moveToScopeItems()
+          .as_const()
+          .value()
           .objectToScopeItems()
           ->at("task1")
           .scopeItems()
           ->at(0));
   EXPECT_EQ(
       "destinationToExploreName",
-      expectedDestinationsToExplore3.get_destinationToExploreName());
+      expectedDestinationsToExplore3.destinationToExploreName()
+          .as_const()
+          .value());
 
   EXPECT_EQ(1e-6, universe->getPrecision().getTolerances().absolute());
   EXPECT_EQ(1e-9, universe->getPrecision().getTolerances().relative());
@@ -1046,7 +1062,8 @@ TEST_P(UniverseProblemBuilderTest, GroupCountSpecEmptyDimension) {
   auto& constraint = universe->getConstraints().getConstraint(constraintId);
 
   EXPECT_EQ(
-      "shard_count", *constraint.getSpec().get_groupCountSpec().dimension());
+      "shard_count",
+      *constraint.getSpec().groupCountSpec().value().dimension());
 }
 
 TEST_P(UniverseProblemBuilderTest, AvoidMovingSpecName) {
@@ -1236,8 +1253,10 @@ TEST_P(UniverseProblemBuilderTest, AddObjectPartitionRoutingDimension) {
 
   // Round-trip back to thrift to confirm the default-valued entries were
   // dropped from groupIdToValue and groupIdToStaticValue.
-  const auto routingThrift =
-      routingDim.toThrift().get_objectPartitionRoutingDimension();
+  const auto routingThrift = routingDim.toThrift()
+                                 .objectPartitionRoutingDimension()
+                                 .as_const()
+                                 .value();
   EXPECT_EQ(1, routingThrift.groupIdToValue()->size());
   EXPECT_EQ(1, routingThrift.groupIdToStaticValue()->size());
 
@@ -1797,7 +1816,8 @@ TEST_P(UniverseProblemBuilderTest, BuildTwice) {
   const auto dteOpts = universe2->getDestinationsToExploreOptions("dteOpts");
   EXPECT_EQ(
       "rack",
-      dteOpts.get_moveToCurrentScopeItem()
+      dteOpts.moveToCurrentScopeItem()
+          .value()
           .scopeNameForExploringMovesToCurrentScopeItem());
 }
 // TODO: add more exhaustive tests

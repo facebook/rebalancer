@@ -280,8 +280,11 @@ TEST(ObjectDimensionTest, StaticToThrift) {
       thrift::ObjectScalarDimension::Type::objectStaticDimension,
       dimensionThrift.scalarDimensions()->at(0).getType());
 
-  auto& staticDimensionThrift =
-      dimensionThrift.scalarDimensions()->at(0).get_objectStaticDimension();
+  auto& staticDimensionThrift = dimensionThrift.scalarDimensions()
+                                    ->at(0)
+                                    .objectStaticDimension()
+                                    .as_const()
+                                    .value();
   EXPECT_EQ(1, staticDimensionThrift.values()->size());
   EXPECT_EQ(10, staticDimensionThrift.values()->at(8));
   EXPECT_EQ(20, *staticDimensionThrift.defaultValue());
@@ -330,8 +333,11 @@ TEST(ObjectDimensionTest, DynamicToThrift) {
       thrift::ObjectScalarDimension::Type::objectDynamicDimension,
       dimensionThrift.scalarDimensions()->at(0).getType());
 
-  auto& dynamicDimensionThrift =
-      dimensionThrift.scalarDimensions()->at(0).get_objectDynamicDimension();
+  auto& dynamicDimensionThrift = dimensionThrift.scalarDimensions()
+                                     ->at(0)
+                                     .objectDynamicDimension()
+                                     .as_const()
+                                     .value();
   EXPECT_EQ(0, *dynamicDimensionThrift.scopeId());
   EXPECT_TRUE(dynamicDimensionThrift.values()->empty());
   const auto& scopedValues = *dynamicDimensionThrift.scopedValues();
@@ -368,8 +374,10 @@ TEST(ObjectDimensionTest, GroupBackedDynamicToThriftUsesScopedGroupValues) {
       /*partitionId=*/PartitionId(7));
 
   const auto dimensionThrift = dimension.toThrift();
-  const auto& dynamicDimensionThrift =
-      dimensionThrift.scalarDimensions()->at(0).get_objectDynamicDimension();
+  const auto& dynamicDimensionThrift = dimensionThrift.scalarDimensions()
+                                           ->at(0)
+                                           .objectDynamicDimension()
+                                           .value();
 
   EXPECT_TRUE(dynamicDimensionThrift.values()->empty());
   const auto& scopedValues = *dynamicDimensionThrift.scopedValues();
@@ -377,13 +385,13 @@ TEST(ObjectDimensionTest, GroupBackedDynamicToThriftUsesScopedGroupValues) {
 
   const auto& item1Values = scopedValues.at(item1.asInt());
   ASSERT_EQ(thrift::ObjectValues::Type::groupValues, item1Values.getType());
-  const auto& item1GroupValues = item1Values.get_groupValues();
+  const auto& item1GroupValues = item1Values.groupValues().value();
   EXPECT_EQ(7, *item1GroupValues.partitionId());
   EXPECT_EQ(10, item1GroupValues.values()->at(group1.asInt()));
 
   const auto& item2Values = scopedValues.at(item2.asInt());
   ASSERT_EQ(thrift::ObjectValues::Type::groupValues, item2Values.getType());
-  const auto& item2GroupValues = item2Values.get_groupValues();
+  const auto& item2GroupValues = item2Values.groupValues().value();
   EXPECT_EQ(7, *item2GroupValues.partitionId());
   EXPECT_EQ(30, item2GroupValues.values()->at(group2.asInt()));
   EXPECT_EQ(42, *dynamicDimensionThrift.defaultValue());
@@ -484,7 +492,9 @@ TEST(ObjectDimensionTest, ObjectPartitionRoutingDimensionToThrift) {
 
   auto& routingDimensionThrift = dimensionThrift.scalarDimensions()
                                      ->at(0)
-                                     .get_objectPartitionRoutingDimension();
+                                     .objectPartitionRoutingDimension()
+                                     .as_const()
+                                     .value();
   EXPECT_EQ(1, routingDimensionThrift.groupIdToValue()->size());
   EXPECT_EQ(10, routingDimensionThrift.groupIdToValue()->at(8));
   EXPECT_EQ(20, routingDimensionThrift.defaultValue());
@@ -550,8 +560,10 @@ TEST(ObjectDimensionTest, ObjectPartitionRoutingDimensionFromThrift) {
 
   // Round-trip back to thrift to confirm the default-valued entries (group 19
   // for groupIdToValue, group 8 for groupIdToStaticValue) were dropped.
-  const auto routingThrift =
-      routingDimension.toThrift().get_objectPartitionRoutingDimension();
+  const auto routingThrift = routingDimension.toThrift()
+                                 .objectPartitionRoutingDimension()
+                                 .as_const()
+                                 .value();
   EXPECT_EQ(1, routingThrift.groupIdToValue()->size());
   EXPECT_TRUE(routingThrift.groupIdToValue()->contains(18));
   EXPECT_EQ(1, routingThrift.groupIdToStaticValue()->size());

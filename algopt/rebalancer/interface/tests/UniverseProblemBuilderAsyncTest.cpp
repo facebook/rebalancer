@@ -261,7 +261,9 @@ TEST_P(UniverseProblemBuilderAsyncTest, GroupBackedDynamicDimensionStorage) {
                                            ->at(dimId.asInt())
                                            .scalarDimensions()
                                            ->at(0)
-                                           .get_objectDynamicDimension();
+                                           .objectDynamicDimension()
+                                           .as_const()
+                                           .value();
   EXPECT_TRUE(dynamicDimensionThrift.values()->empty());
   const auto& scopedValues = *dynamicDimensionThrift.scopedValues();
   ASSERT_TRUE(scopedValues.contains(si0.asInt()));
@@ -269,7 +271,8 @@ TEST_P(UniverseProblemBuilderAsyncTest, GroupBackedDynamicDimensionStorage) {
   ASSERT_EQ(
       entities::thrift::ObjectValues::Type::groupValues,
       thriftValues.getType());
-  EXPECT_EQ(partitionId.asInt(), *thriftValues.get_groupValues().partitionId());
+  EXPECT_EQ(
+      partitionId.asInt(), *thriftValues.groupValues().value().partitionId());
 
   const entities::Universe roundTrippedUniverse(universeThrift);
   const auto& roundTrippedDimension =

@@ -47,7 +47,7 @@ TEST(ThriftStrategyBuilderTest, LocalSearchSolver) {
   auto& solver = strategy.solvers()[0];
 
   EXPECT_EQ(SolverT::Type::localSearchSolverSpec, solver.getType());
-  auto& localSearch = solver.get_localSearchSolverSpec();
+  auto& localSearch = solver.localSearchSolverSpec().as_const().value();
 
   EXPECT_EQ(10, *localSearch.stopAfterMoves());
   EXPECT_EQ(30, *localSearch.timePerMove());
@@ -78,7 +78,7 @@ TEST(ThriftStrategyBuilderTest, OptimalSolver) {
   auto& solver = strategy.solvers()[0];
 
   EXPECT_EQ(SolverT::Type::optimalSolverSpec, solver.getType());
-  auto& optimal = solver.get_optimalSolverSpec();
+  auto& optimal = solver.optimalSolverSpec().as_const().value();
 
   EXPECT_EQ(300, *optimal.solveTime());
   EXPECT_TRUE(*optimal.suppressLogs());
