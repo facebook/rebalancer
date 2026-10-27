@@ -13,6 +13,9 @@
 // limitations under the License.
 
 #include "algopt/rebalancer/interface/tests/utils.h"
+#ifndef REBALANCER_OSS_BUILD
+#include "algopt/rebalancer/interface/tests/fb/ScopedSeparatedPenaltyObjectiveRollout.h"
+#endif
 #include "algopt/rebalancer/tests/SolverTestUtils.h"
 
 #include <fmt/core.h>
@@ -740,6 +743,10 @@ TEST_P(ColocateGroupsTest, CustomDynamicDimension) {
 }
 
 TEST_P(ColocateGroupsLocalSearchTest, LocalSearchFriendliness) {
+#ifndef REBALANCER_OSS_BUILD
+  const facebook::rebalancer::interface::tests::
+      ScopedSeparatedPenaltyObjectiveRollout rollout;
+#endif
   // In this problem we have 9 tasks initially placed randomly in 3 hosts. Tasks
   // are divided into equally sized jobs. We impose that tasks of the same job
   // must be placed in the same host with a ColocateGroupsSpec.
@@ -1273,6 +1280,10 @@ TEST_P(ColocateGroupsLocalSearchTest, DrainWithColocationConstraint) {
 }
 
 TEST_P(ColocateGroupsLocalSearchTest, DrainWithColocationGoal) {
+#ifndef REBALANCER_OSS_BUILD
+  const facebook::rebalancer::interface::tests::
+      ScopedSeparatedPenaltyObjectiveRollout rollout;
+#endif
   // This test shows that with ColocateGroupsSpec as a GOAL:
   // - Colocated tasks stay together (can't drain without breaking colocation)
   // - Non-grouped tasks CAN be drained

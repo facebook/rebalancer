@@ -322,7 +322,8 @@ AssignmentSolution CoreSolver::materializeAndSolve(
       *problemSpec.publishMetrics(),
       *problemSpec.rolloutConfig()->enableInvalidMoveFilter() &&
           solver->needsInvalidMoveFilter(),
-      /*useSeparatedLocalSearchPenaltyObjective=*/false,
+      *problemSpec.rolloutConfig()->useSeparatedLocalSearchPenaltyObjective() &&
+          solver->needs_continuous_expressions(),
       enableParallelizedNewMaterializer);
   materialize.stop();
 
