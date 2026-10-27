@@ -307,6 +307,8 @@ export interface ExpressionResult {
   description: string;
   value: number;
   tupleIndex: number;
+  // Separated local-search penalty; absent when the objective has none.
+  penaltyValue?: number | null;
 }
 
 export interface EvaluationResult {

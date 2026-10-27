@@ -9,10 +9,12 @@ import {
   useState,
 } from 'react';
 
+import InfoOutlined from '@mui/icons-material/InfoOutlined';
 import {
   Box,
   Checkbox,
   FormControlLabel,
+  IconButton,
   Paper,
   Tooltip,
   Typography,
@@ -23,6 +25,12 @@ import {
   filterExpressions,
   type TableDescriptor,
 } from '@/app/components/evaluation/ConstraintsObjectivesView.tables';
+import {
+  hasAnyPenalty,
+  PENALTY_HELP_TEXT,
+  withAllPenaltiesShown,
+  withTablePenaltyShown,
+} from '@/app/components/evaluation/evaluation-penalty';
 import EvaluationTable from '@/app/components/evaluation/EvaluationTable';
 import type {
   Assignment,
@@ -73,6 +81,11 @@ export default function EvaluationSection({
   onEvalFiltersChange,
 }: EvaluationSectionProps) {
   const [uncheckedByTable, setUncheckedByTable] = useState<number | null>(null);
+  // Penalty columns are shown by default; this tracks the tables where the
+  // user turned them off.
+  const [tablesWithPenaltyHidden, setTablesWithPenaltyHidden] = useState<
+    ReadonlySet<number>
+  >(() => new Set());
 
   // Debounce filter applied to tables — prevents re-rendering all rows on every keystroke.
   const [appliedFilters, setAppliedFilters] = useState(evalFilters);
@@ -134,6 +147,32 @@ export default function EvaluationSection({
     [tableDescriptors, srcEvaluation, dstEvaluation],
   );
 
+  const hasPenalty = useMemo(
+    () => hasAnyPenalty(srcEvaluation.expressions),
+    [srcEvaluation],
+  );
+  const showAllPenalties = tablesWithPenaltyHidden.size === 0;
+  const handleShowAllPenaltiesChange = useCallback(
+    (showAll: boolean) => {
+      setTablesWithPenaltyHidden(
+        withAllPenaltiesShown(showAll, tableDescriptors.length),
+      );
+    },
+    [tableDescriptors],
+  );
+
+  // Stable per-table callbacks so React.memo on EvaluationTable can bail out.
+  const showPenaltyHandlers = useMemo(
+    () =>
+      tableDescriptors.map(
+        (_, index) => (show: boolean) =>
+          setTablesWithPenaltyHidden(prev =>
+            withTablePenaltyShown(prev, index, show),
+          ),
+      ),
+    [tableDescriptors],
+  );
+
   const nameOptions = useMemo(() => {
     const names = new Set<string>();
     for (const expr of srcEvaluation.expressions) {
@@ -162,23 +201,71 @@ export default function EvaluationSection({
                 <Typography variant="h6" sx={{fontWeight: 600}}>
                   Constraints & Objectives
                 </Typography>
-                <Tooltip title="Hide all rows across all tables where the two assignments have the same value">
-                  <FormControlLabel
-                    sx={{mr: 0}}
-                    control={
-                      <Checkbox
-                        size="small"
-                        checked={hideAllUnchanged}
-                        onChange={(_e, checked) => handleHideAllToggle(checked)}
-                      />
-                    }
-                    label={
-                      <Typography variant="body2" sx={{fontSize: '0.8125rem'}}>
-                        Hide unchanged Constraints & Objectives
-                      </Typography>
-                    }
-                  />
-                </Tooltip>
+                <Box sx={{display: 'flex', alignItems: 'center', columnGap: 2}}>
+                  {hasPenalty && (
+                    <FormControlLabel
+                      sx={{mr: 0}}
+                      control={
+                        <Checkbox
+                          size="small"
+                          checked={showAllPenalties}
+                          onChange={(_e, checked) =>
+                            handleShowAllPenaltiesChange(checked)
+                          }
+                        />
+                      }
+                      label={
+                        <Box
+                          component="span"
+                          sx={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 0.5,
+                          }}>
+                          <Typography
+                            variant="body2"
+                            sx={{fontSize: '0.8125rem'}}>
+                            Show all penalties
+                          </Typography>
+                          <Tooltip title={PENALTY_HELP_TEXT}>
+                            <IconButton
+                              aria-label="Help: Show all penalties"
+                              disableRipple
+                              onClick={e => e.preventDefault()}
+                              sx={{
+                                p: 0,
+                                color: 'text.disabled',
+                                cursor: 'help',
+                              }}>
+                              <InfoOutlined sx={{fontSize: 14}} />
+                            </IconButton>
+                          </Tooltip>
+                        </Box>
+                      }
+                    />
+                  )}
+                  <Tooltip title="Hide all rows across all tables where the two assignments have the same value">
+                    <FormControlLabel
+                      sx={{mr: 0}}
+                      control={
+                        <Checkbox
+                          size="small"
+                          checked={hideAllUnchanged}
+                          onChange={(_e, checked) =>
+                            handleHideAllToggle(checked)
+                          }
+                        />
+                      }
+                      label={
+                        <Typography
+                          variant="body2"
+                          sx={{fontSize: '0.8125rem'}}>
+                          Hide unchanged Constraints & Objectives
+                        </Typography>
+                      }
+                    />
+                  </Tooltip>
+                </Box>
               </Box>
               <EntityFilter
                 columnDescriptions={EVAL_COLUMN_DESCRIPTIONS}
@@ -199,6 +286,8 @@ export default function EvaluationSection({
             sourceAssignment={sourceAssignment}
             destinationAssignment={destinationAssignment}
             evaluationFilters={appliedFilters}
+            showPenalty={!tablesWithPenaltyHidden.has(index)}
+            onShowPenaltyChange={showPenaltyHandlers[index]}
           />
         </Paper>
       ))}

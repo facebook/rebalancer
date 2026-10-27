@@ -27,6 +27,7 @@ import {
   compileEvaluationFilters,
   matchesEvaluationFilters,
 } from '@/app/components/evaluation/evaluation-filters';
+import {isRowChanged} from '@/app/components/evaluation/evaluation-penalty';
 import CopyCellAffordance from '@/app/components/CopyCellAffordance';
 import PreciseNumber from '@/app/components/evaluation/PreciseNumber';
 import SpecViewerButton from '@/app/components/evaluation/SpecViewerButton';
@@ -72,6 +73,8 @@ type EvaluationTableProps = {
   sourceAssignment: Assignment;
   destinationAssignment: Assignment;
   evaluationFilters?: Filter[];
+  showPenalty: boolean;
+  onShowPenaltyChange: (show: boolean) => void;
 };
 
 /** Merged row joining src and dst expression data. */
@@ -83,6 +86,10 @@ interface EvaluationRow {
   dstValue: number;
   delta: number;
   percentage: number;
+  // Separated local-search penalty; null when the objective has none.
+  srcPenalty: number | null;
+  dstPenalty: number | null;
+  penaltyDelta: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -99,6 +106,18 @@ function calculatePercentageChange(src: number, dst: number): number {
     return dst === 0 ? 0 : 100;
   }
   return (delta / Math.abs(src)) * 100;
+}
+
+// Penalty value, or a muted "-" when the objective has no penalty.
+function PenaltyValue({value}: {value: number | null}) {
+  if (value == null) {
+    return (
+      <Box component="span" sx={{color: 'text.secondary'}}>
+        -
+      </Box>
+    );
+  }
+  return <PreciseNumber value={value} highlight={false} />;
 }
 
 // Small muted "(%)" shown beneath the B - A delta. Parenthesized to match the
@@ -165,6 +184,11 @@ function SortLabel({
 // compact; longer values wrap. `ch` is the width of one digit (tabular-nums
 // keeps digits equal), plus `3rem` padding.
 const NUMBER_COL_WIDTH = 'calc(17ch + 3rem)';
+// With the three penalty columns shown, all number columns narrow and
+// Description gets a fixed width, so the table scrolls horizontally on a narrow
+// screen instead of squeezing Description to nothing.
+const NUMBER_COL_WITH_PENALTY_WIDTH = 'calc(12ch + 3rem)';
+const DESCRIPTION_WITH_PENALTY_WIDTH = 200;
 
 // Name sizes to content (clamped) so short names free width for the auto-width
 // Description column.
@@ -200,6 +224,8 @@ const EvaluationTable = memo(function EvaluationTable({
   sourceAssignment,
   destinationAssignment,
   evaluationFilters,
+  showPenalty,
+  onShowPenaltyChange,
 }: EvaluationTableProps) {
   const {
     hideAllUnchanged,
@@ -262,6 +288,8 @@ const EvaluationTable = memo(function EvaluationTable({
           return null;
         }
         const delta = dst.value - src.value;
+        const srcPenalty = src.penaltyValue ?? null;
+        const dstPenalty = dst.penaltyValue ?? null;
         return {
           expressionId: src.id,
           name: src.name,
@@ -270,10 +298,19 @@ const EvaluationTable = memo(function EvaluationTable({
           dstValue: dst.value,
           delta,
           percentage: calculatePercentageChange(src.value, dst.value),
+          srcPenalty,
+          dstPenalty,
+          penaltyDelta: (dstPenalty ?? 0) - (srcPenalty ?? 0),
         };
       })
       .filter((row): row is EvaluationRow => row != null);
   }, [srcExpressions, dstExpressions]);
+
+  const hasPenalty = useMemo(
+    () => allRows.some(row => row.srcPenalty != null || row.dstPenalty != null),
+    [allRows],
+  );
+  const isPenaltyShown = hasPenalty && showPenalty;
 
   // Rows matching the user-selected evaluation filters.
   const filteredRows = useMemo(() => {
@@ -289,9 +326,9 @@ const EvaluationTable = memo(function EvaluationTable({
   const displayRows = useMemo(
     () =>
       hideUnchanged
-        ? filteredRows.filter(row => row.delta !== 0)
+        ? filteredRows.filter(row => isRowChanged(row, isPenaltyShown))
         : filteredRows,
-    [filteredRows, hideUnchanged],
+    [filteredRows, hideUnchanged, isPenaltyShown],
   );
 
   // Based on allRows, not the visible rows, so the width holds steady as
@@ -311,13 +348,25 @@ const EvaluationTable = memo(function EvaluationTable({
   const totals = useMemo(() => {
     let srcTotal = 0;
     let dstTotal = 0;
+    let srcPenaltyTotal = 0;
+    let dstPenaltyTotal = 0;
     for (const row of displayRows) {
       srcTotal += row.srcValue;
       dstTotal += row.dstValue;
+      srcPenaltyTotal += row.srcPenalty ?? 0;
+      dstPenaltyTotal += row.dstPenalty ?? 0;
     }
     const deltaTotal = dstTotal - srcTotal;
     const percentTotal = calculatePercentageChange(srcTotal, dstTotal);
-    return {srcTotal, dstTotal, deltaTotal, percentTotal};
+    return {
+      srcTotal,
+      dstTotal,
+      deltaTotal,
+      percentTotal,
+      srcPenaltyTotal,
+      dstPenaltyTotal,
+      penaltyDeltaTotal: dstPenaltyTotal - srcPenaltyTotal,
+    };
   }, [displayRows]);
 
   // Sorting state
@@ -402,6 +451,42 @@ const EvaluationTable = memo(function EvaluationTable({
       // Hidden (see columnVisibility): exists only as the sort target for the
       // "(%)" control in the B - A header. Its value is shown by PercentBeneath.
       columnHelper.accessor('percentage', {header: '%'}),
+      // Penalty columns sort a missing penalty as 0; hidden unless the table
+      // has penalties and "Show penalty" is checked (see columnVisibility).
+      columnHelper.accessor(row => row.srcPenalty ?? 0, {
+        id: 'srcPenalty',
+        header: 'Penalty A',
+        cell: info => <PenaltyValue value={info.row.original.srcPenalty} />,
+        meta: {
+          numeric: true,
+          tooltip:
+            'Separated local-search penalty with assignment A. Local search compares it only after the objective value, so it can only break ties between moves that leave the objective unchanged.',
+        },
+      }),
+      columnHelper.accessor(row => row.dstPenalty ?? 0, {
+        id: 'dstPenalty',
+        header: 'Penalty B',
+        cell: info => <PenaltyValue value={info.row.original.dstPenalty} />,
+        meta: {
+          numeric: true,
+          tooltip: 'Separated local-search penalty with assignment B.',
+        },
+      }),
+      columnHelper.accessor('penaltyDelta', {
+        header: 'Penalty B - A',
+        cell: info => {
+          const {srcPenalty, dstPenalty, penaltyDelta} = info.row.original;
+          return srcPenalty == null && dstPenalty == null ? (
+            <PenaltyValue value={null} />
+          ) : (
+            <PreciseNumber value={penaltyDelta} highlight />
+          );
+        },
+        meta: {
+          numeric: true,
+          tooltip: 'Difference of the separated local-search penalty.',
+        },
+      }),
       columnHelper.display({
         id: 'actions',
         header: ' ',
@@ -436,14 +521,24 @@ const EvaluationTable = memo(function EvaluationTable({
     ],
   );
 
+  const columnVisibility = useMemo(
+    () => ({
+      // The percentage column is merged into the B - A cell; keep it in the
+      // model (so it stays sortable) but hidden so it renders no column of its
+      // own.
+      percentage: false,
+      srcPenalty: isPenaltyShown,
+      dstPenalty: isPenaltyShown,
+      penaltyDelta: isPenaltyShown,
+    }),
+    [isPenaltyShown],
+  );
+
   const table = useReactTable({
     data: displayRows,
     columns,
-    state: {sorting},
+    state: {sorting, columnVisibility},
     onSortingChange: setSorting,
-    // The percentage column is merged into the B - A cell; keep it in the model
-    // (so it stays sortable) but hidden so it renders no column of its own.
-    initialState: {columnVisibility: {percentage: false}},
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
   });
@@ -468,25 +563,51 @@ const EvaluationTable = memo(function EvaluationTable({
           sx={{fontWeight: 600, fontSize: '1.125rem'}}>
           {title}
         </Typography>
-        <Tooltip title="Hide rows where the two assignments have the same value">
-          <FormControlLabel
-            sx={{mr: 0}}
-            control={
-              <Checkbox
-                size="small"
-                checked={hideUnchanged}
-                onChange={(_e, checked) =>
-                  handleTableHideUnchangedChange(checked)
+        <Box sx={{display: 'flex', alignItems: 'center', columnGap: 2}}>
+          {hasPenalty && (
+            <Tooltip title="Show the penalty of each objective in this table">
+              <FormControlLabel
+                sx={{mr: 0}}
+                control={
+                  <Checkbox
+                    size="small"
+                    checked={showPenalty}
+                    onChange={(_e, checked) => onShowPenaltyChange(checked)}
+                  />
+                }
+                label={
+                  <Typography variant="body2" sx={{fontSize: '0.8125rem'}}>
+                    Show penalty
+                  </Typography>
                 }
               />
-            }
-            label={
-              <Typography variant="body2" sx={{fontSize: '0.8125rem'}}>
-                {`Hide unchanged ${title}`}
-              </Typography>
-            }
-          />
-        </Tooltip>
+            </Tooltip>
+          )}
+          <Tooltip
+            title={
+              isPenaltyShown
+                ? 'Hide rows where the two assignments have the same value and the same penalty'
+                : 'Hide rows where the two assignments have the same value'
+            }>
+            <FormControlLabel
+              sx={{mr: 0}}
+              control={
+                <Checkbox
+                  size="small"
+                  checked={hideUnchanged}
+                  onChange={(_e, checked) =>
+                    handleTableHideUnchangedChange(checked)
+                  }
+                />
+              }
+              label={
+                <Typography variant="body2" sx={{fontSize: '0.8125rem'}}>
+                  {`Hide unchanged ${title}`}
+                </Typography>
+              }
+            />
+          </Tooltip>
+        </Box>
       </Box>
 
       {/* Table */}
@@ -527,9 +648,13 @@ const EvaluationTable = memo(function EvaluationTable({
                       key={header.id}
                       style={{
                         width: meta?.flex
-                          ? 'auto'
+                          ? isPenaltyShown
+                            ? DESCRIPTION_WITH_PENALTY_WIDTH
+                            : 'auto'
                           : meta?.numeric
-                            ? NUMBER_COL_WIDTH
+                            ? isPenaltyShown
+                              ? NUMBER_COL_WITH_PENALTY_WIDTH
+                              : NUMBER_COL_WIDTH
                             : header.column.id === 'name'
                               ? nameColWidth
                               : header.getSize(),
@@ -637,7 +762,7 @@ const EvaluationTable = memo(function EvaluationTable({
             {rows.length === 0 && (
               <tr>
                 <td
-                  colSpan={6}
+                  colSpan={table.getVisibleLeafColumns().length}
                   style={{
                     textAlign: 'center',
                     padding: '24px 12px',
@@ -696,6 +821,28 @@ const EvaluationTable = memo(function EvaluationTable({
                   />
                 </Box>
               </td>
+              {isPenaltyShown && (
+                <>
+                  {/* Penalty A */}
+                  <td style={{...totalCellStyle, textAlign: 'right'}}>
+                    <PreciseNumber
+                      value={totals.srcPenaltyTotal}
+                      highlight={false}
+                    />
+                  </td>
+                  {/* Penalty B */}
+                  <td style={{...totalCellStyle, textAlign: 'right'}}>
+                    <PreciseNumber
+                      value={totals.dstPenaltyTotal}
+                      highlight={false}
+                    />
+                  </td>
+                  {/* Penalty B - A */}
+                  <td style={{...totalCellStyle, textAlign: 'right'}}>
+                    <PreciseNumber value={totals.penaltyDeltaTotal} highlight />
+                  </td>
+                </>
+              )}
               {/* Actions */}
               <td style={totalCellStyle} />
             </tr>
