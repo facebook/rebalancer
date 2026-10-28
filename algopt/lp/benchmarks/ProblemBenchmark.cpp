@@ -63,6 +63,10 @@ BENCHMARK(BuildXpressProblem) {
   buildLargeSetCoverInstance(ProblemFactory::makeXpressProblem);
 }
 
+BENCHMARK(BuildXpressV2Problem) {
+  buildLargeSetCoverInstance(ProblemFactory::makeXpressV2Problem);
+}
+
 BENCHMARK(BuildGenericProblem) {
   buildLargeSetCoverInstance(makeGenericGurobiProblem);
 }

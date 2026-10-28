@@ -35,6 +35,7 @@ enum SolverType {
   GenericGurobi,
   HiGHS,
   SimplifiedHiGHS,
+  XpressV2,
 };
 
 class MultipleObjectivesTest : public ::testing::TestWithParam<SolverType> {
@@ -76,7 +77,8 @@ class MultipleObjectivesTest : public ::testing::TestWithParam<SolverType> {
     // computeValue() is not implemented accurately in Xpress), we expect that
     // the value of expr is an integer since all the variables used here are
     // integers
-    if (GetParam() == SolverType::Xpress) {
+    if (GetParam() == SolverType::Xpress ||
+        GetParam() == SolverType::XpressV2) {
       EXPECT_NEAR(expectedValue, expr.computeValue(), 1e-8);
     } else {
       EXPECT_EQ(expectedValue, expr.computeValue());
@@ -88,6 +90,8 @@ class MultipleObjectivesTest : public ::testing::TestWithParam<SolverType> {
       return ProblemFactory::makeGurobiProblem();
     } else if (GetParam() == SolverType::Xpress) {
       return ProblemFactory::makeXpressProblem();
+    } else if (GetParam() == SolverType::XpressV2) {
+      return ProblemFactory::makeXpressV2Problem();
     } else if (GetParam() == SolverType::SimplifiedXpress) {
       return ProblemFactory::makeSimplifiedProblem(
           ProblemFactory::makeXpressProblem);
@@ -152,6 +156,11 @@ INSTANTIATE_TEST_CASE_P(
     XpressTest,
     MultipleObjectivesTest,
     ::testing::Values(SolverType::Xpress));
+
+INSTANTIATE_TEST_CASE_P(
+    XpressV2Test,
+    MultipleObjectivesTest,
+    ::testing::Values(SolverType::XpressV2));
 
 INSTANTIATE_TEST_CASE_P(
     XpressWithSimplifierTest,

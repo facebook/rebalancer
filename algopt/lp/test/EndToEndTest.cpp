@@ -796,6 +796,21 @@ TEST(EndToEndTest, Xpress) {
       ProblemFactory::makeXpressProblem, /*solveAsMip=*/true);
 }
 
+TEST(EndToEndTest, XpressV2) {
+  runTest(ProblemFactory::makeXpressV2Problem);
+  testLogging(ProblemFactory::makeXpressV2Problem);
+  testQuadraticExpressions(ProblemFactory::makeXpressV2Problem);
+  testQuadraticConstraints(ProblemFactory::makeXpressV2Problem);
+  testQuadraticLPModel(ProblemFactory::makeXpressV2Problem);
+  testIIS(ProblemFactory::makeXpressV2Problem);
+  testUnknownParameter(ProblemFactory::makeXpressV2Problem);
+  verifyModelFingerprint(ProblemFactory::makeXpressV2Problem, false);
+  testSensitivitySignConvention(
+      ProblemFactory::makeXpressV2Problem, /*solveAsMip=*/false);
+  testSensitivitySignConvention(
+      ProblemFactory::makeXpressV2Problem, /*solveAsMip=*/true);
+}
+
 TEST(EndToEndTest, XpressSimplified) {
   auto factory = []() {
     return ProblemFactory::makeSimplifiedProblem(

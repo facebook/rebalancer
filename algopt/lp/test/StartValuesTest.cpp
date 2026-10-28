@@ -79,3 +79,49 @@ TEST(StartValuesTest, XpressInfeasible) {
       thrift::WarmStartStatus::FEASIBLE_SOLUTION_OBTAINED,
       *warmStartResult.status());
 }
+
+TEST(StartValuesTest, XpressV2Feasible) {
+  REBALANCER_SKIP_IF_NO_XPRESS();
+  auto problem = ProblemFactory::makeXpressV2Problem();
+  auto var = problem.makeVar();
+  var.setLB(0);
+  var.setUB(10);
+  problem.addStartValue(var, 5);
+  problem.setObjective(var);
+  problem.solve();
+
+  auto result = problem.getOnlyResult();
+  auto optionalWarmStartResult = result.warmStartResult();
+  EXPECT_TRUE(optionalWarmStartResult.has_value());
+
+  auto& warmStartResult = *optionalWarmStartResult;
+  // XPRESS may either accept the solution directly (FEASIBLE_SOLUTION_PROVIDED)
+  // or optimize from it (FEASIBLE_SOLUTION_OBTAINED), depending on the version.
+  EXPECT_TRUE(
+      *warmStartResult.status() ==
+          thrift::WarmStartStatus::FEASIBLE_SOLUTION_PROVIDED ||
+      *warmStartResult.status() ==
+          thrift::WarmStartStatus::FEASIBLE_SOLUTION_OBTAINED);
+}
+
+TEST(StartValuesTest, XpressV2Infeasible) {
+  REBALANCER_SKIP_IF_NO_XPRESS();
+  auto problem = ProblemFactory::makeXpressV2Problem();
+  auto var = problem.makeVar();
+  var.setLB(0);
+  var.setUB(10);
+  problem.addStartValue(var, 20);
+  problem.setObjective(var);
+  problem.solve();
+
+  auto result = problem.getOnlyResult();
+  auto optionalWarmStartResult = result.warmStartResult();
+  EXPECT_TRUE(optionalWarmStartResult.has_value());
+
+  auto& warmStartResult = *optionalWarmStartResult;
+  // The hint must be reported as processed, and an infeasible one must not be
+  // taken at face value.
+  EXPECT_NE(
+      thrift::WarmStartStatus::FEASIBLE_SOLUTION_PROVIDED,
+      *warmStartResult.status());
+}

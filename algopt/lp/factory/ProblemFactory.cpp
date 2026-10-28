@@ -21,6 +21,7 @@
 #endif
 #ifdef REBALANCER_USE_XPRESS
 #include "algopt/lp/detail/xpress/XpressProblem.h"
+#include "algopt/lp/detail/xpress_v2/XpressProblemV2.h"
 #endif
 #ifdef REBALANCER_USE_HIGHS
 #include "algopt/lp/detail/highs/HiGHSProblem.h"
@@ -170,6 +171,21 @@ Problem loadWithFallback(
 
 Problem ProblemFactory::makeXpressProblem() {
   return detail::loadWithFallback("XPRESS", &loadXpress);
+}
+
+Problem ProblemFactory::makeXpressV2Problem() {
+#ifdef REBALANCER_USE_XPRESS
+#ifndef REBALANCER_OSS_BUILD
+  lazyLoadXpress();
+#else
+  if (!XpressEnvironment::isInitialized()) {
+    throw std::runtime_error(XpressEnvironment::notInitializedMsg.data());
+  }
+#endif
+  return Problem(std::make_unique<detail::XpressProblemV2>());
+#else
+  throw std::runtime_error("XPRESS is not available in this build");
+#endif
 }
 
 Problem ProblemFactory::makeGenericProblem(

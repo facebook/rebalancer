@@ -46,6 +46,8 @@ Problem loadWithFallback(
 class ProblemFactory {
  public:
   static Problem makeXpressProblem();
+  // Xpress backend built on the typed C++ API (algopt/lp/detail/xpress_v2).
+  static Problem makeXpressV2Problem();
   static Problem makeGurobiProblem();
   static Problem makeHiGHSProblem();
   // Generic problem that can be realized and solved using factory where
