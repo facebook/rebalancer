@@ -256,7 +256,8 @@ static std::unique_ptr<ProblemSolver> setupStackingTestcase(
     int threadCount,
     std::map<std::string, std::string>& partToServer,
     std::optional<std::map<std::string, std::vector<std::string>>>
-        assignmentOverride = std::nullopt) {
+        assignmentOverride = std::nullopt,
+    bool useAsSoftConstraint = false) {
   auto solver =
       initializeTestProblemSolver({.executorThreadCount = threadCount});
   solver->setObjectName("server_part");
@@ -325,7 +326,15 @@ static std::unique_ptr<ProblemSolver> setupStackingTestcase(
     spec.bound() = GroupDiversityBound::MAX;
     spec.limit()->globalLimit() = 2;
     spec.filter()->itemsWhitelist() = {"reservation0"};
-    solver->addGoal(spec);
+    if (useAsSoftConstraint) {
+      solver->addConstraint(
+          spec,
+          ConstraintPolicy::SOFT,
+          /*invalidCost=*/1,
+          /*invalidState=*/0);
+    } else {
+      solver->addGoal(spec);
+    }
   }
   return solver;
 }
@@ -348,18 +357,20 @@ TEST_P(GroupDiversityTest, stackHighOnServersNoProgressWithSingleMoves) {
   EXPECT_EQ(0, numMoves);
 }
 
-TEST_P(GroupDiversityTest, stackHighOnServersPossibleWithSwap) {
-  if (getSolverAlgoType() == OPTIMAL) {
-    GTEST_SKIP() << "local search specific test";
-  }
-
+static void verifyStackHighOnServersPossibleWithSwap(
+    int threadCount,
+    bool useAsSoftConstraint) {
   std::map<std::string, std::string> partToServer;
-  auto solver = setupStackingTestcase(getThreadCount(), partToServer);
+  auto solver = setupStackingTestcase(
+      threadCount,
+      partToServer,
+      /*assignmentOverride=*/std::nullopt,
+      useAsSoftConstraint);
   // use just SWAP moves
   LocalSearchSolverSpec solverSpec;
   solverSpec.moveTypeList()->push_back(
       ProblemSolver::makeMoveTypeSpec(SwapMoveTypeSpec()));
-  addConfiguredSolver(*solver, solverSpec);
+  solver->addSolver(solverSpec);
 
   auto solution = solver->solve();
   auto& assignment = *solution.assignment();
@@ -383,6 +394,24 @@ TEST_P(GroupDiversityTest, stackHighOnServersPossibleWithSwap) {
   EXPECT_TRUE(containerToServers["unassigned"].contains("server2"));
   EXPECT_TRUE(containerToServers["reservation0"].contains("server0"));
   EXPECT_TRUE(containerToServers["reservation0"].contains("server1"));
+}
+
+TEST_P(GroupDiversityTest, StackHighOnServersPossibleWithSwapAsGoal) {
+  if (getSolverAlgoType() == OPTIMAL) {
+    GTEST_SKIP() << "local search specific test";
+  }
+
+  verifyStackHighOnServersPossibleWithSwap(
+      getThreadCount(), /*useAsSoftConstraint=*/false);
+}
+
+TEST_P(GroupDiversityTest, StackHighOnServersPossibleWithSwapAsConstraint) {
+  if (getSolverAlgoType() == OPTIMAL) {
+    GTEST_SKIP() << "local search specific test";
+  }
+
+  verifyStackHighOnServersPossibleWithSwap(
+      getThreadCount(), /*useAsSoftConstraint=*/true);
 }
 
 TEST_P(GroupDiversityTest, stackHighAllGroupsEqual) {

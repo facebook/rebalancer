@@ -186,9 +186,12 @@ TEST_P(PairAffinitiesTest, Goal) {
       EXPECT_NEAR(1, *solution.initialObjective()->value(), 1e-8);
       break;
     case LOCALSEARCH:
-      // when using local search, the initial objective is not the same as the
-      // optimal because of additional penalty terms
-      EXPECT_NEAR(1.95, *solution.initialObjective()->value(), 1e-8);
+      // Without separated penalty objectives, local search also reports the
+      // continuous penalty terms.
+      EXPECT_NEAR(
+          expectedLocalSearchGlobalObjective(1, 0.95),
+          *solution.initialObjective()->value(),
+          1e-8);
       break;
   }
   EXPECT_NEAR(-2, *solution.finalObjective()->value(), 1e-8);

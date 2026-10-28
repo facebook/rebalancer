@@ -60,6 +60,23 @@ enum SolverAlgoType {
 };
 bool isOptimal(const SolverAlgoType solverAlgoType);
 
+// Internal builds default
+// RolloutConfig::useSeparatedLocalSearchPenaltyObjective to true. OSS builds
+// keep the Thrift default, which adds continuous local-search penalties to the
+// reported Global objective.
+#ifdef REBALANCER_OSS_BUILD
+inline constexpr bool kSeparatedLocalSearchPenaltyObjective = false;
+#else
+inline constexpr bool kSeparatedLocalSearchPenaltyObjective = true;
+#endif
+
+constexpr double expectedLocalSearchGlobalObjective(
+    double globalValue,
+    double penaltyValue) {
+  return kSeparatedLocalSearchPenaltyObjective ? globalValue
+                                               : globalValue + penaltyValue;
+}
+
 std::shared_ptr<folly::CPUThreadPoolExecutor> getTestExecutor(
     int numThreads = defaultExecutorThreadCount);
 

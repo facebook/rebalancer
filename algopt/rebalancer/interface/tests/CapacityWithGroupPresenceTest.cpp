@@ -18,10 +18,12 @@
 #include <fmt/core.h>
 #include <folly/container/irange.h>
 #include <gtest/gtest.h>
+#include <thrift/lib/cpp/util/EnumUtils.h>
 
 #include <cmath>
 #include <map>
 #include <string>
+#include <string_view>
 
 using facebook::algopt::isSolverUnavailable;
 using facebook::algopt::solverName;
@@ -34,8 +36,9 @@ class CapacityWithGroupPresenceTest
           std::tuple<int, SolverAlgoType, OptimalSolverPackage>> {
  protected:
   // Scale factors for the default NORMALIZED_CONTINUOUS_UTILIZATION penalty
-  // (= penaltyBound / (numObjects * maxDimValue)). Fixture has 10 objects
-  // (tenant1=7, tenant2=3), maxDimValue = 1.88, roundUp=true so
+  // (= penaltyBound / (numObjects * maxDimValue)), which local search adds to
+  // the Global objective only without separated penalty objectives. Fixture has
+  // 10 objects (tenant1=7, tenant2=3), maxDimValue = 1.88, roundUp=true so
   // penaltyBound = 0.5.
   static constexpr double kMaxDimValue = 1.88;
   static constexpr double kNormPerScopeItem = 0.5 / (10 * kMaxDimValue);
@@ -54,6 +57,20 @@ class CapacityWithGroupPresenceTest
     const auto [threadCount, algoType, solver] = GetParam();
     return solver;
   }
+  // The optimal solver never adds continuous penalties to the Global
+  // objective; local search adds them only without separated objectives.
+  static double expectedGlobalObjective(
+      double globalValue,
+      double localSearchPenaltyValue) {
+    return getSolverAlgoType() == OPTIMAL
+        ? globalValue
+        : expectedLocalSearchGlobalObjective(
+              globalValue, localSearchPenaltyValue);
+  }
+  AssignmentSolution solvePenaltyDominanceProblem(
+      ContinuousPenaltyType penaltyType);
+  AssignmentSolution solveHotContainerOrderingProblem(
+      ContinuousPenaltyType penaltyType);
   void SetUp() override {
     if (getSolverAlgoType() == OPTIMAL) {
       const auto solverPackage = getSolverPackage();
@@ -388,8 +405,10 @@ TEST_P(CapacityWithGroupPresenceTest, MaxConstraint) {
       // = 3 (constraint) + 3.18 (raw penalty) * kNormPerScopeItem
       // with default invalidState and cost
       // = 10000 + 100 * (3 + 3.18 * kNormPerScopeItem)
+      // Separated penalty objectives report only 10000 + 100 * 3.
       EXPECT_NEAR(
-          10000 + 100 * (3 + 3.18 * kNormPerScopeItem),
+          expectedLocalSearchGlobalObjective(
+              10300.0, 100 * 3.18 * kNormPerScopeItem),
           initialObjectiveValue,
           1e-8);
 
@@ -590,21 +609,14 @@ TEST_P(
 
   // region1 aggregate util (per-group ceil): tenant1 = ceil(0.85+0.13+1.2 =
   // 2.18) = 3; tenant2 = ceil(1.0) = 1; aggregate = 4, below floor 5 ->
-  // violation 1. Under local search the normalized MIN continuous penalty is
-  // also added: the sum of per-group upper-bound complements (smooth,
-  // un-ceiled) = tenant1 (3.98 - 2.18 = 1.8) + tenant2 (1.995 - 1.0 = 0.995) =
-  // 2.795. Optimal has no continuous penalty.
-  switch (getSolverAlgoType()) {
-    case LOCALSEARCH:
-      EXPECT_NEAR(
-          10000 + 100 * (1 + 2.795 * kNormPerScopeItem),
-          initialObjectiveValue,
-          1e-8);
-      break;
-    case OPTIMAL:
-      EXPECT_NEAR(10100.0, initialObjectiveValue, 1e-8);
-      break;
-  }
+  // violation 1. Without separated penalty objectives, local search also adds
+  // the normalized MIN continuous penalty: the sum of per-group upper-bound
+  // complements (smooth, un-ceiled) = tenant1 (3.98 - 2.18 = 1.8) + tenant2
+  // (1.995 - 1.0 = 0.995) = 2.795. Optimal has no continuous penalty.
+  EXPECT_NEAR(
+      expectedGlobalObjective(10100.0, 100 * 2.795 * kNormPerScopeItem),
+      initialObjectiveValue,
+      1e-8);
 
   // The floor is satisfiable (max aggregate = ceil(3.98) + ceil(1.995) = 6), so
   // the solver drives the violation -- and the objective -- to 0.
@@ -782,21 +794,17 @@ TEST_P(CapacityWithGroupPresenceTest, MaxConstraintDuringAndAfter) {
     // Both DURING and AFTER are broken at region1 initially. The AFTER leg is
     // fixed by eviction, so the objective drops to the irreducible DURING
     // violation -- the same exact value for both solvers (invalidState offset
-    // 10000 + violation). Local search's initial objective additionally carries
-    // the (ungated) AFTER continuous penalty that the optimal solver omits, so
-    // the initial value is solver-specific but deterministic.
+    // 10000 + violation). Without separated penalty objectives, local search's
+    // initial objective additionally carries the (ungated) AFTER continuous
+    // penalty that the optimal solver omits.
     const bool perScopeItem =
         intent == CapacityWithGroupPresenceUsageIntent::PER_SCOPE_ITEM;
     EXPECT_NEAR(perScopeItem ? 10300.0 : 10100.0, finalObjectiveValue, 1e-8);
-    if (getSolverAlgoType() == LOCALSEARCH) {
-      EXPECT_NEAR(
-          perScopeItem ? 20608.457446808512 : 20208.282674772039,
-          initialObjectiveValue,
-          1e-8);
-    } else {
-      EXPECT_NEAR(
-          perScopeItem ? 20600.0 : 20200.0, initialObjectiveValue, 1e-8);
-    }
+    EXPECT_NEAR(
+        perScopeItem ? expectedGlobalObjective(20600.0, 8.457446808512)
+                     : expectedGlobalObjective(20200.0, 8.282674772039),
+        initialObjectiveValue,
+        1e-8);
 
     // The AFTER leg still rewards evicting region1's tenant1 objects -- any one
     // remaining forces the (per-group or aggregate) AFTER utilization to
@@ -833,14 +841,13 @@ TEST_P(CapacityWithGroupPresenceTest, DuringAndAfterAsGoal) {
 
   // The AFTER leg improves (region1 tenant1 evicted) so the goal drops to the
   // irreducible DURING violation of 3 (same for both solvers); it never reaches
-  // zero. Local search's initial goal additionally carries the AFTER continuous
-  // penalty the optimal solver omits, so the initial value is solver-specific.
+  // zero. Without separated penalty objectives, local search's initial goal
+  // additionally carries the AFTER continuous penalty the optimal solver omits.
   EXPECT_NEAR(3.0, finalObjectiveValue, 1e-8);
-  if (getSolverAlgoType() == LOCALSEARCH) {
-    EXPECT_NEAR(6.084574468085, initialObjectiveValue, 1e-8);
-  } else {
-    EXPECT_NEAR(6.0, initialObjectiveValue, 1e-8);
-  }
+  EXPECT_NEAR(
+      expectedGlobalObjective(6.0, 0.084574468085),
+      initialObjectiveValue,
+      1e-8);
 }
 
 // End-to-end DURING_AND_AFTER with a finer aggregation scope (rack) than the
@@ -862,14 +869,14 @@ TEST_P(CapacityWithGroupPresenceTest, DuringAndAfterWithAggregationScope) {
         *solution.finalGlobalObjective()->goals()->at(0).value();
     // The AFTER leg evicts tenantA from region1, so the objective drops to the
     // irreducible DURING violation of 10300 (same for both solvers and both
-    // dimension kinds). Local search's initial objective additionally carries
-    // the AFTER continuous penalty the optimal solver omits.
+    // dimension kinds). Without separated penalty objectives, local search's
+    // initial objective additionally carries the AFTER continuous penalty the
+    // optimal solver omits.
     EXPECT_NEAR(10300.0, finalObjectiveValue, 1e-8);
-    if (getSolverAlgoType() == LOCALSEARCH) {
-      EXPECT_NEAR(20633.333333333336, initialObjectiveValue, 1e-8);
-    } else {
-      EXPECT_NEAR(20600.0, initialObjectiveValue, 1e-8);
-    }
+    EXPECT_NEAR(
+        expectedGlobalObjective(20600.0, 33.333333333336),
+        initialObjectiveValue,
+        1e-8);
 
     const auto& finalAssignment = *solution.assignment();
     for (const std::string& object : {"a1", "a2"}) {
@@ -932,7 +939,8 @@ TEST_P(CapacityWithGroupPresenceTest, MaxConstraintLocalSearchWithMultipliers) {
       100 * (61 + 42.024 * kNormPerScopeItem)
       */
       EXPECT_NEAR(
-          20000 + 100 * (61 + 42.024 * kNormPerScopeItem),
+          expectedLocalSearchGlobalObjective(
+              26100.0, 100 * 42.024 * kNormPerScopeItem),
           initialObjectiveValue,
           1e-8);
 
@@ -1066,7 +1074,8 @@ TEST_P(
       // with default invalidState and cost
       // = 10000 + 100 * (10 + 1.0 * kNormPerScopeItem)
       EXPECT_NEAR(
-          10000 + 100 * (10 + 1.0 * kNormPerScopeItem),
+          expectedLocalSearchGlobalObjective(
+              11000.0, 100 * 1.0 * kNormPerScopeItem),
           initialObjectiveValue,
           1e-8);
 
@@ -1148,7 +1157,8 @@ TEST_P(CapacityWithGroupPresenceTest, MaxConstraintWithGroupFilter) {
       // with default invalidState and cost
       // = 10000 + 100 * (1 + 2.18 * kNormGroupFilteredTenant1)
       EXPECT_NEAR(
-          10000 + 100 * (1 + 2.18 * kNormGroupFilteredTenant1),
+          expectedLocalSearchGlobalObjective(
+              10100.0, 100 * 2.18 * kNormGroupFilteredTenant1),
           initialObjectiveValue,
           1e-8);
 
@@ -1238,7 +1248,8 @@ TEST_P(
       + 25.56 * kNormTenant2)
       */
       EXPECT_NEAR(
-          20000 + 100 * (14 + 25.56 * kNormTenant2),
+          expectedLocalSearchGlobalObjective(
+              21400.0, 100 * 25.56 * kNormTenant2),
           initialObjectiveValue,
           1e-8);
 
@@ -1387,8 +1398,9 @@ TEST_P(
     + 100 * (53 + 42.024 * kNormPerScopeItem + 25.56 * kNormTenant2)
       */
       EXPECT_NEAR(
-          40000 +
-              100 * (53 + 42.024 * kNormPerScopeItem + 25.56 * kNormTenant2),
+          expectedLocalSearchGlobalObjective(
+              45300.0,
+              100 * (42.024 * kNormPerScopeItem + 25.56 * kNormTenant2)),
           initialObjectiveValue,
           1e-8);
 
@@ -1410,9 +1422,27 @@ TEST_P(
   }
 }
 
-// Demonstrates the penalty dominance problem with multiple tenants: the solver
-// moves a high-util tenant's objects between regions to reduce the penalty,
-// creating new violations that affect all tenants sharing the destination.
+namespace {
+
+std::vector<std::string> makeObjectNames(std::string_view prefix, int count) {
+  std::vector<std::string> names;
+  names.reserve(count);
+  for (auto i : folly::irange(1, count + 1)) {
+    names.push_back(fmt::format("{}{}", prefix, i));
+  }
+  return names;
+}
+
+const std::vector<std::string> kPenaltyDominanceBigObjects =
+    makeObjectNames("big", 10);
+const std::vector<std::string> kHotContainerRegion1Objects =
+    makeObjectNames("a", 5);
+
+} // namespace
+
+// Penalty dominance problem with multiple tenants: the solver may move a
+// high-util tenant's objects between regions to reduce the penalty, creating
+// new violations that affect all tenants sharing the destination.
 //
 // Setup: PER_GROUP_AND_SCOPE_ITEM, 2 regions, SOFT constraint policy.
 //   - tenantBig in region1: 10 objects each with val=100 => 1000 util,
@@ -1420,7 +1450,8 @@ TEST_P(
 //   that region.
 //   - tenants t1-t4 in region2: each 1 object with val=4, limit=3, violation=1.
 //
-// With CONTINUOUS_UTILIZATION penalty (= raw continuousUtil = 1000):
+// With a legacy combined CONTINUOUS_UTILIZATION penalty (= raw continuousUtil
+// = 1000):
 //   Moving tenantBig's object (val=100) from region1 to region2:
 //     tenantBig region1: penalty drops by 100 => no constraint violation in
 //     region which in turns saves invalidCost*100 + invalidCost*penalty
@@ -1429,37 +1460,18 @@ TEST_P(
 //       costs invalidCost*(97+100) + invalidState = 29700
 //     Net: region1 saves 110100, region2 costs 29700 => net improvement 80400
 //     The solver takes the move, creating a huge new violation in region2.
-//
-// With NORMALIZED_CONTINUOUS_UTILIZATION penalty
-//   (= continuousUtil * 0.5 * min(minPositiveDimValue, 1) / maxPossibleUtil,
-//    bounded to [0, 0.5 * min(minPositiveDimValue, 1)]):
-//   minPositiveDimValue = 4, min(4, 1) = 1, so penalty is bounded to [0, 0.5].
-//   Penalty contribution is tiny, violation cost dominates.
-//   The solver correctly rejects the move.
-TEST_P(
-    CapacityWithGroupPresenceTest,
-    PenaltyDominanceCausesViolationWorsening) {
-  if (getSolverAlgoType() == OPTIMAL) {
-    GTEST_SKIP() << "This test is specific to local search penalty behavior";
-  }
-
+AssignmentSolution CapacityWithGroupPresenceTest::solvePenaltyDominanceProblem(
+    ContinuousPenaltyType penaltyType) {
   solver =
       initializeTestProblemSolver({.executorThreadCount = getThreadCount()});
   solver->setObjectName("trafficObject");
   solver->setContainerName("host");
 
-  constexpr int kNumBigObjects = 10;
-  std::vector<std::string> bigObjects;
-  bigObjects.reserve(kNumBigObjects);
-  for (auto i : folly::irange(1, kNumBigObjects + 1)) {
-    bigObjects.push_back(fmt::format("big{}", i));
-  }
-
   // host1 (region1): tenantBig's 10 objects each with val=100
   // host2 (region2): 4 small tenants, each 1 object with val=4
   solver->setAssignment(
       std::vector<std::pair<std::string, std::vector<std::string>>>{
-          {"host1", bigObjects},
+          {"host1", kPenaltyDominanceBigObjects},
           {"host2", {"t1o1", "t2o1", "t3o1", "t4o1"}},
       });
 
@@ -1469,7 +1481,7 @@ TEST_P(
           {"region1", {"host1"}}, {"region2", {"host2"}}});
 
   folly::F14FastMap<std::string, double> replicaCounts;
-  for (const auto& obj : bigObjects) {
+  for (const auto& obj : kPenaltyDominanceBigObjects) {
     replicaCounts[obj] = 100;
   }
   for (const auto& obj : {"t1o1", "t2o1", "t3o1", "t4o1"}) {
@@ -1480,7 +1492,7 @@ TEST_P(
   solver->addPartition(
       "tenant",
       std::map<std::string, std::vector<std::string>>{
-          {"tenantBig", bigObjects},
+          {"tenantBig", kPenaltyDominanceBigObjects},
           {"t1", {"t1o1"}},
           {"t2", {"t2o1"}},
           {"t3", {"t3o1"}},
@@ -1495,8 +1507,7 @@ TEST_P(
   spec.bound() = CapacityWithGroupPresenceBound::MAX;
   spec.intent() =
       CapacityWithGroupPresenceUsageIntent::PER_GROUP_AND_SCOPE_ITEM;
-  spec.continuousPenaltyType() =
-      ContinuousPenaltyType::NORMALIZED_CONTINUOUS_UTILIZATION;
+  spec.continuousPenaltyType() = penaltyType;
 
   // tenantBig: limit=999 in region1 (violation=1), limit=3 in region2
   // t1-t4: limit=3 in each region (each has violation=1 in region2)
@@ -1519,15 +1530,17 @@ TEST_P(
       ProblemSolver::makeMoveTypeSpec(SingleFastMoveTypeSpec{})};
   solver->addSolver(lsSpec);
 
-  const auto solution = solver->solve();
-  const auto& finalAssignment = *solution.assignment();
+  return solver->solve();
+}
 
+static void expectNoPenaltyDominanceMoves(const AssignmentSolution& solution) {
   // No tenantBig objects should move to region2. Each such move creates a
   // violation of ~97 (val=100 vs limit=3) in region2 while only reducing
   // the penalty in region1. With 4 small tenants already in region2, the
   // solver would be worsening the shared region to chase one tenant's penalty.
+  const auto& finalAssignment = *solution.assignment();
   int bigMovedToRegion2 = 0;
-  for (const auto& obj : bigObjects) {
+  for (const auto& obj : kPenaltyDominanceBigObjects) {
     if (finalAssignment.at(obj) == "host2") {
       bigMovedToRegion2++;
     }
@@ -1541,7 +1554,50 @@ TEST_P(
          "health for all tenants sharing region2.";
 }
 
-// Demonstrates penalty-driven misordering of hot containers.
+// With NORMALIZED_CONTINUOUS_UTILIZATION penalty
+//   (= continuousUtil * 0.5 * min(minPositiveDimValue, 1) / maxPossibleUtil,
+//    bounded to [0, 0.5 * min(minPositiveDimValue, 1)]):
+//   minPositiveDimValue = 4, min(4, 1) = 1, so penalty is bounded to [0, 0.5].
+//   Penalty contribution is tiny, violation cost dominates.
+//   The solver correctly rejects the move.
+TEST_P(
+    CapacityWithGroupPresenceTest,
+    PenaltyDominanceCausesViolationWorsening) {
+  if (getSolverAlgoType() == OPTIMAL) {
+    GTEST_SKIP() << "This test is specific to local search penalty behavior";
+  }
+
+  expectNoPenaltyDominanceMoves(solvePenaltyDominanceProblem(
+      ContinuousPenaltyType::NORMALIZED_CONTINUOUS_UTILIZATION));
+}
+
+// With separated local-search objectives, each tuple position compares its
+// violation value before its penalty, so the solver rejects the move with
+// either penalty type, including the raw CONTINUOUS_UTILIZATION penalty. The
+// reported Global objective excludes the penalty: 5 broken constraints =>
+// 5 * 10000 + 100 * 5.
+TEST_P(
+    CapacityWithGroupPresenceTest,
+    SeparatedPenaltyObjectivePreventsViolationWorsening) {
+  if (getSolverAlgoType() == OPTIMAL) {
+    GTEST_SKIP() << "This test is specific to local search penalty behavior";
+  }
+  if (!kSeparatedLocalSearchPenaltyObjective) {
+    GTEST_SKIP() << "Separated penalty objectives require MetaConfig";
+  }
+
+  for (const auto penaltyType :
+       {ContinuousPenaltyType::CONTINUOUS_UTILIZATION,
+        ContinuousPenaltyType::NORMALIZED_CONTINUOUS_UTILIZATION}) {
+    SCOPED_TRACE(apache::thrift::util::enumNameSafe(penaltyType));
+    const auto solution = solvePenaltyDominanceProblem(penaltyType);
+
+    EXPECT_NEAR(50500, *solution.initialObjective()->value(), 1e-8);
+    expectNoPenaltyDominanceMoves(solution);
+  }
+}
+
+// Penalty-driven misordering of hot containers.
 //
 // Setup: PER_SCOPE_ITEM, 2 regions, 1 free host outside, SOFT policy.
 //   - region1 (host1): 5 objects each with val=100 => 500 util, limit=499,
@@ -1551,35 +1607,21 @@ TEST_P(
 //   - host3: free host outside any region
 //   - stopAfterMoves=1: forces the solver to pick one region to fix first
 //
-// With CONTINUOUS_UTILIZATION: region1's softComponent ≈ 60100 (penalty=500
-// inflates it) vs region2's ≈ 12200 (penalty=12). Solver explores region1
-// first (hotter), fixes it, leaves region2 (violation=10) broken.
-//
-// With NORMALIZED_CONTINUOUS_UTILIZATION
-//   (= continuousUtil * 0.5 * min(minPositiveDimValue, 1) / maxPossibleUtil):
-//   minPositiveDimValue = 12, min(12, 1) = 1, maxPossibleUtil = 6*100 = 600.
-//   region1's softComponent ≈ 10000 + 100*(1 + 500*0.5/600)
-//   vs region2's ≈ 10000 + 100*(10 + 12*0.5/600).
-//   Solver correctly explores region2 first (larger violation), fixes it.
-TEST_P(CapacityWithGroupPresenceTest, PenaltyInflationMisordersHotContainers) {
-  if (getSolverAlgoType() == OPTIMAL) {
-    GTEST_SKIP() << "This test is specific to local search penalty behavior";
-  }
-
+// With a legacy combined CONTINUOUS_UTILIZATION penalty: region1's
+// softComponent ≈ 60100 (penalty=500 inflates it) vs region2's ≈ 12200
+// (penalty=12). Solver explores region1 first (hotter), fixes it, leaves
+// region2 (violation=10) broken.
+AssignmentSolution
+CapacityWithGroupPresenceTest::solveHotContainerOrderingProblem(
+    ContinuousPenaltyType penaltyType) {
   solver =
       initializeTestProblemSolver({.executorThreadCount = getThreadCount()});
   solver->setObjectName("trafficObject");
   solver->setContainerName("host");
 
-  std::vector<std::string> region1Objects;
-  region1Objects.reserve(5);
-  for (auto i : folly::irange(1, 6)) {
-    region1Objects.push_back(fmt::format("a{}", i));
-  }
-
   solver->setAssignment(
       std::vector<std::pair<std::string, std::vector<std::string>>>{
-          {"host1", region1Objects},
+          {"host1", kHotContainerRegion1Objects},
           {"host2", {"b1"}},
           {"host3", {}},
       });
@@ -1590,13 +1632,13 @@ TEST_P(CapacityWithGroupPresenceTest, PenaltyInflationMisordersHotContainers) {
           {"region1", {"host1"}}, {"region2", {"host2"}}});
 
   folly::F14FastMap<std::string, double> utilValues;
-  for (const auto& obj : region1Objects) {
+  for (const auto& obj : kHotContainerRegion1Objects) {
     utilValues[obj] = 100;
   }
   utilValues["b1"] = 12;
   solver->addObjectDimension("util", utilValues);
 
-  auto allObjects = region1Objects;
+  auto allObjects = kHotContainerRegion1Objects;
   allObjects.emplace_back("b1");
   solver->addPartition(
       "tenant",
@@ -1611,8 +1653,7 @@ TEST_P(CapacityWithGroupPresenceTest, PenaltyInflationMisordersHotContainers) {
   spec.roundUpGroupUtilOnScopeItem() = false;
   spec.bound() = CapacityWithGroupPresenceBound::MAX;
   spec.intent() = CapacityWithGroupPresenceUsageIntent::PER_SCOPE_ITEM;
-  spec.continuousPenaltyType() =
-      ContinuousPenaltyType::NORMALIZED_CONTINUOUS_UTILIZATION;
+  spec.continuousPenaltyType() = penaltyType;
 
   auto& capacityLimits = *spec.scopeItemToLimit();
   capacityLimits.type() = interface::LimitType::ABSOLUTE;
@@ -1635,7 +1676,10 @@ TEST_P(CapacityWithGroupPresenceTest, PenaltyInflationMisordersHotContainers) {
   lsSpec.stopAfterMoves() = 1;
   solver->addSolver(lsSpec);
 
-  const auto solution = solver->solve();
+  return solver->solve();
+}
+
+static void expectRegion2FixedFirst(const AssignmentSolution& solution) {
   const auto& initialAssignment = *solution.initialAssignment();
   const auto& finalAssignment = *solution.assignment();
 
@@ -1644,7 +1688,7 @@ TEST_P(CapacityWithGroupPresenceTest, PenaltyInflationMisordersHotContainers) {
 
   // No region1 objects should move
   int region1Moves = 0;
-  for (const auto& obj : region1Objects) {
+  for (const auto& obj : kHotContainerRegion1Objects) {
     if (finalAssignment.at(obj) != initialAssignment.at(obj)) {
       region1Moves++;
     }
@@ -1657,6 +1701,48 @@ TEST_P(CapacityWithGroupPresenceTest, PenaltyInflationMisordersHotContainers) {
   EXPECT_EQ(0, region1Moves)
       << "Region1 objects should not move; region2 (violation=10) should be "
          "prioritized over region1 (violation=1).";
+}
+
+// With NORMALIZED_CONTINUOUS_UTILIZATION
+//   (= continuousUtil * 0.5 * min(minPositiveDimValue, 1) / maxPossibleUtil):
+//   minPositiveDimValue = 12, min(12, 1) = 1, maxPossibleUtil = 6*100 = 600.
+//   region1's softComponent ≈ 10000 + 100*(1 + 500*0.5/600)
+//   vs region2's ≈ 10000 + 100*(10 + 12*0.5/600).
+//   Solver correctly explores region2 first (larger violation), fixes it.
+TEST_P(CapacityWithGroupPresenceTest, PenaltyInflationMisordersHotContainers) {
+  if (getSolverAlgoType() == OPTIMAL) {
+    GTEST_SKIP() << "This test is specific to local search penalty behavior";
+  }
+
+  expectRegion2FixedFirst(solveHotContainerOrderingProblem(
+      ContinuousPenaltyType::NORMALIZED_CONTINUOUS_UTILIZATION));
+}
+
+// With separated local-search objectives, hot-container ranking compares the
+// violation contribution before the penalty contribution, so the solver
+// explores and fixes region2 first with either penalty type, including the raw
+// CONTINUOUS_UTILIZATION penalty. The reported Global objective excludes the
+// penalty.
+TEST_P(
+    CapacityWithGroupPresenceTest,
+    SeparatedPenaltyObjectiveOrdersHotContainersByViolation) {
+  if (getSolverAlgoType() == OPTIMAL) {
+    GTEST_SKIP() << "This test is specific to local search penalty behavior";
+  }
+  if (!kSeparatedLocalSearchPenaltyObjective) {
+    GTEST_SKIP() << "Separated penalty objectives require MetaConfig";
+  }
+
+  for (const auto penaltyType :
+       {ContinuousPenaltyType::CONTINUOUS_UTILIZATION,
+        ContinuousPenaltyType::NORMALIZED_CONTINUOUS_UTILIZATION}) {
+    SCOPED_TRACE(apache::thrift::util::enumNameSafe(penaltyType));
+    const auto solution = solveHotContainerOrderingProblem(penaltyType);
+
+    EXPECT_NEAR(21100, *solution.initialObjective()->value(), 1e-8);
+    EXPECT_NEAR(10100, *solution.finalObjective()->value(), 1e-8);
+    expectRegion2FixedFirst(solution);
+  }
 }
 
 } // namespace facebook::rebalancer::interface::tests

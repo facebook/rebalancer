@@ -1247,9 +1247,13 @@ TEST_P(
   //        => total load on region2 = 0.01*20 + 0.0*50 = 0.2
 
   // initial objective value (capacity limit is 35) = 0 + (44.8 - 35) + 0 + 44.8
-  // = 9.8 + 44.8 (raw penalty) = 54.6. NORMALIZED penalty (default) scales the
-  // raw 44.8 by penaltyBound / (numObjects * maxDimValue) = 0.5/(4*50) = 1/400.
-  EXPECT_NEAR(9.8 + 44.8 / 400.0, *solution.initialObjective()->value(), 1e-8);
+  // = 9.8 + 44.8 (raw penalty). NORMALIZED penalty (default) scales the raw
+  // 44.8 by penaltyBound / (numObjects * maxDimValue) = 0.5/(4*50) = 1/400.
+  // Separated penalty objectives report only the 9.8 violation.
+  EXPECT_NEAR(
+      expectedLocalSearchGlobalObjective(9.8, 44.8 / 400.0),
+      *solution.initialObjective()->value(),
+      1e-8);
 
   // In the expected best solution: move a replica of tenant0 from region1 to
   // region0. This enables 98% from region0 of traffic to be evenly spread
