@@ -55,6 +55,7 @@
     "@types/react-dom": "^19.2.3",
     "@types/react-relay": "^18.2.1",
     "@typescript-eslint/eslint-plugin": "^8.35.1",
+    "@typescript/native": "npm:typescript@~7.0.2",
     "babel-plugin-react-compiler": "^1.0.0",
     "babel-plugin-relay": "^20.1.1",
     "eslint": "^9.34.0",
@@ -65,7 +66,7 @@
     "relay-compiler": "main",
     "tailwindcss": "^4",
     "tsx": "^4.20.5",
-    "typescript": "^5.9.3",
+    "typescript": "npm:@typescript/typescript6@^6.0.2",
     "vitest": "^3.2.6"
   },
   "resolutions": {

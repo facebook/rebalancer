@@ -75,6 +75,7 @@ const webpackFn: NonNullable<NextConfig['webpack']> = config => {
 
 const nextConfig: NextConfig = {
   ...baseConfig,
+  experimental: {...baseConfig.experimental, useTypeScriptCli: false},
   transpilePackages: [
     ...(baseConfig.transpilePackages ?? []),
     ...(isInternal ? ['@nest/eps'] : []),
