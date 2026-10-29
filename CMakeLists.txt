@@ -147,9 +147,6 @@ endif()
 find_package(glog CONFIG REQUIRED)
 
 set(THRIFT_COMPILER "${FBTHRIFT_COMPILER}")
-# ThriftLibrary.cmake is installed alongside fbthrift headers
-list(APPEND CMAKE_MODULE_PATH "${FBTHRIFT_INCLUDE_DIR}/thrift")
-include(ThriftLibrary)
 
 message(STATUS "FBTHRIFT_COMPILER: ${FBTHRIFT_COMPILER}")
 message(STATUS "FBTHRIFT_INCLUDE_DIR: ${FBTHRIFT_INCLUDE_DIR}")
