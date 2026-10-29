@@ -14,7 +14,7 @@
 
 #include "algopt/rebalancer/algopt_common/AssociativeFixedMap.h"
 
-#include <fmt/core.h>
+#include <fmt/format.h>
 #include <folly/container/irange.h>
 #include <gtest/gtest.h>
 

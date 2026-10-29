@@ -16,7 +16,7 @@
 
 #ifdef REBALANCER_USE_XPRESS
 
-#include <fmt/core.h>
+#include <fmt/format.h>
 
 #include <filesystem>
 #include <memory>
