@@ -54,6 +54,22 @@ TEST(XpressEnvironmentTest, InvalidLicenseFallsBackToAnotherSolver) {
   }
 }
 
+TEST(XpressEnvironmentTest, InvalidLicenseTypedFactoryPreservesFallback) {
+  if (!facebook::algopt::isHiGHSAvailable()) {
+    GTEST_SKIP() << "build has no unlicensed fallback backend";
+  }
+  writeInvalidLicense();
+  auto problem = ProblemFactory::makeXpressV2Problem();
+  EXPECT_NE(problem.backendName(), "XPRESS");
+  auto x = problem.makeVar();
+  x.setLB(3.0);
+  x.setUB(10.0);
+  problem.setObjective(x);
+  problem.solve();
+  ASSERT_EQ(problem.getStatus(), thrift::ProblemStatus::OPTIMAL_FOUND);
+  EXPECT_NEAR(x.getValue(), 3.0, 1e-6);
+}
+
 } // namespace facebook::algopt::lp
 
 #endif

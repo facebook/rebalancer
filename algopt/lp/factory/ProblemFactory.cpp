@@ -45,7 +45,7 @@ namespace {
 // Loads a backend directly, with no fallback. The fallback chain below is built
 // from these rather than from the public make*Problem() entry points, which
 // would recurse back into their own chains.
-Problem loadXpress() {
+Problem loadXpressBackend([[maybe_unused]] const bool typedApi) {
 #ifdef REBALANCER_USE_XPRESS
 #ifndef REBALANCER_OSS_BUILD
   lazyLoadXpress();
@@ -54,10 +54,15 @@ Problem loadXpress() {
     throw std::runtime_error(XpressEnvironment::notInitializedMsg.data());
   }
 #endif
-  return Problem(std::make_unique<detail::XpressProblem>());
+  return typedApi ? Problem(std::make_unique<detail::XpressProblemV2>())
+                  : Problem(std::make_unique<detail::XpressProblem>());
 #else
   throw std::runtime_error("XPRESS is not available in this build");
 #endif
+}
+
+Problem loadXpress() {
+  return loadXpressBackend(false);
 }
 
 Problem loadGurobi() {
@@ -174,18 +179,8 @@ Problem ProblemFactory::makeXpressProblem() {
 }
 
 Problem ProblemFactory::makeXpressV2Problem() {
-#ifdef REBALANCER_USE_XPRESS
-#ifndef REBALANCER_OSS_BUILD
-  lazyLoadXpress();
-#else
-  if (!XpressEnvironment::isInitialized()) {
-    throw std::runtime_error(XpressEnvironment::notInitializedMsg.data());
-  }
-#endif
-  return Problem(std::make_unique<detail::XpressProblemV2>());
-#else
-  throw std::runtime_error("XPRESS is not available in this build");
-#endif
+  return detail::loadWithFallback(
+      "XPRESS", [] { return loadXpressBackend(true); });
 }
 
 Problem ProblemFactory::makeGenericProblem(
