@@ -452,14 +452,14 @@ ProblemConfigs CoreSolver::makeProblemConfig(
     const auto& solverType = problemSpec.strategy()->solvers()->at(0).getType();
     if (solverType == SolverT::Type::optimalSolverSpec) {
       const auto& optimalSolverSpec =
-          problemSpec.strategy()->solvers()->at(0).get_optimalSolverSpec();
+          problemSpec.strategy()->solvers()->at(0).optimalSolverSpec().value();
       checkIfLpCanBeParallelized(optimalSolverSpec);
     } else if (solverType == SolverT::Type::optimalSubsetSolverSpec) {
       const auto& optimalSolverSpec = *problemSpec.strategy()
                                            ->solvers()
                                            ->at(0)
-                                           .get_optimalSubsetSolverSpec()
-                                           .optimalConfig();
+                                           .optimalSubsetSolverSpec()
+                                           ->optimalConfig();
       checkIfLpCanBeParallelized(optimalSolverSpec);
     }
   }
