@@ -56,17 +56,9 @@ class PropertiesTestCustom : public ExpressionTestsBase {};
 TEST_F(PropertiesTest, AnyPositive) {
   buildUniverse();
   const auto& universe = getUniverse();
-  const AnyPositive anyPositive({}, universe, 1e-3);
+  const AnyPositive anyPositive({}, universe);
   ASSERT_EQ("AnyPositive", anyPositive.getType());
-
-  auto properties = anyPositive.getProperties();
-  ASSERT_EQ(1, properties.properties()->size());
-  ASSERT_EQ(
-      1e-3,
-      *properties.properties()
-           ->at("feasibility_tolerance")
-           .valueDouble()
-           ->value());
+  ASSERT_TRUE(anyPositive.getProperties().properties()->empty());
 }
 
 TEST_F(PropertiesTest, Product) {

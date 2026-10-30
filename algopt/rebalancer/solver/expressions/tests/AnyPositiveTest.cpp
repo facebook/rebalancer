@@ -74,4 +74,36 @@ TEST_F(AnyPositiveTest, AddInitialValue) {
   EXPECT_DOUBLE_EQ(1.0, expr->getInitialValue());
 }
 
+TEST_F(AnyPositiveTest, ChildWithinToleranceAboveTheToleranceIsViolating) {
+  setUpDefaultAssignment();
+  buildUniverse();
+  const auto& universe = getUniverse();
+  const Assignment assignment(universe.getContainers().getInitialAssignment());
+  const auto tolerance =
+      universe.getPrecision().getTolerances().absolute().value();
+  const ObjectToNewContainer moveIn{{object(0), container(1)}};
+  const auto movedAssignment = getModifiedAssignment(assignment, moveIn);
+
+  const auto anyPositiveOf = [&](const Assignment& base, double weight) {
+    return any_positive(
+        {variable(object(0), container(1), universe, base) * weight}, universe);
+  };
+  // Incremental evaluation of the move.
+  EXPECT_DOUBLE_EQ(
+      1.0,
+      evaluate(
+          *anyPositiveOf(assignment, 1.5 * tolerance),
+          getChangeSet(moveIn, assignment)));
+  EXPECT_DOUBLE_EQ(
+      0.0,
+      evaluate(
+          *anyPositiveOf(assignment, 0.5 * tolerance),
+          getChangeSet(moveIn, assignment)));
+  // Full evaluation of the assignment after the move.
+  EXPECT_DOUBLE_EQ(
+      1.0, anyPositiveOf(movedAssignment, 1.5 * tolerance)->getInitialValue());
+  EXPECT_DOUBLE_EQ(
+      0.0, anyPositiveOf(movedAssignment, 0.5 * tolerance)->getInitialValue());
+}
+
 } // namespace facebook::rebalancer::packer::tests

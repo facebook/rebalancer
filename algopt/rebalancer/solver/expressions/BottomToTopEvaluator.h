@@ -28,10 +28,8 @@ class BottomToTopEvaluator : public Evaluator {
       const override;
 
   // check if expr break constraint
-  virtual bool isPositive(
-      const Expression* expr,
-      const ChangeSet& changes,
-      const double feasibilityTolerance) const override;
+  virtual bool isPositive(const Expression* expr, const ChangeSet& changes)
+      const override;
 
   // used by apply and evaluate function in Expression,
   // to_check gets expr's children which changed value

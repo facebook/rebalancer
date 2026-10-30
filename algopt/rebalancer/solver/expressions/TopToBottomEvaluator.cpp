@@ -38,8 +38,7 @@ double TopToBottomEvaluator::apply(
 
 bool TopToBottomEvaluator::isPositive(
     const Expression* /* expr */,
-    const ChangeSet& /* changes */,
-    const double /* feasibilityTolerance */) const {
+    const ChangeSet& /* changes */) const {
   throw std::runtime_error(
       "isPositive with changes cannot be called with TopToBottomEvaluator");
 }

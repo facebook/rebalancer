@@ -42,10 +42,8 @@ double BottomToTopEvaluator::apply(
 
 bool BottomToTopEvaluator::isPositive(
     const Expression* expr,
-    const ChangeSet& changes,
-    const double feasibilityTolerance) const {
-  return expr->getPrecision().compare(
-             evaluate(expr, changes), feasibilityTolerance) == 1;
+    const ChangeSet& changes) const {
+  return expr->getPrecision().isStrictlyGtZero(evaluate(expr, changes));
 }
 
 const folly::F14FastSet<Expression*>& BottomToTopEvaluator::getChangedChildren(

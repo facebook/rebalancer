@@ -120,8 +120,7 @@ class LpEvaluator : public Evaluator {
 
   virtual bool isPositive(
       const Expression* /*unused*/,
-      const ChangeSet& /*unused*/,
-      const double /*unused*/) const override {
+      const ChangeSet& /*unused*/) const override {
     throw std::runtime_error(
         "isPositive cannot be used with object of type LpEvaluator");
   }

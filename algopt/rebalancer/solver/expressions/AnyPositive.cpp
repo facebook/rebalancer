@@ -18,7 +18,6 @@
 #include "algopt/rebalancer/solver/expressions/BottomToTopEvaluator.h"
 #include "algopt/rebalancer/solver/expressions/LpEvaluator.h"
 #include "algopt/rebalancer/solver/expressions/Operators.h"
-#include "algopt/rebalancer/solver/expressions/PropertiesHelper.h"
 #include "algopt/rebalancer/solver/expressions/TopToBottomEvaluator.h"
 #include "algopt/rebalancer/solver/utils/Assignment.h"
 
@@ -36,9 +35,8 @@ namespace facebook::rebalancer {
 
 AnyPositive::AnyPositive(
     const vector<ExprPtr>& exprs,
-    const entities::Universe& universe,
-    const double feasibilityTolerance)
-    : Expression(universe), feasibilityTolerance(feasibilityTolerance) {
+    const entities::Universe& universe)
+    : Expression(universe) {
   for (const auto& expr : exprs) {
     add_child(expr);
     if (isViolating(expr->getInitialValue())) {
@@ -49,7 +47,7 @@ AnyPositive::AnyPositive(
 }
 
 bool AnyPositive::isViolating(double childVal) const {
-  return getPrecision().compare(childVal, feasibilityTolerance) == 1;
+  return getPrecision().isStrictlyGtZero(childVal);
 }
 
 double AnyPositive::computeResult() const {
@@ -107,7 +105,7 @@ double AnyPositive::evaluate(
   size_t nonViolatingChildren = 0;
   auto& changedChildren = evaluator.getChangedChildren((Expression*)this);
   for (auto& child : changedChildren) {
-    if (evaluator.isPositive(child, changes, feasibilityTolerance)) {
+    if (evaluator.isPositive(child, changes)) {
       return 1;
     }
     nonViolatingChildren += violatingChildren_.count(child);
@@ -199,14 +197,6 @@ algopt::lp::Expression AnyPositive::lp(
     lpProvider_ = getEquivStepExpr(children(), getUniverse());
   }
   return evaluator.lp(lpProvider_.get(), minimizing, configs);
-}
-
-ExpressionProperties AnyPositive::getProperties() const {
-  ExpressionProperties properties;
-  properties.properties()->emplace(
-      "feasibility_tolerance",
-      PropertiesHelper::makeDoubleValue(feasibilityTolerance));
-  return properties;
 }
 
 bool AnyPositive::inner_is_integer(Context& /* not used */) {

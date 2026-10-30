@@ -197,8 +197,7 @@ TEST_F(DigestTest, AnyPositive) {
   expressions.push_back(
       std::make_shared<Variable>(
           object(2), container(0), universe, assignment));
-  auto eAnyPositive =
-      std::make_shared<AnyPositive>(expressions, universe, 0.01);
+  auto eAnyPositive = std::make_shared<AnyPositive>(expressions, universe);
   auto problem = createTestProblem(
       getUniversePtr(), {eAnyPositive}, eAnyPositive, {}, {}, false);
   auto digest = eAnyPositive->digest(*problem);

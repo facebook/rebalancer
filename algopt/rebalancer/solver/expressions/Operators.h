@@ -83,14 +83,6 @@ ExprPtr any_positive(
     const std::vector<ExprPtr>& exprs,
     const entities::Universe& universe);
 
-ExprPtr any_positive(
-    std::initializer_list<ExprPtr> exprs,
-    const entities::Universe& universe,
-    const double feasibilityTolerance);
-ExprPtr any_positive(
-    const std::vector<ExprPtr>& exprs,
-    const entities::Universe& universe,
-    const double feasibilityTolerance);
 void inplace_any_positive(ExprPtr& lhs, ExprPtr rhs);
 void any_positive_add(ExprPtr& lhs, ExprPtr rhs);
 

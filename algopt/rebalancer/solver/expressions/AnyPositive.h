@@ -22,13 +22,9 @@ namespace facebook::rebalancer {
 
 class AnyPositive : public Expression {
  public:
-  // feasibilityTolerance is used to determine the level of POSITIVE
-  // For example, if feasibilityTolerance is 1e-4
-  // then when expr == 1e-5, it is regarded as NON-POSITIVE
   explicit AnyPositive(
       const std::vector<ExprPtr>& exprs,
-      const entities::Universe& universe,
-      const double feasibilityTolerance);
+      const entities::Universe& universe);
 
   void add(const ExprPtr& expr);
 
@@ -41,8 +37,6 @@ class AnyPositive : public Expression {
   virtual void lpIntent(const LpEvaluator& evaluator, bool minimizing) override;
 
   std::string innerDigest(size_t maxChildren = 10) const override;
-
-  ExpressionProperties getProperties() const override;
 
   using Expression::evaluate;
   virtual double evaluate(
@@ -60,7 +54,6 @@ class AnyPositive : public Expression {
   virtual bool isAnyPositive() const override;
 
  private:
-  const double feasibilityTolerance;
   ExprPtr lpProvider_;
   PackerSet<Expression*> violatingChildren_;
 

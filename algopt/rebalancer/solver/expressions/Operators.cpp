@@ -363,31 +363,13 @@ void inplace_max(ExprPtr& lhs, ExprPtr rhs) {
 ExprPtr any_positive(
     initializer_list<ExprPtr> exprs,
     const entities::Universe& universe) {
-  auto feasibilityTolerance =
-      universe.getPrecision().getTolerances().absolute().value();
-  return make_shared<AnyPositive>(exprs, universe, feasibilityTolerance);
+  return make_shared<AnyPositive>(exprs, universe);
 }
 
 ExprPtr any_positive(
     const std::vector<ExprPtr>& exprs,
     const entities::Universe& universe) {
-  auto feasibilityTolerance =
-      universe.getPrecision().getTolerances().absolute().value();
-  return make_shared<AnyPositive>(exprs, universe, feasibilityTolerance);
-}
-
-ExprPtr any_positive(
-    initializer_list<ExprPtr> exprs,
-    const entities::Universe& universe,
-    const double feasibilityTolerance) {
-  return make_shared<AnyPositive>(exprs, universe, feasibilityTolerance);
-}
-
-ExprPtr any_positive(
-    const std::vector<ExprPtr>& exprs,
-    const entities::Universe& universe,
-    const double feasibilityTolerance) {
-  return make_shared<AnyPositive>(exprs, universe, feasibilityTolerance);
+  return make_shared<AnyPositive>(exprs, universe);
 }
 
 void inplace_any_positive(ExprPtr& lhs, ExprPtr rhs) {

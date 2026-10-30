@@ -66,7 +66,7 @@ class ChangeAffectionTestCustom : public ExpressionTestsBase {};
 
 TEST_F(ChangeAffectionTest, AnyPositive) {
   buildUniverse();
-  const AnyPositive anyPositive({}, getUniverse(), 1e-3);
+  const AnyPositive anyPositive({}, getUniverse());
   EXPECT_FALSE(anyPositive.getDirectlyAffectedContainers().exists());
   EXPECT_TRUE(
       anyPositive.isAffectedByChange(AffectedByChangeDecisionData(0, 0)) ==

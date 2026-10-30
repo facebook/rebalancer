@@ -31,10 +31,8 @@ class Evaluator {
   virtual const folly::F14FastSet<Expression*>& getChangedChildren(
       const Expression* const expr) const = 0;
 
-  virtual bool isPositive(
-      const Expression* expr,
-      const ChangeSet& changes,
-      const double feasibilityTolerance) const = 0;
+  virtual bool isPositive(const Expression* expr, const ChangeSet& changes)
+      const = 0;
 
   virtual Context& getContext() const = 0;
 

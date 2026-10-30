@@ -27,10 +27,8 @@ class TopToBottomEvaluator : public Evaluator {
   virtual double apply(Expression* expr, const Assignment& assignment)
       const override;
 
-  virtual bool isPositive(
-      const Expression* expr,
-      const ChangeSet& changes,
-      const double feasibilityTolerance) const override;
+  virtual bool isPositive(const Expression* expr, const ChangeSet& changes)
+      const override;
 
   virtual const folly::F14FastSet<Expression*>& getChangedChildren(
       const Expression* const expr) const override;
