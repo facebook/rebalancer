@@ -21,7 +21,6 @@
 
 #include <functional>
 #include <memory>
-#include <optional>
 #include <stddef.h>
 #pragma once
 
@@ -66,11 +65,8 @@ class AllowedScopeItemsPerGroup : public EntityAttributes {
       std::function<size_t(entities::GroupId, entities::ScopeItemId)> evaluate,
       std::shared_ptr<folly::Executor> executor);
 
-  // Returns the count of objects that can be moved from groupId to scopeItemId
-  // Returns nullopt if no object of groupId can be moved to scopeItemId
-  // Returns 0 if groupId has allowed scope items but not for this scopeItemId
-  std::optional<size_t> getAllowedCount(
-      entities::GroupId groupId,
+  // Returns group -> allowed count for scopeItemId
+  const entities::Map<entities::GroupId, size_t>& getGroupsWithNonZeroCount(
       entities::ScopeItemId scopeItemId) const;
 
  private:
@@ -83,14 +79,14 @@ class AllowedScopeItemsPerGroup : public EntityAttributes {
       entities::ContainerId srcContainer) override;
 
   void recomputeAllowedScopeItemsForGroup(entities::GroupId groupId);
-  entities::Map<entities::ScopeItemId, size_t> evaluateAllowedScopeItems(
-      entities::GroupId groupId) const;
+  entities::Map<entities::GroupId, size_t> evaluateAllowedGroups(
+      entities::ScopeItemId scopeItemId) const;
   const entities::Scope& scope_;
   const entities::Partition& partition_;
   std::function<size_t(entities::GroupId, entities::ScopeItemId)> evaluate_;
-  // Store counts per group per scope item (items with count > 0)
-  entities::Map<entities::GroupId, entities::Map<entities::ScopeItemId, size_t>>
-      allowedCounts_;
+  // Only positive counts are stored
+  entities::Map<entities::ScopeItemId, entities::Map<entities::GroupId, size_t>>
+      scopeItemToGroupToCount_;
 };
 
 } // namespace facebook::rebalancer

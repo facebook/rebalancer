@@ -459,11 +459,12 @@ std::vector<ObjectBundle> FixedSrcDstMoveCandidateGenerator<MoveTypeSpecT>::
   std::vector<ObjectBundle> moveCandidates;
   int invalidEquivSets = 0;
   int numForbiddenServers = 0;
-  const AllowedScopeItemsPerGroup* allowedScopeItemsPerGroup =
+  const auto* const serverToAllowedCount =
       (dstContainerShape && srcContainer == specialContainerId)
       ? &problem.getEntityAttributeStore()
              .getAttributes<AllowedScopeItemsPerGroup>(
                  kAllowedScopeItemsPerGroupAttrName.str())
+             .getGroupsWithNonZeroCount(*dstContainerShape)
       : nullptr;
   for (auto& [equivSetId, partsPerServer] : currentSrcContainerEquivSets) {
     if (formBundlesAtEquivSetGranularity) {
@@ -493,11 +494,10 @@ std::vector<ObjectBundle> FixedSrcDstMoveCandidateGenerator<MoveTypeSpecT>::
       // 2. Check resource limits and calculate maxCount if needed
       std::optional<size_t> maxCount = std::nullopt;
 
-      if (allowedScopeItemsPerGroup) {
-        auto allowedCount = allowedScopeItemsPerGroup->getAllowedCount(
-            serverId, *dstContainerShape);
-
-        if (!allowedCount.has_value() || *allowedCount == 0) {
+      if (serverToAllowedCount) {
+        const auto* const allowedCount =
+            folly::get_ptr(*serverToAllowedCount, serverId);
+        if (!allowedCount) {
           // Not enough resources for this reservation type
           continue;
         }

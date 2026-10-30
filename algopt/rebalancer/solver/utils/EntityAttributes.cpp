@@ -70,34 +70,40 @@ AllowedScopeItemsPerGroup::AllowedScopeItemsPerGroup(
   if (!executor) {
     throw std::invalid_argument("AllowedScopeItemsPerGroup needs an executor");
   }
-  const auto& groupIds = partition_.getGroupIds();
+  const auto& scopeItemIds = scope_.getScopeItemIds();
   folly::coro::blockingWait(
       CoroUtils::runEachFuncAndUpdate(
-          groupIds.begin(),
-          groupIds.end(),
-          [this](const auto& it) { return evaluateAllowedScopeItems(*it); },
-          [this](auto&& groupCounts, const auto& it) {
-            allowedCounts_[*it] = std::move(groupCounts);
+          scopeItemIds.begin(),
+          scopeItemIds.end(),
+          [this](const auto& it) { return evaluateAllowedGroups(*it); },
+          [this](auto&& groupToCount, const auto& it) {
+            scopeItemToGroupToCount_[*it] = std::move(groupToCount);
           },
           std::move(executor)));
 }
 
 void AllowedScopeItemsPerGroup::recomputeAllowedScopeItemsForGroup(
     entities::GroupId groupId) {
-  allowedCounts_[groupId] = evaluateAllowedScopeItems(groupId);
-}
-
-entities::Map<entities::ScopeItemId, size_t>
-AllowedScopeItemsPerGroup::evaluateAllowedScopeItems(
-    entities::GroupId groupId) const {
-  entities::Map<entities::ScopeItemId, size_t> groupCounts;
-  for (auto scopeItemId : scope_.getScopeItemIds()) {
-    const auto count = evaluate_(groupId, scopeItemId);
-    if (count > 0) {
-      groupCounts[scopeItemId] = count;
+  for (const auto scopeItemId : scope_.getScopeItemIds()) {
+    auto& groupToCount = scopeItemToGroupToCount_[scopeItemId];
+    if (const auto count = evaluate_(groupId, scopeItemId); count > 0) {
+      groupToCount[groupId] = count;
+    } else {
+      groupToCount.erase(groupId);
     }
   }
-  return groupCounts;
+}
+
+entities::Map<entities::GroupId, size_t>
+AllowedScopeItemsPerGroup::evaluateAllowedGroups(
+    entities::ScopeItemId scopeItemId) const {
+  entities::Map<entities::GroupId, size_t> groupToCount;
+  for (const auto groupId : partition_.getGroupIds()) {
+    if (const auto count = evaluate_(groupId, scopeItemId); count > 0) {
+      groupToCount[groupId] = count;
+    }
+  }
+  return groupToCount;
 }
 
 void AllowedScopeItemsPerGroup::setOn(
@@ -114,16 +120,12 @@ void AllowedScopeItemsPerGroup::removeFrom(
   recomputeAllowedScopeItemsForGroup(groupId);
 }
 
-std::optional<size_t> AllowedScopeItemsPerGroup::getAllowedCount(
-    entities::GroupId groupId,
+const entities::Map<entities::GroupId, size_t>&
+AllowedScopeItemsPerGroup::getGroupsWithNonZeroCount(
     entities::ScopeItemId scopeItemId) const {
-  auto allowedScopeItemsForGroupPtr = folly::get_ptr(allowedCounts_, groupId);
-  if (!allowedScopeItemsForGroupPtr || allowedScopeItemsForGroupPtr->empty()) {
-    // Group not found - server has no allowed scope items or
-    // Group found but has no allowed scope items (exhausted)
-    return std::nullopt;
-  }
-  return folly::get_default(*allowedScopeItemsForGroupPtr, scopeItemId, 0);
+  static const entities::Map<entities::GroupId, size_t> kEmptyGroupToCount;
+  return folly::get_ref_default(
+      scopeItemToGroupToCount_, scopeItemId, kEmptyGroupToCount);
 }
 
 } // namespace facebook::rebalancer

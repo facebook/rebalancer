@@ -29,8 +29,8 @@
 #include <folly/executors/CPUThreadPoolExecutor.h>
 #include <folly/tracing/AsyncStack.h>
 
+#include <map>
 #include <memory>
-#include <optional>
 #include <stddef.h>
 #include <string>
 #include <vector>
@@ -130,46 +130,38 @@ CO_TEST_F(AllowedScopeItemsPerGroupTest, ReturnsCountOfUnassignedObjects) {
           evaluateFn,
           std::make_shared<folly::CPUThreadPoolExecutor>(4)));
 
-  // Test initial state: All 4 objects are unassigned.
-  // Fetch attributes and verify counts for valid and invalid group-scope pairs.
-  {
-    const auto& attr = store.getAttributes<AllowedScopeItemsPerGroup>("test");
+  using GroupToCount = std::map<entities::GroupId, size_t>;
+  const auto groupToCount = [&](entities::ScopeItemId scopeItemId) {
+    const auto& groups = store.getAttributes<AllowedScopeItemsPerGroup>("test")
+                             .getGroupsWithNonZeroCount(scopeItemId);
+    return GroupToCount(groups.begin(), groups.end());
+  };
 
-    EXPECT_EQ(2, *attr.getAllowedCount(oddGroup, oddScope));
-    EXPECT_EQ(2, *attr.getAllowedCount(evenGroup, evenScope));
-    EXPECT_EQ(0, *attr.getAllowedCount(evenGroup, oddScope));
-    EXPECT_EQ(0, *attr.getAllowedCount(oddGroup, evenScope));
-  }
+  // Test initial state: All 4 objects are unassigned.
+  // Each scope item only allows its own parity group.
+  EXPECT_EQ(groupToCount(oddScope), (GroupToCount{{oddGroup, 2}}));
+  EXPECT_EQ(groupToCount(evenScope), (GroupToCount{{evenGroup, 2}}));
 
   // Test after moving obj0 (even) to container0 (evenScope).
-  // Fetch attributes and verify evenGroup count decrements to 1.
+  // Verify evenGroup count decrements to 1.
   {
     assignment.moveTo(obj0, container0Id);
     const auto move = Move(obj0, unassigned, container0Id);
     store.updateOnApply(move.getChangeSet());
 
-    const auto& attr = store.getAttributes<AllowedScopeItemsPerGroup>("test");
-
-    EXPECT_EQ(2, *attr.getAllowedCount(oddGroup, oddScope));
-    EXPECT_EQ(1, *attr.getAllowedCount(evenGroup, evenScope));
+    EXPECT_EQ(groupToCount(oddScope), (GroupToCount{{oddGroup, 2}}));
+    EXPECT_EQ(groupToCount(evenScope), (GroupToCount{{evenGroup, 1}}));
   }
 
   // Test after moving obj2 (even) to container0 (evenScope).
-  // Fetch attributes and verify evenGroup returns nullopt (no more even
-  // objects).
+  // There are no even objects left, so evenGroup drops out of every scope item.
   {
     assignment.moveTo(obj2, container0Id);
     const auto move2 = Move(obj2, unassigned, container0Id);
     store.updateOnApply(move2.getChangeSet());
 
-    const auto& attr = store.getAttributes<AllowedScopeItemsPerGroup>("test");
-
-    EXPECT_EQ(2, *attr.getAllowedCount(oddGroup, oddScope));
-    EXPECT_EQ(0, *attr.getAllowedCount(oddGroup, evenScope));
-
-    // There is no evenGroup objects in unassigned
-    EXPECT_FALSE(attr.getAllowedCount(evenGroup, evenScope));
-    EXPECT_FALSE(attr.getAllowedCount(evenGroup, oddScope));
+    EXPECT_EQ(groupToCount(oddScope), (GroupToCount{{oddGroup, 2}}));
+    EXPECT_EQ(groupToCount(evenScope), GroupToCount{});
   }
 }
 
