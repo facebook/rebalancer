@@ -14,6 +14,7 @@
 
 #include "algopt/rebalancer/solver/moves/TripleLoopMoveType.h"
 
+#include "algopt/rebalancer/solver/moves/InvalidMoveFilter.h"
 #include "algopt/rebalancer/solver/moves/Move.h"
 #include "algopt/rebalancer/solver/moves/MovesEvaluator.h"
 #include "algopt/rebalancer/solver/utils/ObjectDeduper.h"
@@ -37,8 +38,10 @@ MoveResult TripleLoopMoveType::exploreFromAllSingleMoves(
     MoveStatsAggregator& stats) {
   auto best_result = MoveResult::makeEmpty();
 
+  const auto* const filter = evaluator.getProblem().getInvalidMoveFilter();
   if (evaluator.getProblem().not_accepting_containers.contains(
-          cold_container)) {
+          cold_container) ||
+      isMoveInvalid(filter, hotObject, cold_container)) {
     return best_result;
   }
 
@@ -57,14 +60,16 @@ MoveResult TripleLoopMoveType::exploreFromAllSingleMoves(
         continue;
       }
       if (evaluator.getProblem().not_accepting_containers.contains(
-              cold_container2)) {
+              cold_container2) ||
+          isMoveInvalid(filter, coldObject, cold_container2)) {
         continue;
       }
       const ObjectDeduper deduped_objs2(
           &evaluator.getProblem().getEquivalenceSets(),
           evaluator.getDynamicObjects(cold_container2));
       for (auto cold_object2 : deduped_objs2) {
-        if (evaluator.getProblem().fixed_objects.contains(cold_object2)) {
+        if (evaluator.getProblem().fixed_objects.contains(cold_object2) ||
+            isMoveInvalid(filter, cold_object2, hot_container)) {
           continue;
         }
         MoveSet moves;

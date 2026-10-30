@@ -17,6 +17,7 @@
 #include "algopt/rebalancer/algopt_common/Timer.h"
 #include "algopt/rebalancer/solver/iterators/CartesianProduct.h"
 #include "algopt/rebalancer/solver/iterators/Filter.h"
+#include "algopt/rebalancer/solver/moves/InvalidMoveFilter.h"
 #include "algopt/rebalancer/solver/moves/MoveHelper.h"
 #include "algopt/rebalancer/solver/moves/MovesEvaluator.h"
 #include "algopt/rebalancer/solver/utils/ObjectDeduper.h"
@@ -69,6 +70,7 @@ MoveResult ReplicaDropMoveType::findBestMove(
         return result;
       };
 
+  const auto* const filter = problem.getInvalidMoveFilter();
   auto bestResult = MoveResult::makeEmpty();
   const algopt::Timer timer(true);
   for (auto hotObjectId : hotObjectIds) {
@@ -107,7 +109,12 @@ MoveResult ReplicaDropMoveType::findBestMove(
 
     auto result = MoveHelper::findBest(
         problem.configs.threadPool.get(),
-        singleMoves,
+        Filter(
+            singleMoves,
+            [filter](const auto& singleMove) {
+              return !isMoveInvalid(
+                  filter, singleMove.first, singleMove.second);
+            }),
         evaluate,
         timeLimit - timer.getSeconds(),
         parallelExecutionSelector(),

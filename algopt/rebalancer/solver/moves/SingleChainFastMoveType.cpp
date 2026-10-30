@@ -16,6 +16,7 @@
 
 #include "algopt/rebalancer/algopt_common/Timer.h"
 #include "algopt/rebalancer/solver/iterators/Filter.h"
+#include "algopt/rebalancer/solver/moves/InvalidMoveFilter.h"
 #include "algopt/rebalancer/solver/moves/MoveHelper.h"
 #include "algopt/rebalancer/solver/utils/ObjectDeduper.h"
 
@@ -61,6 +62,7 @@ MoveResult SingleChainFastMoveType::findBestMove(
             !problem.not_accepting_containers.contains(container);
       });
 
+  const auto* const filter = problem.getInvalidMoveFilter();
   auto bestResult = MoveResult::makeEmpty();
   const auto& precision = problem.getUniverse().getPrecision();
 
@@ -84,7 +86,11 @@ MoveResult SingleChainFastMoveType::findBestMove(
 
     auto result = MoveHelper::findBest(
         problem.configs.threadPool.get(),
-        coldContainers,
+        Filter(
+            coldContainers,
+            [filter, hotObject](entities::ContainerId coldContainer) {
+              return !isMoveInvalid(filter, hotObject, coldContainer);
+            }),
         evaluate,
         timeLimit - timer.getSeconds(),
         parallelExecutionSelector(),

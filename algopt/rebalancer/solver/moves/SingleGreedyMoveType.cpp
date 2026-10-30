@@ -15,6 +15,7 @@
 #include "algopt/rebalancer/solver/moves/SingleGreedyMoveType.h"
 
 #include "algopt/rebalancer/solver/iterators/ExpressionContainersIterator.h"
+#include "algopt/rebalancer/solver/moves/InvalidMoveFilter.h"
 #include "algopt/rebalancer/solver/moves/MovesEvaluator.h"
 #include "algopt/rebalancer/solver/utils/ObjectDeduper.h"
 
@@ -52,6 +53,7 @@ MoveResult SingleGreedyMoveType::findBestMove(
   std::vector<entities::ContainerId> coldContainers(
       descending.begin(), descending.end());
   std::reverse(coldContainers.begin(), coldContainers.end());
+  const auto* const filter = evaluator.getProblem().getInvalidMoveFilter();
 
   for (auto hotObject : dedupedObjs) {
     if (timer.getSeconds() >= timeLimit) {
@@ -67,7 +69,8 @@ MoveResult SingleGreedyMoveType::findBestMove(
         return bestResult;
       }
       if (evaluator.getProblem().not_accepting_containers.contains(
-              coldContainer)) {
+              coldContainer) ||
+          isMoveInvalid(filter, hotObject, coldContainer)) {
         continue;
       }
 

@@ -88,6 +88,15 @@ class InvalidMoveFilter {
   std::atomic<bool> isEmpty_{true};
 };
 
+// Returns true if `objectId` is marked invalid for `destContainer`. Returns
+// false if `filter` is null.
+inline bool isMoveInvalid(
+    const InvalidMoveFilter* filter,
+    entities::ObjectId objectId,
+    entities::ContainerId destContainer) {
+  return filter && filter->isMarkedInvalid(objectId, destContainer);
+}
+
 // Returns true if any object in `objectBundle` is marked invalid for
 // `destContainer`. Returns false if `filter` is null.
 inline bool anyMoveInvalid(

@@ -15,6 +15,7 @@
 #pragma once
 
 #include "algopt/rebalancer/solver/moves/AsyncDestinationsMoveType.h"
+#include "algopt/rebalancer/solver/moves/InvalidMoveFilter.h"
 #include "algopt/rebalancer/solver/moves/MovesEvaluator.h"
 #include "algopt/rebalancer/solver/utils/ObjectStore.h"
 
@@ -54,9 +55,13 @@ class KLSearchMoveType : public AsyncDestinationsMoveType {
       const MoveSet& baseMoves,
       const PackerSet<entities::ObjectId>& objectsTried,
       MoveStatsAggregator& stats);
+  // Objects in `sourceIds` that are not in `removeIds` and are not marked
+  // invalid for `toContainer`.
   static std::vector<entities::ObjectId> filter(
       const ObjectStore& sourceIds,
-      const PackerSet<entities::ObjectId>& removeIds);
+      const PackerSet<entities::ObjectId>& removeIds,
+      const InvalidMoveFilter* invalidMoveFilter,
+      entities::ContainerId toContainer);
 
  public:
   interface::KLSearchMoveTypeSpec config_;

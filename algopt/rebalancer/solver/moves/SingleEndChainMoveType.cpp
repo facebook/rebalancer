@@ -14,6 +14,7 @@
 
 #include "algopt/rebalancer/solver/moves/SingleEndChainMoveType.h"
 
+#include "algopt/rebalancer/solver/moves/InvalidMoveFilter.h"
 #include "algopt/rebalancer/solver/moves/Move.h"
 #include "algopt/rebalancer/solver/moves/MovesEvaluator.h"
 #include "algopt/rebalancer/solver/utils/ObjectDeduper.h"
@@ -36,6 +37,10 @@ MoveResult SingleEndChainMoveType::exploreFromAllSingleMoves(
     entities::ContainerId cold_container,
     MoveStatsAggregator& stats) {
   auto best_result = MoveResult::makeEmpty();
+  const auto* const filter = evaluator.getProblem().getInvalidMoveFilter();
+  if (isMoveInvalid(filter, hotObject, cold_container)) {
+    return best_result;
+  }
 
   const ObjectDeduper cold_objects(
       &evaluator.getProblem().getEquivalenceSets(),
@@ -43,7 +48,8 @@ MoveResult SingleEndChainMoveType::exploreFromAllSingleMoves(
   for (auto coldObject : cold_objects) {
     for (auto other_container : evaluator.getContainers()) {
       if (other_container == hot_container ||
-          other_container == cold_container) {
+          other_container == cold_container ||
+          isMoveInvalid(filter, coldObject, other_container)) {
         continue;
       }
 

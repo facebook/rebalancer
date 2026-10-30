@@ -14,6 +14,7 @@
 
 #include "algopt/rebalancer/solver/moves/GroupRoutingMoveType.h"
 
+#include "algopt/rebalancer/solver/moves/InvalidMoveFilter.h"
 #include "algopt/rebalancer/solver/moves/MoveHelper.h"
 #include "algopt/rebalancer/solver/moves/MovesEvaluator.h"
 #include "algopt/rebalancer/solver/solvers/LocalSearchSolver.h"
@@ -143,6 +144,7 @@ MoveSet GroupRoutingMoveType::generateMoveSetFor(
   const auto latencyTablePtr = routingConfig.getLatencyTablePtr();
   const auto repObjectId = objectIds.front();
   const auto repSourceContainer = problem.assignment.getContainer(repObjectId);
+  const auto* const filter = problem.getInvalidMoveFilter();
 
   // track validity of a destination container
   PackerMap<entities::ContainerId, bool> candidateToIsValid;
@@ -168,7 +170,8 @@ MoveSet GroupRoutingMoveType::generateMoveSetFor(
         break;
       }
 
-      if (problem.not_accepting_containers.contains(candidate)) {
+      if (problem.not_accepting_containers.contains(candidate) ||
+          isMoveInvalid(filter, repObjectId, candidate)) {
         continue;
       }
 

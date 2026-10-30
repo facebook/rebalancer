@@ -14,6 +14,7 @@
 
 #include "algopt/rebalancer/solver/moves/GreedyGroupToScopeItemMoveType.h"
 
+#include "algopt/rebalancer/solver/moves/InvalidMoveFilter.h"
 #include "algopt/rebalancer/solver/moves/Move.h"
 #include "algopt/rebalancer/solver/moves/MoveHelper.h"
 #include "algopt/rebalancer/solver/moves/MovesEvaluator.h"
@@ -99,6 +100,8 @@ std::vector<entities::ContainerId> getFeasibleContainers(
   return kept;
 }
 
+// Returns an empty move set if the sample moves an object into a container the
+// invalid move filter marks for it.
 MoveSet generateRandomSampleAndMoveSet(
     std::vector<entities::ContainerId>& allContainers,
     const std::vector<entities::ObjectId>& groupObjectIds,
@@ -106,12 +109,17 @@ MoveSet generateRandomSampleAndMoveSet(
     folly::Random::DefaultGenerator& rng) {
   std::shuffle(allContainers.begin(), allContainers.end(), rng);
 
+  const auto* const filter = problem.getInvalidMoveFilter();
   const int sampleSize = groupObjectIds.size();
   MoveSet candidateMoveSet;
   for (const auto i : folly::irange(sampleSize)) {
     auto hotObject = groupObjectIds.at(i);
     auto sourceContainer = problem.assignment.getContainer(hotObject);
     auto destinationContainer = allContainers.at(i);
+    if (sourceContainer != destinationContainer &&
+        isMoveInvalid(filter, hotObject, destinationContainer)) {
+      return MoveSet{};
+    }
 
     candidateMoveSet.insert(
         Move(hotObject, sourceContainer, destinationContainer));
@@ -173,6 +181,9 @@ MoveResult GreedyGroupToScopeItemMoveType::exploreMovingGroup(
             for (const auto _ : folly::irange(nSampleSetsToExplore_)) {
               auto candidateMoveSet = generateRandomSampleAndMoveSet(
                   containerIds, groupObjectIds, problem, rng);
+              if (candidateMoveSet.empty()) {
+                continue;
+              }
               auto result = evaluator.evaluate(std::move(candidateMoveSet));
               stats.add(result);
               bestResult.aggregate(std::move(result));

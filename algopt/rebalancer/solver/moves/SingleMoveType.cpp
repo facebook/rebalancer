@@ -14,6 +14,7 @@
 
 #include "algopt/rebalancer/solver/moves/SingleMoveType.h"
 
+#include "algopt/rebalancer/solver/moves/InvalidMoveFilter.h"
 #include "algopt/rebalancer/solver/moves/Move.h"
 #include "algopt/rebalancer/solver/moves/MovesEvaluator.h"
 
@@ -34,6 +35,10 @@ MoveResult SingleMoveType::exploreFromAllSingleMoves(
     entities::ObjectId hotObject,
     entities::ContainerId coldContainer,
     MoveStatsAggregator& stats) {
+  const auto* const filter = evaluator.getProblem().getInvalidMoveFilter();
+  if (isMoveInvalid(filter, hotObject, coldContainer)) {
+    return MoveResult::makeEmpty();
+  }
   MoveSet moves;
   moves.insert(Move(hotObject, hotContainer, coldContainer));
   auto result = evaluator.evaluate(std::move(moves));

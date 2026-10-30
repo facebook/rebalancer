@@ -48,7 +48,7 @@ static AssignmentSolution solveProblem(
       "memory",
       std::vector<std::pair<std::string, double>>{
           {"host0", 20},
-          {"host1", 5},
+          {"host1", 20},
       });
 
   {
@@ -56,6 +56,17 @@ static AssignmentSolution solveProblem(
     CapacitySpec spec;
     spec.scope() = "host";
     spec.dimension() = "memory";
+    solver->addConstraint(spec);
+  }
+
+  {
+    // Keep host0 full. The invalid move filter does not model MIN bounds, so
+    // moves out of host0 are still evaluated (and tracked).
+    CapacitySpec spec;
+    spec.scope() = "host";
+    spec.dimension() = "memory";
+    spec.bound() = CapacitySpecBound::MIN;
+    spec.filter()->itemsWhitelist() = {"host0"};
     solver->addConstraint(spec);
   }
 
@@ -83,8 +94,7 @@ static AssignmentSolution solveProblem(
   auto solution = solver->solve();
   auto& assignment = *solution.assignment();
 
-  // None of the tasks were able to move because host1 doesn't have enough
-  // memory capacity for either.
+  // None of the tasks were able to move because host0 must stay full.
   EXPECT_EQ("host0", assignment.at("task0"));
   EXPECT_EQ("host0", assignment.at("task1"));
 

@@ -97,7 +97,8 @@ ObjectsToExploreGenerator::getObjectsToExplore(
     const std::string& partitionName,
     entities::ContainerId hotContainer,
     const Assignment& assignment,
-    const EquivalenceSets& equivalenceSets) {
+    const EquivalenceSets& equivalenceSets,
+    const InvalidMoveFilter* invalidMoveFilter) {
   auto partitionId = universe_.getPartitionId(partitionName);
   auto& partition = universe_.getPartition(partitionId);
 
@@ -108,7 +109,8 @@ ObjectsToExploreGenerator::getObjectsToExplore(
     std::vector<entities::ObjectId> objectsInGroup;
     for (auto& objectId : objectIds) {
       auto containerId = assignment.getContainer(objectId);
-      if (containerId != hotContainer) {
+      if (containerId != hotContainer &&
+          !isMoveInvalid(invalidMoveFilter, objectId, hotContainer)) {
         objectsInGroup.push_back(objectId);
       }
     }

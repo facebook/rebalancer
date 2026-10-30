@@ -40,8 +40,7 @@ std::vector<entities::ContainerId> getValidDestinations(
   for (const auto containerId : candidates) {
     if (problem.not_accepting_containers.contains(containerId) ||
         containerId == sourceContainer ||
-        (invalidMoveFilter &&
-         invalidMoveFilter->isMarkedInvalid(object, containerId))) {
+        isMoveInvalid(invalidMoveFilter, object, containerId)) {
       continue;
     }
     valid.push_back(containerId);

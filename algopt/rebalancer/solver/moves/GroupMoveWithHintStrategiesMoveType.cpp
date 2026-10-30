@@ -14,6 +14,7 @@
 
 #include "algopt/rebalancer/solver/moves/GroupMoveWithHintStrategiesMoveType.h"
 
+#include "algopt/rebalancer/solver/moves/InvalidMoveFilter.h"
 #include "algopt/rebalancer/solver/moves/MoveHelper.h"
 #include "algopt/rebalancer/solver/moves/MoveTypeUtils.h"
 #include "algopt/rebalancer/solver/utils/ObjectDeduper.h"
@@ -158,6 +159,7 @@ MoveSet GroupMoveWithHintStrategiesMoveType::generateMoveSet(
   if (sampledContainers.size() < objectIds.size()) {
     return MoveSet();
   }
+  const auto* const filter = problem.getInvalidMoveFilter();
   MoveSet candidateMoveSet;
   size_t i = 0;
   for (const auto& destinationContainer : sampledContainers) {
@@ -165,6 +167,9 @@ MoveSet GroupMoveWithHintStrategiesMoveType::generateMoveSet(
     const auto sourceContainer = problem.assignment.getContainer(hotObject);
     if (sourceContainer == destinationContainer) {
       continue;
+    }
+    if (isMoveInvalid(filter, hotObject, destinationContainer)) {
+      return MoveSet();
     }
     candidateMoveSet.insert(
         Move(hotObject, sourceContainer, destinationContainer));

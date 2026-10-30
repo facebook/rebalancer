@@ -15,6 +15,7 @@
 #include "algopt/rebalancer/solver/moves/MoveHelper.h"
 
 #include "algopt/rebalancer/solver/iterators/Filter.h"
+#include "algopt/rebalancer/solver/moves/InvalidMoveFilter.h"
 #include "algopt/rebalancer/solver/moves/MovesEvaluator.h"
 
 namespace facebook::rebalancer {
@@ -35,7 +36,7 @@ MoveResult MoveHelper::findBestMove(
       [&problem, filter, hotObject, hotContainer](auto container) {
         return container != hotContainer &&
             !problem.not_accepting_containers.contains(container) &&
-            !(filter && filter->isMarkedInvalid(hotObject, container));
+            !isMoveInvalid(filter, hotObject, container);
       });
 
   // WARNING: The stats object is not thread safe. For that reason, it is put

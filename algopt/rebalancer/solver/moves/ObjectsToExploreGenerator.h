@@ -30,11 +30,15 @@ class ObjectsToExploreGenerator {
 
   ~ObjectsToExploreGenerator() = default;
 
+  // Objects of each group in `partitionName` that can move into
+  // `hotContainer`: objects already there, and objects `invalidMoveFilter`
+  // marks invalid for it, are left out.
   ReferenceList<const std::vector<entities::ObjectId>> getObjectsToExplore(
       const std::string& partitionName,
       entities::ContainerId hotContainer,
       const Assignment& assignment,
-      const EquivalenceSets& equivalenceSets);
+      const EquivalenceSets& equivalenceSets,
+      const InvalidMoveFilter* invalidMoveFilter = nullptr);
 
   // Create ObjectBundles of `bundleSize` from objects in `srcContainer`.
   // All objects in a bundle are from the same group in `partition`.

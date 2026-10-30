@@ -17,6 +17,7 @@
 #include "algopt/rebalancer/solver/iterators/Range.h"
 #include "algopt/rebalancer/solver/iterators/StlWrapper.h"
 #include "algopt/rebalancer/solver/iterators/Transform.h"
+#include "algopt/rebalancer/solver/moves/InvalidMoveFilter.h"
 #include "algopt/rebalancer/solver/moves/MoveHelper.h"
 
 #include <folly/container/irange.h>
@@ -81,6 +82,18 @@ MoveResult SwapNMoveType::findBestMove(
     return MoveResult::makeEmpty();
   }
 
+  // A destination container always swaps its first dynamic object into the hot
+  // container, and with one concurrent object it always receives
+  // objectIdsToMove[0]; drop containers where either move is marked invalid.
+  const auto* const filter = evaluator.getProblem().getInvalidMoveFilter();
+  const auto isInvalidDestination =
+      [&](entities::ContainerId containerId,
+          entities::ObjectId destinationObjectId) {
+        return isMoveInvalid(filter, destinationObjectId, hot_container) ||
+            (concurrentObjects == 1 &&
+             isMoveInvalid(filter, objectIdsToMove.front(), containerId));
+      };
+
   std::vector<std::vector<entities::ContainerId>> destinationScopeIds;
   destinationScopeIds.reserve(spec_.swapNDestinationScope()->size());
   for (auto& destinationScope : *spec_.swapNDestinationScope()) {
@@ -88,7 +101,9 @@ MoveResult SwapNMoveType::findBestMove(
     containerIds.reserve(destinationScope.size());
     for (auto& containerName : destinationScope) {
       auto containerId = evaluator.getProblem().containerId(containerName);
-      if (evaluator.getDynamicObjects(containerId).empty()) {
+      const auto& destinationObjects = evaluator.getDynamicObjects(containerId);
+      if (destinationObjects.empty() ||
+          isInvalidDestination(containerId, *destinationObjects.begin())) {
         continue;
       }
       containerIds.push_back(containerId);
@@ -121,6 +136,9 @@ MoveResult SwapNMoveType::findBestMove(
     double timeLimit) {
   const std::function<MoveResult(MoveSet)> evaluate = [&evaluator,
                                                        &stats](auto moveset) {
+    if (moveset.empty()) {
+      return MoveResult::makeEmpty();
+    }
     auto result = evaluator.evaluate(std::move(moveset));
     stats.add(result);
     return result;
@@ -142,12 +160,18 @@ MoveResult SwapNMoveType::findBestMove(
       auto& objectIds = evaluator.getDynamicObjects(containerId);
       destinationObjectIds.push_back(*objectIds.begin());
     }
+    const auto* const filter = evaluator.getProblem().getInvalidMoveFilter();
     MoveSet moveset;
     for (const auto i : folly::irange(concurrentObjects)) {
       auto object1 = objectIdsToMove.at(i);
       auto object2 = destinationObjectIds.at(i);
       auto container1 = evaluator.getProblem().assignment.getContainer(object1);
       auto container2 = evaluator.getProblem().assignment.getContainer(object2);
+      // object2 -> container1 (the hot container) was already checked when
+      // destinationScopeIds was built.
+      if (isMoveInvalid(filter, object1, container2)) {
+        return MoveSet{};
+      }
       moveset.insert(Move(object1, container1, container2));
       moveset.insert(Move(object2, container2, container1));
     }

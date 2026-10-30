@@ -16,6 +16,7 @@
 #include "algopt/rebalancer/solver/expressions/Operators.h"
 #include "algopt/rebalancer/solver/expressions/tests/ExpressionUtils.h"
 #include "algopt/rebalancer/solver/moves/GroupMoveWithHintStrategiesMoveType.h"
+#include "algopt/rebalancer/solver/moves/InvalidMoveFilter.h"
 #include "algopt/rebalancer/solver/moves/tests/MoveTestBase.h"
 
 #include <folly/container/irange.h>
@@ -351,6 +352,42 @@ CO_TEST_F(GroupMoveWithHintStrategiesTest, TestRandomSamplingWithReplacement) {
   EXPECT_EQ(expectedObjects, actualObjects);
 }
 
+CO_TEST_F(GroupMoveWithHintStrategiesTest, SampledMoveSetDroppedIfInvalid) {
+  const auto universe = co_await setUpUniverse();
+  auto filter = std::make_unique<InvalidMoveFilter>(
+      universe->getNumObjects(),
+      universe->getContainers().getContainerIds().size());
+  filter->markInvalid({object(4)}, container("rank1"));
+  createProblem(
+      /*objectiveTuple=*/{const_expr(0, *universe)},
+      /*constraint=*/const_expr(0, *universe),
+      /*higherPriorityObjConfig=*/std::nullopt,
+      /*nonAcceptingContainers=*/{},
+      std::move(filter));
+
+  interface::GroupMoveWithHintStrategiesMoveTypeSpec moveTypeSpec;
+  moveTypeSpec.primaryPartition() = "tables";
+  moveTypeSpec.secondaryPartition() = "shardTypes";
+  const MockGroupMoveWithHintStrategiesMoveType moveType(
+      interface::LocalSearchSolverSpec{}, moveTypeSpec, getProblem());
+  const std::vector<entities::ContainerId> containerIds = {container("rank1")};
+  const auto sample = [&](const std::vector<entities::ObjectId>& objectIds) {
+    return moveType.generateSampledContainersAndMoveSet(
+        interface::MoveStrategyType::RANDOM_SAMPLING_WITH_REPLACEMENT,
+        containerIds,
+        objectIds,
+        container("dummyRank"),
+        getProblem());
+  };
+
+  // object4 cannot move into rank1, so any set that moves it there is dropped.
+  EXPECT_TRUE(sample({object(0), object(4)}).empty());
+  const auto moveSet = sample({object(0)});
+  CO_ASSERT_EQ(1, moveSet.size());
+  EXPECT_EQ(
+      Move(object(0), container("dummyRank"), container("rank1")),
+      moveSet.at(0));
+}
 CO_TEST_F(
     GroupMoveWithHintStrategiesTest,
     TestRandomSamplingWithoutReplacement) {

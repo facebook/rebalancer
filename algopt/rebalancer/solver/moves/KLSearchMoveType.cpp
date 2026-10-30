@@ -77,8 +77,11 @@ MoveResult KLSearchMoveType::exploreAllMovesFromContainer(
     const MoveSet& baseMoves,
     const PackerSet<entities::ObjectId>& objectsTried,
     MoveStatsAggregator& stats) {
-  auto filteredObjs =
-      filter(evaluator.getDynamicObjects(fromContainer), objectsTried);
+  auto filteredObjs = filter(
+      evaluator.getDynamicObjects(fromContainer),
+      objectsTried,
+      evaluator.getProblem().getInvalidMoveFilter(),
+      toContainer);
   const GenericObjectDeduper<std::vector<entities::ObjectId>::const_iterator>
       dedupedObjs(
           &evaluator.getProblem().getEquivalenceSets(),
@@ -106,10 +109,13 @@ MoveResult KLSearchMoveType::exploreAllMovesFromContainer(
 
 std::vector<entities::ObjectId> KLSearchMoveType::filter(
     const ObjectStore& sourceIds,
-    const PackerSet<entities::ObjectId>& removeIds) {
+    const PackerSet<entities::ObjectId>& removeIds,
+    const InvalidMoveFilter* invalidMoveFilter,
+    entities::ContainerId toContainer) {
   std::vector<entities::ObjectId> resultIds;
   for (auto id : sourceIds) {
-    if (!removeIds.contains(id)) {
+    if (!removeIds.contains(id) &&
+        !isMoveInvalid(invalidMoveFilter, id, toContainer)) {
       resultIds.push_back(id);
     }
   }

@@ -14,6 +14,7 @@
 
 #include "algopt/rebalancer/solver/moves/SingleChainMoveType.h"
 
+#include "algopt/rebalancer/solver/moves/InvalidMoveFilter.h"
 #include "algopt/rebalancer/solver/moves/Move.h"
 #include "algopt/rebalancer/solver/moves/MovesEvaluator.h"
 #include "algopt/rebalancer/solver/utils/ObjectDeduper.h"
@@ -52,6 +53,10 @@ MoveResult SingleChainMoveType::exploreChainsWithHotObjectToColdContainer(
     bool greedy) {
   const auto& precision = evaluator.getProblem().getUniverse().getPrecision();
   auto bestResult = MoveResult::makeEmpty();
+  const auto* const filter = evaluator.getProblem().getInvalidMoveFilter();
+  if (isMoveInvalid(filter, hotObject, coldContainer)) {
+    return bestResult;
+  }
   for (auto otherContainer : evaluator.getContainers()) {
     if (otherContainer == hotContainer || otherContainer == coldContainer) {
       continue;
@@ -105,10 +110,13 @@ MoveResult SingleChainMoveType::exploreWithinGroupAndGetBestResult(
   auto& objectsInGroup =
       problem.getObjectIdsForGroup(partitionName, *groupIdOpt);
 
-  // only objects that are in 'otherContainer' are relevant
+  // only objects that are in 'otherContainer' and can move into
+  // 'hotContainer' are relevant
+  const auto* const filter = problem.getInvalidMoveFilter();
   PackerSet<entities::ObjectId> relevantObjects;
   for (auto object : objectsInGroup) {
-    if (problem.assignment.getContainer(object) == otherContainer) {
+    if (problem.assignment.getContainer(object) == otherContainer &&
+        !isMoveInvalid(filter, object, hotContainer)) {
       relevantObjects.insert(object);
     }
   }
@@ -146,10 +154,14 @@ MoveResult SingleChainMoveType::exploreAllAndGetBestResult(
   auto bestResult = MoveResult::makeEmpty();
   auto& problem = evaluator.getProblem();
 
+  const auto* const filter = problem.getInvalidMoveFilter();
   const ObjectDeduper otherObjects(
       &problem.getEquivalenceSets(),
       evaluator.getDynamicObjects(otherContainer));
   for (auto otherObject : otherObjects) {
+    if (isMoveInvalid(filter, otherObject, hotContainer)) {
+      continue;
+    }
     bestResult.aggregate(generateMoveSetAndGetResult(
         evaluator,
         hotObject,

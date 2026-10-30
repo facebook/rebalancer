@@ -14,6 +14,7 @@
 
 #include "algopt/rebalancer/solver/moves/SwapFullContainersMoveType.h"
 
+#include "algopt/rebalancer/solver/moves/InvalidMoveFilter.h"
 #include "algopt/rebalancer/solver/moves/MovesEvaluator.h"
 
 namespace facebook::rebalancer {
@@ -31,19 +32,24 @@ bool SwapFullContainersMoveType::canSwapObjects(
     const MovesEvaluator& evaluator,
     entities::ContainerId hot_container,
     entities::ContainerId cold_container) {
-  if (evaluator.getProblem().not_accepting_containers.contains(hot_container) &&
+  const auto& problem = evaluator.getProblem();
+  if (problem.not_accepting_containers.contains(hot_container) &&
       !isContainerEmpty(evaluator, cold_container)) {
     return false;
   }
-  for (auto container : {hot_container, cold_container}) {
-    for (auto object :
-         evaluator.getProblem().assignment.getObjects(container)) {
-      if (evaluator.getProblem().fixed_objects.contains(object)) {
+  const auto* const filter = problem.getInvalidMoveFilter();
+  const auto canMoveAllObjects = [&](entities::ContainerId src,
+                                     entities::ContainerId dst) {
+    for (auto object : problem.assignment.getObjects(src)) {
+      if (problem.fixed_objects.contains(object) ||
+          isMoveInvalid(filter, object, dst)) {
         return false;
       }
     }
-  }
-  return true;
+    return true;
+  };
+  return canMoveAllObjects(hot_container, cold_container) &&
+      canMoveAllObjects(cold_container, hot_container);
 }
 
 bool SwapFullContainersMoveType::isContainerEmpty(

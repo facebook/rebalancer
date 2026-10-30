@@ -147,7 +147,8 @@ MoveType::getObjectsToExplore(
                ->partitionName(),
           hotContainerId,
           problem.assignment,
-          problem.getEquivalenceSets());
+          problem.getEquivalenceSets(),
+          problem.getInvalidMoveFilter());
     case interface::ObjectsToExploreOptions::Type::__EMPTY__:
       throw std::runtime_error(
           "ObjectsToExploreOptions is empty; you need to specify one of the options");
