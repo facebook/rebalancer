@@ -605,9 +605,12 @@ void GroupCountSpecBuilder::populateInvalidMoveFilter(
           static_cast<double>(partition_.getObjectIds(groupId).size());
       for (const auto& objectId : partition_.getObjectIds(groupId)) {
         const auto value = scalarDim.getValue(objectId);
-        const auto penaltyIncrease = *spec_.squares()
-            ? (value * value - threshold * threshold) / (groupSize * groupSize)
+        const auto deviation = *spec_.squares()
+            ? (value - threshold) / groupSize
             : value - threshold;
+        const auto penaltyIncrease = *spec_.squares() && deviation > 0
+            ? deviation * deviation
+            : deviation;
         if (duringExemptObjects.contains(objectId) ||
             !precision.isStrictlyGtZero(penaltyIncrease)) {
           continue;

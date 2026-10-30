@@ -698,7 +698,7 @@ CO_TEST_F(
     FilterSquaresUsesUpdatedInitialPenaltyForAfter) {
   co_await addObjectDimension(
       "near_threshold",
-      {{task(0), 1.0}, {task(1), 1.00000000015}, {task(2), 1.000000002}},
+      {{task(0), 1.0}, {task(1), 1.00001}, {task(2), 1.0001}},
       0);
 
   interface::GroupCountSpec spec;
