@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "algopt/rebalancer/algopt_common/Precision.h"
 #include "algopt/rebalancer/algopt_common/TestUtils.h"
 #include "algopt/rebalancer/interface/thrift/gen-cpp2/ProblemSpecs_types.h"
 #include "algopt/rebalancer/materializer/spec_builder/CapacitySpecBuilder.h"
@@ -731,8 +730,7 @@ TEST_F(CapacitySpecBuilderTest, FilterNoOpForContextDependentDefinitions) {
       universe_->getContainers().getContainerIds().size();
 
   for (auto def :
-       {interface::CapacitySpecDefinition::NEW,
-        interface::CapacitySpecDefinition::OLD,
+       {interface::CapacitySpecDefinition::OLD,
         interface::CapacitySpecDefinition::MOVED_DATA}) {
     interface::CapacitySpec spec;
     spec.scope() = "host";
@@ -750,6 +748,28 @@ TEST_F(CapacitySpecBuilderTest, FilterNoOpForContextDependentDefinitions) {
     EXPECT_TRUE(filter.empty()) << "Expected no-op for definition "
                                 << apache::thrift::util::enumNameSafe(def);
   }
+}
+
+TEST_F(CapacitySpecBuilderTest, FilterWorksForNewDefinition) {
+  interface::CapacitySpec spec;
+  spec.scope() = "host";
+  spec.dimension() = "cpu";
+  spec.bound() = interface::CapacitySpecBound::MAX;
+  spec.definition() = interface::CapacitySpecDefinition::NEW;
+  spec.limit()->type() = interface::LimitType::ABSOLUTE;
+  spec.limit()->globalLimit() = 0.5;
+
+  // Unlike DURING, the tasks a host starts with do not lower its limit, so only
+  // task4 (cpu 0.8) and task5 (cpu 1.6) are blocked from the other hosts.
+  const std::set<InvalidPair> expected{
+      {task(4), containerId("host0")},
+      {task(4), containerId("host1")},
+      {task(4), containerId("host2")},
+      {task(5), containerId("host0")},
+      {task(5), containerId("host1")},
+      {task(5), containerId("host2")},
+  };
+  EXPECT_EQ(expected, collectInvalidPairsFor(spec));
 }
 
 TEST_F(CapacitySpecBuilderTest, FilterWorksForDuringDefinitions) {

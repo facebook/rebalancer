@@ -27,7 +27,6 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
-#include <iterator>
 #include <optional>
 #include <stdexcept>
 #include <utility>
@@ -571,7 +570,8 @@ void CapacitySpecBuilder::populateInvalidMoveFilter(
   if (*spec_.bound() != CapacitySpecBound::MAX ||
       (def != CapacitySpecDefinition::AFTER &&
        def != CapacitySpecDefinition::DURING &&
-       def != CapacitySpecDefinition::DURING_AND_AFTER)) {
+       def != CapacitySpecDefinition::DURING_AND_AFTER &&
+       def != CapacitySpecDefinition::NEW)) {
     return;
   }
   const auto& objDim = universe_->getObjects().getDimension(dimensionId_);
@@ -596,15 +596,39 @@ void CapacitySpecBuilder::populateInvalidMoveFilter(
   const auto maxObjValue = scalarDim.getMaximumValue();
 
   // Block (object, container) pairs that can never be valid: an object is
-  // blocked from a scope item's containers when it cannot fit within that scope
-  // item's threshold, which in turn depends on the definition:
-  // + AFTER considers only the final assignment; so, an object fits unless its
-  // own value exceeds max(limit, initialUtil), since other objects can move
-  // out.
-  // + DURING keeps the initial objects in the utilization while adding incoming
-  // objects, so an object fits only within max(limit - initialUtil, 0). Objects
-  // already in the scope item are exempt because moving them within it never
-  // raises util.
+  // blocked from a scope item's containers when its own value is above the
+  // threshold: the largest value an object can have and still move into the
+  // scope item.
+  const auto getThreshold = [def](double limit, double initialUtil) {
+    switch (def) {
+      case CapacitySpecDefinition::AFTER: {
+        // Other objects can move out, so only the object itself must fit.
+        return std::max(limit, initialUtil);
+      }
+
+      case CapacitySpecDefinition::DURING:
+      case CapacitySpecDefinition::DURING_AND_AFTER: {
+        // The initial objects stay counted while the object moves in.
+        return std::max(limit - initialUtil, 0.0);
+      }
+
+      case CapacitySpecDefinition::NEW: {
+        // Only objects that were not initially in the scope item count.
+        return std::max(limit, 0.0);
+      }
+
+      case CapacitySpecDefinition::DOUBLE_DURING_AND_AFTER:
+      case CapacitySpecDefinition::DOUBLE_DURING:
+      case CapacitySpecDefinition::OLD:
+      case CapacitySpecDefinition::MOVED_DATA: {
+        break;
+      }
+    }
+    throw std::runtime_error(
+        fmt::format(
+            "unsupported capacity definition {} for the invalid move filter",
+            apache::thrift::util::enumNameSafe(def)));
+  };
 
   // AFTER can skip per-scope processing when every object fits by itself.
   if (isAfter && limits_.getType() == LimitType::ABSOLUTE &&
@@ -656,8 +680,7 @@ void CapacitySpecBuilder::populateInvalidMoveFilter(
         }
       }
     }
-    const auto threshold = isAfter ? std::max(limit, initialUtil)
-                                   : std::max(limit - initialUtil, 0.0);
+    const auto threshold = getThreshold(limit, initialUtil);
     const auto normCoef =
         getNormalizationCoefficient(scopeItemId, averageCapacity);
     if (!(normCoef > 0)) {
