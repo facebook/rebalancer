@@ -109,13 +109,7 @@ class OneObjectPerGroup : public EntityAttributes {
    */
   int getAssignedCount(entities::GroupId groupId) const;
 
- protected:
-  void setOn(entities::ObjectId objectId, entities::ContainerId dstContainer)
-      override;
-
-  void removeFrom(
-      entities::ObjectId objectId,
-      entities::ContainerId srcContainer) override;
+  void updateOnApply(const ChangeSet& changes) override;
 
  private:
   enum class MoveDirection {

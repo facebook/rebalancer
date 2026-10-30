@@ -38,18 +38,7 @@ class EntityAttributes {
 
   // update the entity attributes when the changes have been applied to the
   // assignment
-  void updateOnApply(const ChangeSet& changes);
-
- protected:
-  // update attribute when an objectId is moved to dstContainer
-  virtual void setOn(
-      entities::ObjectId objectId,
-      entities::ContainerId dstContainer) = 0;
-
-  // update attribute when an objectId is moved from srcContainer
-  virtual void removeFrom(
-      entities::ObjectId objectId,
-      entities::ContainerId srcContainer) = 0;
+  virtual void updateOnApply(const ChangeSet& changes) = 0;
 };
 
 // This attribute maintains a dynamic map of allowed scope items per group
@@ -69,15 +58,10 @@ class AllowedScopeItemsPerGroup : public EntityAttributes {
   const entities::Map<entities::GroupId, size_t>& getGroupsWithNonZeroCount(
       entities::ScopeItemId scopeItemId) const;
 
+  // Recomputes each changed group once, instead of once per changed object
+  void updateOnApply(const ChangeSet& changes) override;
+
  private:
-  virtual void setOn(
-      entities::ObjectId objectId,
-      entities::ContainerId dstContainer) override;
-
-  virtual void removeFrom(
-      entities::ObjectId objectId,
-      entities::ContainerId srcContainer) override;
-
   void recomputeAllowedScopeItemsForGroup(entities::GroupId groupId);
   entities::Map<entities::GroupId, size_t> evaluateAllowedGroups(
       entities::ScopeItemId scopeItemId) const;

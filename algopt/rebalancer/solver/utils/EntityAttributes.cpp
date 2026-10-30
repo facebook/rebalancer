@@ -22,6 +22,7 @@
 #include "algopt/rebalancer/solver/utils/ChangeSet.h"
 
 #include <fmt/format.h>
+#include <folly/container/F14Set.h>
 #include <folly/container/MapUtil.h>
 
 #include <stdexcept>
@@ -48,19 +49,6 @@ entities::GroupId getOnlyGroupId(
 
 } // namespace
 
-void EntityAttributes::updateOnApply(const ChangeSet& changes) {
-  for (auto& change : changes) {
-    if (change.getValue() == 1) {
-      setOn(change.getObject(), change.getContainer());
-    } else if (change.getValue() == -1) {
-      removeFrom(change.getObject(), change.getContainer());
-    } else {
-      throw std::runtime_error(
-          fmt::format("Invalid change {}", change.toString()));
-    }
-  }
-}
-
 AllowedScopeItemsPerGroup::AllowedScopeItemsPerGroup(
     const entities::Scope& scope,
     const entities::Partition& partition,
@@ -80,6 +68,16 @@ AllowedScopeItemsPerGroup::AllowedScopeItemsPerGroup(
             scopeItemToGroupToCount_[*it] = std::move(groupToCount);
           },
           std::move(executor)));
+}
+
+void AllowedScopeItemsPerGroup::updateOnApply(const ChangeSet& changes) {
+  folly::F14FastSet<entities::GroupId> changedGroups;
+  for (const auto& change : changes) {
+    changedGroups.insert(getOnlyGroupId(partition_, change.getObject()));
+  }
+  for (const auto groupId : changedGroups) {
+    recomputeAllowedScopeItemsForGroup(groupId);
+  }
 }
 
 void AllowedScopeItemsPerGroup::recomputeAllowedScopeItemsForGroup(
@@ -104,20 +102,6 @@ AllowedScopeItemsPerGroup::evaluateAllowedGroups(
     }
   }
   return groupToCount;
-}
-
-void AllowedScopeItemsPerGroup::setOn(
-    entities::ObjectId objectId,
-    entities::ContainerId /*dstContainer*/) {
-  auto groupId = getOnlyGroupId(partition_, objectId);
-  recomputeAllowedScopeItemsForGroup(groupId);
-}
-
-void AllowedScopeItemsPerGroup::removeFrom(
-    entities::ObjectId objectId,
-    entities::ContainerId /*srcContainer*/) {
-  auto groupId = getOnlyGroupId(partition_, objectId);
-  recomputeAllowedScopeItemsForGroup(groupId);
 }
 
 const entities::Map<entities::GroupId, size_t>&

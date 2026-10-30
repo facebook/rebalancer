@@ -17,6 +17,8 @@
 #include "algopt/rebalancer/entities/Partition.h"
 #include "algopt/rebalancer/entities/Universe.h"
 #include "algopt/rebalancer/solver/utils/Assignment.h"
+#include "algopt/rebalancer/solver/utils/Change.h"
+#include "algopt/rebalancer/solver/utils/ChangeSet.h"
 
 #include "multifeed/hash/HeterogeneousAccess.h"
 
@@ -65,19 +67,14 @@ int OneObjectPerGroup::getAssignedCount(entities::GroupId groupId) const {
   return folly::get_default(assignedCounts_, groupId, 0);
 }
 
-void OneObjectPerGroup::setOn(
-    entities::ObjectId objectId,
-    entities::ContainerId dstContainer) {
-  if (dstContainer == sourceContainer_) {
-    recordObjectMove(objectId, MoveDirection::ToSource);
-  }
-}
-
-void OneObjectPerGroup::removeFrom(
-    entities::ObjectId objectId,
-    entities::ContainerId srcContainer) {
-  if (srcContainer == sourceContainer_) {
-    recordObjectMove(objectId, MoveDirection::FromSource);
+void OneObjectPerGroup::updateOnApply(const ChangeSet& changes) {
+  for (const auto& change : changes) {
+    if (change.getContainer() == sourceContainer_) {
+      recordObjectMove(
+          change.getObject(),
+          change.getValue() == 1 ? MoveDirection::ToSource
+                                 : MoveDirection::FromSource);
+    }
   }
 }
 
