@@ -100,9 +100,13 @@ MoveResult SwapMoveType::exploreSwappingHotObjectWithObjectsInColdContainer(
     }
   }
 
-  auto dynamicObjects = groupInfoOpt
-      ? problem.getDynamicObjects(
-            coldContainer, groupInfoOpt->partitionName, groupInfoOpt->groupId)
+  std::optional<ObjectStore> groupDynamicObjects;
+  if (groupInfoOpt) {
+    groupDynamicObjects.emplace(problem.getDynamicObjects(
+        coldContainer, groupInfoOpt->partitionName, groupInfoOpt->groupId));
+  }
+  const auto& dynamicObjects = groupDynamicObjects
+      ? *groupDynamicObjects
       : evaluator.getDynamicObjects(coldContainer);
 
   return exploreAllAndGetBestResult(
