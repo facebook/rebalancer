@@ -44,8 +44,12 @@ XpressV2Variable::XpressV2Variable(
     const xpress::objects::Variable& variable,
     Type type,
     XpressV2SolutionSlot solution,
-    XpressProblemV2* problem)
-    : variable_{variable}, solution_{std::move(solution)}, problem_{problem} {
+    XpressProblemV2* problem,
+    std::shared_ptr<XpressV2NameBuffer> names)
+    : variable_{variable},
+      solution_{std::move(solution)},
+      problem_{problem},
+      names_{std::move(names)} {
   type_ = type;
 }
 
@@ -98,17 +102,26 @@ double XpressV2Variable::getReducedCost() const {
 
 std::shared_ptr<ExpressionImpl> XpressV2Variable::makeExpression(
     double coeff) const {
-  return std::make_shared<XpressV2Expression>(variable_, coeff, solution_);
+  return std::make_shared<XpressV2Expression>(
+      variable_, coeff, solution_, names_);
 }
 
 const xpress::objects::Variable& XpressV2Variable::get() const {
+  if (names_) {
+    names_->expose();
+  }
+  return getNative();
+}
+
+const xpress::objects::Variable& XpressV2Variable::getNative() const {
   return variable_;
 }
 
 XpressV2Expression::XpressV2Expression(
     const xpress::objects::Expression& expression,
-    XpressV2SolutionSlot solution)
-    : solution_{std::move(solution)} {
+    XpressV2SolutionSlot solution,
+    std::shared_ptr<XpressV2NameBuffer> names)
+    : solution_{std::move(solution)}, names_{std::move(names)} {
   // A general expression may already be quadratic, so it cannot be decomposed
   // into the linear term vectors.
   quadratic_ = expression;
@@ -117,15 +130,20 @@ XpressV2Expression::XpressV2Expression(
 XpressV2Expression::XpressV2Expression(
     const xpress::objects::Variable& variable,
     double coefficient,
-    XpressV2SolutionSlot solution)
+    XpressV2SolutionSlot solution,
+    std::shared_ptr<XpressV2NameBuffer> names)
     : variables_{variable},
       coefficients_{coefficient},
-      solution_{std::move(solution)} {}
+      solution_{std::move(solution)},
+      names_{std::move(names)} {}
 
 XpressV2Expression::XpressV2Expression(
     double constant,
-    XpressV2SolutionSlot solution)
-    : constant_{constant}, solution_{std::move(solution)} {}
+    XpressV2SolutionSlot solution,
+    std::shared_ptr<XpressV2NameBuffer> names)
+    : constant_{constant},
+      solution_{std::move(solution)},
+      names_{std::move(names)} {}
 
 bool XpressV2Expression::isLinear() const {
   return !quadratic_.has_value();
@@ -153,11 +171,18 @@ xpress::objects::LinExpression XpressV2Expression::materialise() const {
 }
 
 xpress::objects::Expression XpressV2Expression::get() const {
+  if (names_) {
+    names_->expose();
+  }
+  return getNative();
+}
+
+xpress::objects::Expression XpressV2Expression::getNative() const {
   return isLinear() ? xpress::objects::Expression{materialise()} : *quadratic_;
 }
 
 std::shared_ptr<ExpressionImpl> XpressV2Expression::clone() const {
-  auto copy = std::make_shared<XpressV2Expression>(0.0, solution_);
+  auto copy = std::make_shared<XpressV2Expression>(0.0, solution_, names_);
   copy->variables_ = variables_;
   copy->coefficients_ = coefficients_;
   copy->constant_ = constant_;
@@ -175,6 +200,14 @@ void XpressV2Expression::add(double constant) {
 
 void XpressV2Expression::add(std::shared_ptr<const ExpressionImpl> expression) {
   const auto& other = asV2Expression(*expression);
+  if (names_ != other.names_) {
+    if (names_) {
+      names_->expose();
+    }
+    if (other.names_) {
+      other.names_->expose();
+    }
+  }
   if (isLinear() && other.isLinear()) {
     if (&other == this) {
       // Self-add: the source iterators would be invalidated by the insert that
@@ -191,7 +224,7 @@ void XpressV2Expression::add(std::shared_ptr<const ExpressionImpl> expression) {
     constant_ += other.constant_;
     return;
   }
-  quadratic_ = get() + other.get();
+  quadratic_ = getNative() + other.getNative();
   clearLinearTerms();
 }
 
@@ -209,6 +242,14 @@ void XpressV2Expression::multiply(double constant) {
 void XpressV2Expression::multiply(
     std::shared_ptr<const ExpressionImpl> expression) {
   const auto& other = asV2Expression(*expression);
+  if (names_ != other.names_) {
+    if (names_) {
+      names_->expose();
+    }
+    if (other.names_) {
+      other.names_->expose();
+    }
+  }
   // Scaling by a constant is not a quadratic, whichever side the constant is
   // on, so both of those cases stay on the linear fast path.
   if (other.isPureConstant()) {
@@ -228,10 +269,10 @@ void XpressV2Expression::multiply(
   if (&other == this) {
     // Self-multiply: materialise once, so squaring cannot depend on the operand
     // surviving the clearLinearTerms() below.
-    const auto self = get();
+    const auto self = getNative();
     quadratic_ = self * self;
   } else {
-    quadratic_ = get() * other.get();
+    quadratic_ = getNative() * other.getNative();
   }
   clearLinearTerms();
 }
@@ -280,7 +321,7 @@ double XpressV2Expression::computeValue() const {
         "XpressV2Expression: no solution available; the problem must be solved "
         "before an expression can be evaluated");
   }
-  return get().evaluate(*solution_);
+  return getNative().evaluate(*solution_);
 }
 
 double XpressV2Expression::getConstant() const {
@@ -291,7 +332,10 @@ double XpressV2Expression::getConstant() const {
 }
 
 void XpressV2Expression::print() const {
-  std::cout << get().toString() << '\n';
+  if (names_) {
+    names_->flush();
+  }
+  std::cout << getNative().toString() << '\n';
 }
 
 XpressV2Relation::XpressV2Relation(
@@ -338,8 +382,9 @@ xpress::objects::InequalityDefinition XpressV2Relation::makeDefinition() const {
 
 XpressV2Constraint::XpressV2Constraint(
     const xpress::objects::Inequality& inequality,
-    const XpressProblemV2* problem)
-    : inequality_{inequality}, problem_{problem} {}
+    const XpressProblemV2* problem,
+    std::shared_ptr<XpressV2NameBuffer> names)
+    : inequality_{inequality}, problem_{problem}, names_{std::move(names)} {}
 
 double XpressV2Constraint::getDual() const {
   if (!problem_->hasLpSensitivity()) {
@@ -359,6 +404,13 @@ double XpressV2Constraint::getRHS() const {
 }
 
 const xpress::objects::Inequality& XpressV2Constraint::get() const {
+  if (names_) {
+    names_->expose();
+  }
+  return getNative();
+}
+
+const xpress::objects::Inequality& XpressV2Constraint::getNative() const {
   return inequality_;
 }
 

@@ -31,6 +31,7 @@
 namespace facebook::algopt::lp::detail {
 
 class XpressProblemV2;
+class XpressV2NameBuffer;
 
 // Unlike xpress::objects::Variable, which knows the problem that created it, a
 // typed Expression is a free-standing algebraic object. Evaluating one requires
@@ -50,7 +51,8 @@ class XpressV2Variable : public VariableImpl {
       const xpress::objects::Variable& variable,
       Type type,
       XpressV2SolutionSlot solution,
-      XpressProblemV2* problem);
+      XpressProblemV2* problem,
+      std::shared_ptr<XpressV2NameBuffer> names = {});
 
   void setLB(double lb) override;
   void setUB(double ub) override;
@@ -62,9 +64,13 @@ class XpressV2Variable : public VariableImpl {
   const xpress::objects::Variable& get() const;
 
  private:
+  friend class XpressProblemV2;
+  const xpress::objects::Variable& getNative() const;
+
   xpress::objects::Variable variable_;
   XpressV2SolutionSlot solution_;
   XpressProblemV2* problem_;
+  std::shared_ptr<XpressV2NameBuffer> names_;
 };
 
 // Accumulates linear terms in plain vectors and materialises an Xpress
@@ -88,13 +94,18 @@ class XpressV2Expression : public ExpressionImpl {
  public:
   XpressV2Expression(
       const xpress::objects::Expression& expression,
-      XpressV2SolutionSlot solution);
+      XpressV2SolutionSlot solution,
+      std::shared_ptr<XpressV2NameBuffer> names = {});
   // Single term: coefficient * variable.
   XpressV2Expression(
       const xpress::objects::Variable& variable,
       double coefficient,
-      XpressV2SolutionSlot solution);
-  explicit XpressV2Expression(double constant, XpressV2SolutionSlot solution);
+      XpressV2SolutionSlot solution,
+      std::shared_ptr<XpressV2NameBuffer> names = {});
+  explicit XpressV2Expression(
+      double constant,
+      XpressV2SolutionSlot solution,
+      std::shared_ptr<XpressV2NameBuffer> names = {});
 
   std::shared_ptr<ExpressionImpl> clone() const override;
   void add(double constant) override;
@@ -113,6 +124,9 @@ class XpressV2Expression : public ExpressionImpl {
   xpress::objects::Expression get() const;
 
  private:
+  friend class XpressProblemV2;
+  xpress::objects::Expression getNative() const;
+
   bool isLinear() const;
 
   // True when the value is just `constant_`: no terms, and not quadratic. Such
@@ -131,6 +145,7 @@ class XpressV2Expression : public ExpressionImpl {
   double constant_{0.0};
   std::optional<xpress::objects::Expression> quadratic_;
   XpressV2SolutionSlot solution_;
+  std::shared_ptr<XpressV2NameBuffer> names_;
 };
 
 // RelationImpl is a marker base, so the relation carries the comparison itself:
@@ -162,7 +177,8 @@ class XpressV2Constraint : public ConstraintImpl {
  public:
   XpressV2Constraint(
       const xpress::objects::Inequality& inequality,
-      const XpressProblemV2* problem);
+      const XpressProblemV2* problem,
+      std::shared_ptr<XpressV2NameBuffer> names = {});
 
   double getDual() const override;
   double getSlack() const override;
@@ -170,8 +186,12 @@ class XpressV2Constraint : public ConstraintImpl {
   const xpress::objects::Inequality& get() const;
 
  private:
+  friend class XpressProblemV2;
+  const xpress::objects::Inequality& getNative() const;
+
   xpress::objects::Inequality inequality_;
   const XpressProblemV2* problem_;
+  std::shared_ptr<XpressV2NameBuffer> names_;
 };
 
 } // namespace facebook::algopt::lp::detail

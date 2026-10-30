@@ -506,6 +506,100 @@ TEST_F(XpressProblemV2Test, NewVariableRequiresAnotherPublishedSolution) {
   EXPECT_NEAR(y.getValue(), 3.0, 1e-6);
 }
 
+TEST_F(XpressProblemV2Test, NamesAreObservableBeforeSolve) {
+  auto problem = makeProblem();
+  const auto x = problem.makeVar("named_column");
+  const auto y = problem.makeVar("another_column");
+  auto row = problem.newConstraint(x + y >= 4.0, "named_row");
+  const auto& nativeX = dynamic_cast<const XpressV2Variable&>(*x.get()).get();
+  const auto& nativeRow =
+      dynamic_cast<const XpressV2Constraint&>(*row.get()).get();
+  EXPECT_EQ(nativeX.getName(), std::string{"named_column"});
+  EXPECT_EQ(nativeRow.getName(), std::string{"named_row"});
+  const auto expression = x + y;
+  const auto& implementation =
+      dynamic_cast<const XpressV2Expression&>(*expression.get());
+  const auto text = implementation.get().toString();
+  EXPECT_NE(text.find("named_column"), std::string::npos);
+  EXPECT_NE(text.find("another_column"), std::string::npos);
+}
+
+TEST_F(XpressProblemV2Test, PrintedExpressionsIncludeUnobservedNames) {
+  auto problem = makeProblem();
+  const auto x = problem.makeVar("print_column");
+  const auto expression = x + 2.0;
+  const auto& implementation =
+      dynamic_cast<const XpressV2Expression&>(*expression.get());
+  testing::internal::CaptureStdout();
+  implementation.print();
+  const auto text = testing::internal::GetCapturedStdout();
+  EXPECT_NE(text.find("print_column"), std::string::npos);
+}
+
+TEST_F(
+    XpressProblemV2Test,
+    MixedProblemExpressionKeepsOwnershipChecksAndNames) {
+  auto first = makeProblem();
+  auto second = makeProblem();
+  const auto x = first.makeVar("first_column");
+  const auto y = second.makeVar("second_column");
+  EXPECT_THROW(first.newConstraint(x + y >= 4.0), std::exception);
+  EXPECT_EQ(
+      dynamic_cast<const XpressV2Variable&>(*x.get()).get().getName(),
+      std::string{"first_column"});
+  EXPECT_EQ(
+      dynamic_cast<const XpressV2Variable&>(*y.get()).get().getName(),
+      std::string{"second_column"});
+}
+
+TEST_F(XpressProblemV2Test, RetainedNativeHandleObservesLaterNames) {
+  auto problem = makeProblem();
+  const auto x = problem.makeVar("first");
+  auto* native =
+      dynamic_cast<const XpressV2Variable&>(*x.get()).get().getProblem();
+  [[maybe_unused]] const auto y = problem.makeVar("second");
+  EXPECT_EQ(native->getColumnName(1), std::string{"second"});
+}
+
+TEST_F(XpressProblemV2Test, DeletingRowPreservesLaterNames) {
+  auto problem = makeProblem();
+  const auto x = problem.makeVar("x");
+  auto removed = problem.newConstraint(x >= 1.0, "removed");
+  auto retained = problem.newConstraint(x >= 2.0, "retained");
+  problem.deleteConstraint(removed);
+  auto last = problem.newConstraint(x <= 8.0, "last");
+  EXPECT_EQ(
+      dynamic_cast<const XpressV2Constraint&>(*retained.get()).get().getName(),
+      std::string{"retained"});
+  EXPECT_EQ(
+      dynamic_cast<const XpressV2Constraint&>(*last.get()).get().getName(),
+      std::string{"last"});
+  problem.setObjective(x);
+  problem.solve(false);
+  EXPECT_NEAR(x.getValue(), 2.0, 1e-6);
+}
+
+TEST_F(XpressProblemV2Test, NativeHandleExposureAfterProblemDestructionIsSafe) {
+  const auto variable = [] {
+    auto problem = makeProblem();
+    const auto x = problem.makeVar("retained");
+    return x.get();
+  }();
+  EXPECT_NO_THROW(dynamic_cast<const XpressV2Variable&>(*variable).get());
+}
+
+TEST_F(XpressProblemV2Test, EmbeddedNullNameDoesNotOverwriteAdjacentName) {
+  auto problem = makeProblem();
+  const auto x = problem.makeVar(std::string{"prefix\0suffix", 13});
+  const auto y = problem.makeVar("neighbor");
+  EXPECT_EQ(
+      dynamic_cast<const XpressV2Variable&>(*x.get()).get().getName(),
+      std::string{"prefix"});
+  EXPECT_EQ(
+      dynamic_cast<const XpressV2Variable&>(*y.get()).get().getName(),
+      std::string{"neighbor"});
+}
+
 TEST_F(XpressProblemV2Test, IisRetainsUnnamedRows) {
   auto problem = makeProblem();
   const auto x = problem.makeVar("");

@@ -34,6 +34,25 @@
 
 namespace facebook::algopt::lp::detail {
 
+class XpressV2NameBuffer {
+ public:
+  explicit XpressV2NameBuffer(xpress::XPRSProblem* problem);
+  bool canDefer(const std::string& name) const;
+  void queueColumn(int index, std::string name);
+  void queueRow(int index, std::string name);
+  void flush();
+  void expose();
+  void detach();
+
+ private:
+  xpress::XPRSProblem* problem_;
+  bool exposed_{false};
+  std::vector<std::optional<std::string>> pendingColumnNames_;
+  std::vector<std::optional<std::string>> pendingRowNames_;
+  int firstPendingColumnName_{0};
+  int firstPendingRowName_{0};
+};
+
 // Xpress backend, built on the Xpress 9.9.0 typed C++ API.
 //
 // The model is constructed directly in xpress::objects. Native general and PWL
@@ -45,6 +64,10 @@ namespace facebook::algopt::lp::detail {
 class XpressProblemV2 : public ProblemImpl {
  public:
   XpressProblemV2();
+  XpressProblemV2(const XpressProblemV2&) = delete;
+  XpressProblemV2& operator=(const XpressProblemV2&) = delete;
+  XpressProblemV2(XpressProblemV2&&) = delete;
+  XpressProblemV2& operator=(XpressProblemV2&&) = delete;
   ~XpressProblemV2() override;
 
   std::string_view backendName() const override {
@@ -143,6 +166,7 @@ class XpressProblemV2 : public ProblemImpl {
   // Reads the solved column values into solution_ so expressions created by
   // this problem can evaluate themselves. See XpressV2SolutionSlot.
   void publishSolution();
+  void flushNames();
 
   // Pushes accumulated warm-start hints into the model before a solve.
   void applyStartValues();
@@ -157,6 +181,8 @@ class XpressProblemV2 : public ProblemImpl {
       const std::string& name);
 
   xpress::objects::XpressProblem problem_;
+  std::shared_ptr<XpressV2NameBuffer> names_{
+      std::make_shared<XpressV2NameBuffer>(&problem_)};
 
   // Shared with every variable and expression this problem creates.
   XpressV2SolutionSlot solution_{std::make_shared<std::vector<double>>()};

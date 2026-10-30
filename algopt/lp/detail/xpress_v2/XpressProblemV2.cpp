@@ -68,7 +68,75 @@ const XpressV2Expression& asV2Expression(const ExpressionImpl& expression) {
   return *casted;
 }
 
+void queueName(
+    int index,
+    std::string name,
+    int& first,
+    std::vector<std::optional<std::string>>& names) {
+  if (names.empty()) {
+    first = index;
+  }
+  if (index < first) {
+    throw std::logic_error(
+        fmt::format("Name index {} precedes {}", index, first));
+  }
+  names.resize(static_cast<size_t>(index - first) + 1);
+  names.at(static_cast<size_t>(index - first)) = std::move(name);
+}
+
 } // namespace
+
+XpressV2NameBuffer::XpressV2NameBuffer(xpress::XPRSProblem* problem)
+    : problem_{problem} {}
+
+bool XpressV2NameBuffer::canDefer(const std::string& name) const {
+  return !exposed_ && name.find('\0') == std::string::npos;
+}
+
+void XpressV2NameBuffer::queueColumn(int index, std::string name) {
+  queueName(
+      index, std::move(name), firstPendingColumnName_, pendingColumnNames_);
+}
+
+void XpressV2NameBuffer::queueRow(int index, std::string name) {
+  queueName(index, std::move(name), firstPendingRowName_, pendingRowNames_);
+}
+
+void XpressV2NameBuffer::flush() {
+  if (problem_ == nullptr) {
+    return;
+  }
+  if (!pendingColumnNames_.empty()) {
+    problem_->addNames(
+        xpress::Namespaces::Column,
+        xpress::SizedArray<const std::optional<std::string>>{
+            pendingColumnNames_},
+        firstPendingColumnName_,
+        firstPendingColumnName_ + static_cast<int>(pendingColumnNames_.size()) -
+            1);
+    pendingColumnNames_.clear();
+  }
+  if (!pendingRowNames_.empty()) {
+    problem_->addNames(
+        xpress::Namespaces::Row,
+        xpress::SizedArray<const std::optional<std::string>>{pendingRowNames_},
+        firstPendingRowName_,
+        firstPendingRowName_ + static_cast<int>(pendingRowNames_.size()) - 1);
+    pendingRowNames_.clear();
+  }
+}
+
+void XpressV2NameBuffer::expose() {
+  flush();
+  exposed_ = true;
+}
+
+void XpressV2NameBuffer::detach() {
+  problem_ = nullptr;
+  exposed_ = true;
+  std::vector<std::optional<std::string>>{}.swap(pendingColumnNames_);
+  std::vector<std::optional<std::string>>{}.swap(pendingRowNames_);
+}
 
 XpressProblemV2::XpressProblemV2() {
   setTolerances(Tolerances{});
@@ -76,7 +144,9 @@ XpressProblemV2::XpressProblemV2() {
   problem_.setIntControl(
       XPRS_SCALING, scaling | XPRS_SCALING_SIMPLEX_OBJECTIVE_SCALING);
 }
-XpressProblemV2::~XpressProblemV2() = default;
+XpressProblemV2::~XpressProblemV2() {
+  names_->detach();
+}
 
 bool XpressProblemV2::hasLpSensitivity() const {
   return solvedAsLp_ && !modifiedSinceSolve_ &&
@@ -94,13 +164,21 @@ std::shared_ptr<VariableImpl> XpressProblemV2::makeTypedVar(
   // Xpress rejects a binary whose bounds fall outside [0, 1].
   const double ub = type == VariableImpl::Type::BINARY ? 1.0 : kInfinity;
   markModified();
-  const auto nativeName = uniqueName(name, usedNames_);
-  auto variable = problem_.addVariable(lb, ub, toColumnType(type), nativeName);
+  auto nativeName = uniqueName(name, usedNames_);
+  const bool defer = names_->canDefer(name);
+  if (!defer) {
+    flushNames();
+  }
+  auto variable = problem_.addVariable(
+      lb, ub, toColumnType(type), defer ? std::nullopt : nativeName);
   if (nativeName && *nativeName != name) {
     originalVariableNames_.emplace(*nativeName, name);
   }
+  if (defer && nativeName) {
+    names_->queueColumn(variable.getIndex(), std::move(*nativeName));
+  }
   return std::make_shared<XpressV2Variable>(
-      std::move(variable), type, solution_, this);
+      std::move(variable), type, solution_, this, names_);
 }
 
 std::optional<std::string> XpressProblemV2::uniqueName(
@@ -156,7 +234,7 @@ std::shared_ptr<ExpressionImpl> XpressProblemV2::makeExpression(
     double constant) const {
   // Use the constant ctor so the expression stays on the linear fast path
   // rather than becoming an opaque general expression.
-  return std::make_shared<XpressV2Expression>(constant, solution_);
+  return std::make_shared<XpressV2Expression>(constant, solution_, names_);
 }
 
 std::shared_ptr<ConstraintImpl> XpressProblemV2::newConstraint(
@@ -172,17 +250,24 @@ std::shared_ptr<ConstraintImpl> XpressProblemV2::newConstraint(
   markModified();
   auto inequality = problem_.addConstraint(v2Relation->makeDefinition());
   if (!name.empty()) {
-    const auto nativeName = *uniqueName(name, usedConstraintNames_);
-    inequality.setName(nativeName);
+    auto nativeName = *uniqueName(name, usedConstraintNames_);
     if (nativeName != name) {
       originalConstraintNames_.emplace(nativeName, name);
     }
+    if (names_->canDefer(nativeName)) {
+      names_->queueRow(inequality.getIndex(), std::move(nativeName));
+    } else {
+      flushNames();
+      inequality.setName(nativeName);
+    }
   }
-  return std::make_shared<XpressV2Constraint>(std::move(inequality), this);
+  return std::make_shared<XpressV2Constraint>(
+      std::move(inequality), this, names_);
 }
 
 void XpressProblemV2::deleteConstraint(
     std::shared_ptr<ConstraintImpl> constraint) {
+  flushNames();
   const auto* v2Constraint =
       dynamic_cast<const XpressV2Constraint*>(constraint.get());
   if (v2Constraint == nullptr) {
@@ -191,7 +276,7 @@ void XpressProblemV2::deleteConstraint(
   }
   // The typed API exposes deletion for general/SOS/indicator constraints but
   // not for plain rows, so drop to the inherited raw interface for this one.
-  const int rowIndex = v2Constraint->get().getIndex();
+  const int rowIndex = v2Constraint->getNative().getIndex();
   markModified();
   problem_.delRows(1, &rowIndex);
 }
@@ -224,9 +309,14 @@ std::shared_ptr<const ExpressionImpl> XpressProblemV2::getObjectiveAt(
   return objectives_[pos];
 }
 
+void XpressProblemV2::flushNames() {
+  names_->flush();
+}
+
 void XpressProblemV2::solveForObjectiveAt(
     int pos,
     std::optional<double> timeLimit) {
+  flushNames();
   // Runs for the whole solve, not just the callback: the warm-start notify
   // callback reads the elapsed time too, and it can fire during addMipSol.
   // Scoped so a throwing solve still stops the timer -- Timer::start() throws
@@ -243,7 +333,8 @@ void XpressProblemV2::solveForObjectiveAt(
   warmStartResult_.reset();
 
   problem_.setObjective(
-      asV2Expression(*getObjectiveAt(pos)).get(), xpress::ObjSense::Minimize);
+      asV2Expression(*getObjectiveAt(pos)).getNative(),
+      xpress::ObjSense::Minimize);
 
   if (timeLimit.has_value()) {
     // Pass the limit through as-is. A negated limit -- the "stop even without
@@ -491,6 +582,7 @@ void XpressProblemV2::setLogfile(const std::string& filename) {
 }
 
 void XpressProblemV2::saveToFile(const std::string& filename) {
+  flushNames();
   const std::filesystem::path path(filename);
   const auto extension = path.extension();
   const auto stem = (path.parent_path() / path.stem()).string();
@@ -511,7 +603,8 @@ void XpressProblemV2::saveToFileWithObjectiveAt(
     const std::string& filename) {
   markModified();
   problem_.setObjective(
-      asV2Expression(*getObjectiveAt(pos)).get(), xpress::ObjSense::Minimize);
+      asV2Expression(*getObjectiveAt(pos)).getNative(),
+      xpress::ObjSense::Minimize);
   saveToFile(filename);
 }
 
@@ -531,6 +624,7 @@ void XpressProblemV2::saveDebugData(DebugPhase phase) {
   if (debugPath_.empty()) {
     return;
   }
+  flushNames();
   const bool isWarmStart =
       phase == DebugPhase::PreWarmStart || phase == DebugPhase::PostWarmStart;
   const bool isPre =
@@ -551,6 +645,7 @@ void XpressProblemV2::saveDebugData(DebugPhase phase) {
 
 void XpressProblemV2::print(
     const std::vector<std::string>& /* substringsToMatch */) {
+  flushNames();
   // Xpress has no per-constraint print, so the filter is ignored and the whole
   // model is dumped.
   problem_.writeProb("", "lp");
@@ -596,7 +691,7 @@ void XpressProblemV2::applyStartValues() {
       throw std::invalid_argument(
           "XpressProblemV2 expected an XpressV2Variable for a start value");
     }
-    columns.push_back(v2Variable->get().getIndex());
+    columns.push_back(v2Variable->getNative().getIndex());
     values.push_back(value);
   }
   // Register before submitting: Xpress may process the hint during the
@@ -650,6 +745,7 @@ thrift::WarmStartStatus XpressProblemV2::toWarmStartStatus(
 }
 
 std::optional<IIS> XpressProblemV2::getIIS() {
+  flushNames();
   try {
     if (problem_.firstIIS(1) != 0) {
       return std::nullopt;
@@ -740,7 +836,7 @@ bool XpressProblemV2::setIndicatorOnConstraint(
   }
   // Xpress accepts a non-binary variable here and quietly builds a different
   // model, so reject it rather than emit a silent mis-formulation.
-  const auto columnType = v2Variable->get().getType();
+  const auto columnType = v2Variable->getNative().getType();
   if (columnType != xpress::ColumnType::Binary) {
     throw std::invalid_argument(
         fmt::format(
@@ -749,7 +845,8 @@ bool XpressProblemV2::setIndicatorOnConstraint(
             xpress::to_string(columnType)));
   }
   markModified();
-  problem_.setIndicator(v2Variable->get(), dir == 1, v2Constraint->get());
+  problem_.setIndicator(
+      v2Variable->getNative(), dir == 1, v2Constraint->getNative());
   return true;
 }
 
@@ -758,12 +855,12 @@ xpress::objects::Variable XpressProblemV2::pinToVariable(
     const std::string& name) {
   auto auxImpl = std::dynamic_pointer_cast<XpressV2Variable>(
       makeTypedVar(name, VariableImpl::Type::CONTINUOUS, -kInfinity));
-  auto aux = auxImpl->get();
+  auto aux = auxImpl->getNative();
 
   // aux - expression == 0. A pure constant carries its value in the Expression
   // wrapper with a null impl, so it must not be dereferenced.
   if (const auto impl = expression.get()) {
-    problem_.addConstraint(aux - asV2Expression(*impl).get() == 0.0);
+    problem_.addConstraint(aux - asV2Expression(*impl).getNative() == 0.0);
   } else {
     problem_.addConstraint(aux == expression.getConstant());
   }
@@ -787,7 +884,7 @@ std::optional<Expression> XpressProblemV2::addNativeMaxConstraint(
   auto resultImpl = std::dynamic_pointer_cast<XpressV2Variable>(
       makeTypedVar("max_result", VariableImpl::Type::CONTINUOUS, -kInfinity));
 
-  problem_.addConstraint(resultImpl->get().maxOf(
+  problem_.addConstraint(resultImpl->getNative().maxOf(
       xpress::SizedArray<const xpress::objects::Variable>{inputVars}));
 
   return Expression(resultImpl->makeExpression(1.0));
@@ -816,7 +913,7 @@ std::optional<Expression> XpressProblemV2::addNativePwlConstraint(
 
   auto yImpl = std::dynamic_pointer_cast<XpressV2Variable>(
       makeTypedVar("pwl_y", VariableImpl::Type::CONTINUOUS, -kInfinity));
-  problem_.addConstraint(yImpl->get().pwlOf(
+  problem_.addConstraint(yImpl->getNative().pwlOf(
       xAux,
       xpress::SizedArray<const double>{xs},
       xpress::SizedArray<const double>{ys}));
