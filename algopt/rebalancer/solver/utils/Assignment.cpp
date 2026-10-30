@@ -347,37 +347,6 @@ Assignment::getObjectsIndexedByEquivSetsAndPartition(
           partitionId));
 }
 
-void Assignment::markFixedAndRemoveFromDynamicIndices(
-    entities::ContainerId containerId,
-    const PackerSet<entities::ObjectId>& containerObjects) {
-  for (auto objectId : containerObjects) {
-    if (objectToContainer_.at(objectId) != containerId) {
-      throw std::runtime_error(
-          "Object to fix must belong to provide container");
-    }
-    auto [_iter, inserted] = fixedObjects_.insert(objectId);
-    if (!inserted) {
-      // object already fixed, nothing to do
-      continue;
-    }
-    containerToObjectsDynamic_.at(containerId).erase(objectId);
-    // Remove from Index#1 : EquivSetId -> Objects
-    if (containerToEquivSetsToObjects_) {
-      containerToEquivSetsToObjects_->removeFrom(objectId, containerId);
-    }
-    // Remove from Index#2 : EquivSetId -> GroupId -> Objects
-    for (auto& [_partition, indexedByEquivSetAndGroup] :
-         partitionToPerContainerIndexByEquivSetAndGroups_) {
-      indexedByEquivSetAndGroup.removeFrom(objectId, containerId);
-    }
-    // Remove from Index#3 : GroupId -> Objects
-    for (auto& [_partition, indexedByGroup] :
-         partitionToPerContainerObjectIndexByGroups_) {
-      indexedByGroup.removeFrom(objectId, containerId);
-    }
-  }
-}
-
 const ObjectStore::Factory& Assignment::getObjectStoreFactory() const {
   return objectStoreFactory_;
 }

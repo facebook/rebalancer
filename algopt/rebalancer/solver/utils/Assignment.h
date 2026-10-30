@@ -135,12 +135,6 @@ class Assignment {
   getObjectsIndexedByEquivSetsAndPartition(
       entities::PartitionId partitionId) const;
 
-  // Mark all containerObjects from containerId as fixed and remove
-  // them from dynamic indices
-  void markFixedAndRemoveFromDynamicIndices(
-      entities::ContainerId containerId,
-      const PackerSet<entities::ObjectId>& containerObjects);
-
   const ObjectStore::Factory& getObjectStoreFactory() const;
 
  private:
