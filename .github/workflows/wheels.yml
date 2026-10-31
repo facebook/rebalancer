@@ -52,7 +52,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [linux, macos]
-        py: [cp312, cp313, cp314]
+        py: [cp312, cp313, cp314, cp315]
         include:
         - os: linux
           runs_on: 16-core-ubuntu
@@ -70,7 +70,8 @@ jobs:
         # tags are needed at wheel-build time.
         fetch-depth: 1
 
-    - uses: pypa/cibuildwheel@v3.1
+    # v4.2+ builds CPython 3.15 by default (3.15.0 final since v4.3.1).
+    - uses: pypa/cibuildwheel@v4.3
       env:
         # One Python ABI per matrix cell.
         CIBW_BUILD: "${{ matrix.py }}-*"
@@ -234,7 +235,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        py: [cp312, cp313, cp314]
+        py: [cp312, cp313, cp314, cp315]
     steps:
     - uses: actions/checkout@v6
       with:
@@ -252,7 +253,8 @@ jobs:
         python-version: |
           ${{ matrix.py == 'cp312' && '3.12' ||
               matrix.py == 'cp313' && '3.13' ||
-              '3.14' }}
+              matrix.py == 'cp314' && '3.14' ||
+              '3.15' }}
         allow-prereleases: true
 
     - name: Install wheel and run smoke test

@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Python wheels for CPython 3.15 on Linux (`manylinux_2_28`, x86\_64) and
+  macOS (arm64) (#77).
+
+### Changed
+
+- Wheel builds use cibuildwheel 4.3 (was 3.1). It builds CPython 3.15 by
+  default.
+
 ## [1.0.2] - 2026-06-14
 
 ### Fixed
