@@ -16,7 +16,7 @@ name: wheels
 
 on:
   push:
-    branches: [main]
+    branches: [main, feat-cp315-wheels]
     tags: ['v*']
   pull_request:
     types: [opened, synchronize, reopened]
