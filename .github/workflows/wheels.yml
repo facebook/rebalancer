@@ -55,14 +55,14 @@ jobs:
         py: [cp312, cp313, cp314, cp315]
         include:
         - os: linux
-          runs_on: 16-core-ubuntu
+          runs_on: ubuntu-latest
           cibw_archs: x86_64
           cibw_image: quay.io/pypa/manylinux_2_28_x86_64
-          timeout_minutes: 60
+          timeout_minutes: 350
         - os: macos
-          runs_on: macos-14-xlarge
+          runs_on: macos-14
           cibw_archs: arm64
-          timeout_minutes: 60
+          timeout_minutes: 350
     steps:
     - uses: actions/checkout@v6
       with:
